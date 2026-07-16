@@ -7,10 +7,8 @@
 // Mudancas da v2:
 //  - Mutacoes sao categorizadas (STRUCTURAL / TYPE_CONFUSION /
 //    BOUNDARY / INJECTION) e cada categoria pode ser ligada ou
-//    desligada abaixo, para controlar volume/tempo de execucao.
-//  - Severidade nao depende so de "status diferente do baseline".
-//    A regra de finding e objetiva: qualquer mutacao que receba
-//    resposta HTTP 2xx foi aceita e e enviada ao Repeater.
+//    desligada abaixo, para controlar volume/tempo de execucao
+//
 //  - Respostas 4xx, 5xx, redirecionamentos e falhas de conexao
 //    nao sao enviadas ao Repeater; ficam apenas registradas no log.
 //  - Findings acima do limite de abas sao enviados ao Organizer.

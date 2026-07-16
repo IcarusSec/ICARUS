@@ -1,10 +1,10 @@
 // ============================================================
-// JSON Parameter Validation Tester - Burp Custom Action (v2)
+// JSON Parameter Validation Tester - Burp Custom Action (v3)
 // ------------------------------------------------------------
 // Cole este script em: Repeater > Custom actions > New > Blank
 // Rode com o botao direito sobre uma requisicao com corpo JSON.
 //
-// Mudancas da v2:
+// Recursos principais:
 //  - Mutacoes sao categorizadas (STRUCTURAL / TYPE_CONFUSION /
 //    BOUNDARY / INJECTION) e cada categoria pode ser ligada ou
 //    desligada abaixo, para controlar volume/tempo de execucao
@@ -12,22 +12,191 @@
 //  - Respostas 4xx, 5xx, redirecionamentos e falhas de conexao
 //    nao sao enviadas ao Repeater; ficam apenas registradas no log.
 //  - Findings acima do limite de abas sao enviados ao Organizer.
+//  - Regras por caminho permitem inclusao, exclusao e excecoes
+//    especificas por teste ou categoria, com suporte a curingas.
 //
 // Sem dependencias externas: parser/serializer JSON proprio,
 // ja que Custom Actions nao permitem adicionar bibliotecas.
 // ============================================================
 
-// ---------------- CONFIGURACAO ----------------
-var TEST_STRUCTURAL = true;     // null, campo removido, {}/[] no lugar do valor
-var TEST_TYPE_CONFUSION = true; // string<->numero<->boolean
-var TEST_BOUNDARY = true;       // vazio, zero, negativo, overflow, string gigante
-var TEST_INJECTION = true;      // SQLi, XSS, NoSQLi, path traversal, format string, unicode
+// ================= CONFIGURACAO DO USUÁRIO =================
+//
+// Altere somente esta secao para personalizar a execucao.
 
-var MAX_MUTATIONS = 60;         // teto global de mutacoes geradas
-var MAX_REPEATER_SENDS = 10;    // teto de abas novas no Repeater
-// ------------------------------------------------
+// ---------- Categorias principais ----------
+var TEST_STRUCTURAL = true;       // null, remocao, objeto vazio e array vazio
+var TEST_TYPE_CONFUSION = true;   // troca entre string, numero e boolean
+var TEST_BOUNDARY = true;         // vazio, negativos, overflow e strings longas
+var TEST_INJECTION = true;        // XSS, SQLi, NoSQLi, traversal etc.
+
+// ---------- Testes estruturais individuais ----------
+var TEST_NULL_VALUE = true;
+var TEST_FIELD_REMOVAL = true;
+var TEST_EMPTY_OBJECT = true;
+var TEST_EMPTY_ARRAY = true;
+
+// ---------- Testes de limite individuais ----------
+var TEST_EMPTY_STRING = true;
+var TEST_LONG_STRING = true;
+var TEST_NUMBER_ZERO = true;
+var TEST_NUMBER_NEGATIVE = true;
+var TEST_NUMBER_OVERFLOW = true;
+var TEST_INTEGER_AS_FLOAT = true;
+var TEST_BOOLEAN_FLIP = true;
+
+// ---------- Testes de injecao individuais ----------
+var TEST_SQLI = true;
+var TEST_XSS = true;
+var TEST_PATH_TRAVERSAL = true;
+var TEST_NOSQLI = true;
+var TEST_FORMAT_STRING = true;
+var TEST_UNICODE = true;
+
+// ---------- Testes de confusao de tipo ----------
+var TEST_STRING_AS_NUMBER = true;
+var TEST_STRING_AS_BOOLEAN = true;
+var TEST_NUMBER_AS_STRING = true;
+var TEST_NUMBER_AS_NUMERIC_STRING = true;
+var TEST_BOOLEAN_AS_STRING = true;
+var TEST_BOOLEAN_AS_NUMBER = true;
+
+// ---------- Regras por caminho JSON ----------
+//
+// Sintaxe de caminhos:
+//   $.user.email          caminho exato
+//   $.users[*].email      qualquer indice de array
+//   $.metadata.*          qualquer filho direto
+//   $.metadata.**         qualquer descendente
+//
+// INCLUSAO:
+//   - Lista vazia: todos os caminhos podem ser testados.
+//   - Lista preenchida: somente caminhos que casarem com algum padrao.
+//
+// EXCLUSAO:
+//   - Caminhos que casarem aqui nao recebem nenhuma mutacao.
+//   - A exclusao tem prioridade sobre a inclusao.
+//
+// EXCECOES:
+//   - Impedem apenas um teste ou uma categoria em determinado caminho.
+//   - Formato: "PADRAO_DO_CAMINHO::REGRA"
+//   - Regras aceitas:
+//       ALL
+//       CATEGORY:STRUCTURAL
+//       CATEGORY:TYPE_CONFUSION
+//       CATEGORY:BOUNDARY
+//       CATEGORY:INJECTION
+//       ou o nome exato do teste, como STRING_XSS ou NULL_VALUE.
+
+List<String> INCLUDE_PATH_PATTERNS = List.of(
+        // "$.user.**",
+        // "$.items[*].**"
+);
+
+// Exemplos:
+// "$.chosen_discount"    -> exclui somente esse caminho
+// "$.chosen_discount.**" -> exclui o caminho e todos os descendentes
+// "$.items[*].internalId" -> exclui o campo em qualquer item do array
+List<String> EXCLUDE_PATH_PATTERNS = List.of(
+         "$.chosen_products.quantity"
+        // "$.audit.**"
+);
+
+List<String> PATH_TEST_EXCEPTIONS = List.of(
+        // "$.profile.nickname::NULL_VALUE",
+        // "$.description::CATEGORY:STRUCTURAL",
+        // "$.items[*].internalId::ALL"
+);
+
+// Mostra no log os caminhos ignorados pelas regras.
+var LOG_PATH_RULE_SKIPS = true;
+
+// Mostra todos os caminhos JSON encontrados antes das mutacoes.
+// Util para confirmar o nome exato de um campo durante a configuracao.
+var LOG_DISCOVERED_JSON_PATHS = false;
+
+// ---------- Payloads editaveis ----------
+var PAYLOAD_SQLI = "' OR '1'='1";
+var PAYLOAD_XSS = "<script>alert(1)</script>";
+var PAYLOAD_PATH_TRAVERSAL = "../../../../etc/passwd";
+var PAYLOAD_NOSQLI = "{\"$ne\": null}";
+var PAYLOAD_FORMAT_STRING = "%s%x%n";
+var PAYLOAD_UNICODE = "\u202Etest\uD83D\uDE00";
+
+var PAYLOAD_NON_NUMERIC_STRING = "abc";
+var PAYLOAD_NUMERIC_STRING = "123";
+var PAYLOAD_BOOLEAN_STRING = "true";
+var PAYLOAD_LONG_STRING_CHARACTER = "A";
+
+// ---------- Valores de limite ----------
+var LONG_STRING_LENGTH = 10000;
+var NEGATIVE_INTEGER_VALUE = -1L;
+var NEGATIVE_DECIMAL_VALUE = -1.5;
+var INTEGER_AS_FLOAT_VALUE = 1.5;
+var STRING_AS_NUMBER_VALUE = 0L;
+var BOOLEAN_AS_NUMBER_VALUE = 1L;
+
+// ---------- Criterio de finding ----------
+// Qualquer resposta dentro deste intervalo e considerada aceitacao.
+var FINDING_STATUS_MIN = 200;
+var FINDING_STATUS_MAX = 299;
+
+// Exige que a requisicao original tambem retorne um status neste intervalo.
+var REQUIRE_SUCCESSFUL_BASELINE = true;
+var BASELINE_STATUS_MIN = 200;
+var BASELINE_STATUS_MAX = 299;
+
+// ---------- Volume e destinos ----------
+var MAX_MUTATIONS = 60;
+var MAX_REPEATER_SENDS = 10;
+
+// Quando o limite do Repeater for atingido, envia o excedente ao Organizer.
+var SEND_EXCESS_TO_ORGANIZER = true;
+
+// ---------- Organizacao no Repeater ----------
+//
+// A Montoya API usada pelas Custom Actions nao permite criar ou selecionar
+// grupos de abas por codigo. Para que os findings entrem em um grupo:
+// 1. crie o grupo manualmente no Repeater;
+// 2. selecione esse grupo em Settings > Tools > Repeater > Default tab group.
+//
+// Esta variavel identifica no log qual grupo deve ser configurado.
+var REPEATER_GROUP_NAME = "JSON Validation";
+
+// Prefixo curto usado nos nomes das abas.
+var REPEATER_TAB_PREFIX = "IV";
+
+// Quantidade maxima de caracteres no nome completo da aba.
+var REPEATER_TAB_NAME_MAX_LENGTH = 28;
+
+// Quantos componentes finais do caminho JSON aparecem no nome.
+var REPEATER_TAB_PATH_COMPONENTS = 2;
+
+// Adiciona um contador curto ao final para evitar nomes repetidos.
+var REPEATER_TAB_INCLUDE_COUNTER = true;
+
+// Exibe no inicio uma orientacao sobre o grupo padrao.
+var LOG_REPEATER_GROUP_GUIDANCE = true;
+
+// ---------- Logs ----------
+var LOG_REJECTED_PAYLOADS = true;
+var LOG_SERVER_ERRORS = true;
+var LOG_REDIRECTS = true;
+var LOG_OTHER_STATUS = true;
+
+// ============================================================
 
 var request = requestResponse.request();
+
+if (LOG_REPEATER_GROUP_GUIDANCE) {
+    logging.logToOutput(
+            "[REPEATER] Para agrupar automaticamente as abas desta action, "
+                    + "crie o grupo '"
+                    + REPEATER_GROUP_NAME
+                    + "' e selecione-o em Settings > Tools > Repeater "
+                    + "> Default tab group."
+    );
+}
+
 var contentType = request.headerValue("Content-Type");
 var originalBody = request.bodyToString();
 
@@ -178,6 +347,328 @@ enum Severity { NONE, LOW, MEDIUM, HIGH }
 record MutationSpec(String type, String description, Object value, boolean remove, Category category) {}
 record Mutation(String path, String type, String description, Category category, String body) {}
 
+// ---------- Nomes curtos para abas do Repeater ----------
+class RepeaterNames {
+
+    static String testLabel(String type) {
+        if (type == null) {
+            return "TEST";
+        }
+
+        return switch (type) {
+            case "STRING_XSS" -> "XSS";
+            case "STRING_SQLI" -> "SQLI";
+            case "STRING_NOSQLI" -> "NOSQL";
+            case "STRING_PATH_TRAVERSAL" -> "TRAV";
+            case "STRING_FORMAT" -> "FMT";
+            case "STRING_UNICODE" -> "UNICODE";
+
+            case "NULL_VALUE" -> "NULL";
+            case "FIELD_REMOVED" -> "REMOVE";
+            case "TYPE_EMPTY_OBJECT" -> "OBJ0";
+            case "TYPE_EMPTY_ARRAY" -> "ARR0";
+
+            case "EMPTY_STRING" -> "EMPTY";
+            case "STRING_LONG" -> "LONG";
+            case "NUMBER_ZERO" -> "ZERO";
+            case "NUMBER_NEGATIVE" -> "NEG";
+            case "NUMBER_OVERFLOW" -> "MAX";
+            case "NUMBER_FLOAT" -> "FLOAT";
+            case "BOOLEAN_FLIP" -> "FLIP";
+
+            case "TYPE_STRING" -> "STR";
+            case "TYPE_STRING_NUMERIC" -> "NUMSTR";
+            case "TYPE_NUMBER" -> "NUM";
+            case "TYPE_BOOLEAN" -> "BOOL";
+
+            default -> abbreviate(type, 8);
+        };
+    }
+
+    static String shortPath(String path, int componentLimit) {
+        if (path == null || path.isBlank() || "$".equals(path)) {
+            return "root";
+        }
+
+        var normalized = path;
+
+        if (normalized.startsWith("$.")) {
+            normalized = normalized.substring(2);
+        } else if (normalized.startsWith("$")) {
+            normalized = normalized.substring(1);
+        }
+
+        // Todos os indices sao mostrados como [] para manter o titulo curto.
+        normalized = normalized.replaceAll("\\\\[\\\\d+\\\\]", "[]");
+
+        var components = normalized.split("\\\\.");
+        var start = Math.max(0, components.length - Math.max(1, componentLimit));
+        var output = new StringBuilder();
+
+        for (int index = start; index < components.length; index++) {
+            if (output.length() > 0) {
+                output.append(".");
+            }
+
+            output.append(components[index]);
+        }
+
+        var sanitized = output.toString()
+                .replaceAll("[^a-zA-Z0-9._\\\\[\\\\]-]", "_");
+
+        return sanitized.isBlank()
+                ? "root"
+                : sanitized;
+    }
+
+    static String create(
+            String prefix,
+            String type,
+            String path,
+            int findingNumber,
+            int maxLength,
+            int pathComponents,
+            boolean includeCounter
+    ) {
+        var safePrefix = prefix == null || prefix.isBlank()
+                ? "IV"
+                : prefix.trim();
+
+        var label = testLabel(type);
+        var compactPath = shortPath(path, pathComponents);
+        var counter = includeCounter
+                ? "-" + String.format("%02d", findingNumber)
+                : "";
+
+        var fixedLength =
+                safePrefix.length()
+                        + 1
+                        + label.length()
+                        + 1
+                        + counter.length();
+
+        var availablePathLength = Math.max(
+                4,
+                maxLength - fixedLength
+        );
+
+        compactPath = abbreviate(
+                compactPath,
+                availablePathLength
+        );
+
+        var result =
+                safePrefix
+                        + "-"
+                        + label
+                        + "-"
+                        + compactPath
+                        + counter;
+
+        return abbreviate(
+                result,
+                Math.max(12, maxLength)
+        );
+    }
+
+    static String abbreviate(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+
+        if (value.length() <= maxLength) {
+            return value;
+        }
+
+        if (maxLength <= 3) {
+            return value.substring(0, maxLength);
+        }
+
+        return value.substring(0, maxLength - 3) + "...";
+    }
+}
+
+// ---------- Regras de inclusao, exclusao e excecao por caminho ----------
+class PathRules {
+
+    boolean isIncluded(String path) {
+        if (INCLUDE_PATH_PATTERNS == null || INCLUDE_PATH_PATTERNS.isEmpty()) {
+            return true;
+        }
+
+        return matchesAny(path, INCLUDE_PATH_PATTERNS);
+    }
+
+    boolean isExcluded(String path) {
+        return EXCLUDE_PATH_PATTERNS != null
+                && matchesAny(path, EXCLUDE_PATH_PATTERNS);
+    }
+
+    boolean isException(String path, MutationSpec spec) {
+        if (PATH_TEST_EXCEPTIONS == null || PATH_TEST_EXCEPTIONS.isEmpty()) {
+            return false;
+        }
+
+        for (String rawRule : PATH_TEST_EXCEPTIONS) {
+            if (rawRule == null || rawRule.isBlank()) {
+                continue;
+            }
+
+            var separatorIndex = rawRule.lastIndexOf("::");
+
+            if (separatorIndex <= 0 || separatorIndex >= rawRule.length() - 2) {
+                logging.logToError(
+                        "Regra de excecao invalida: "
+                                + rawRule
+                                + " | use CAMINHO::REGRA"
+                );
+                continue;
+            }
+
+            var pathPattern = rawRule.substring(0, separatorIndex).trim();
+            var exceptionRule = rawRule.substring(separatorIndex + 2).trim();
+
+            if (!matches(path, pathPattern)) {
+                continue;
+            }
+
+            if (exceptionRule.equalsIgnoreCase("ALL")) {
+                return true;
+            }
+
+            if (exceptionRule.regionMatches(
+                    true,
+                    0,
+                    "CATEGORY:",
+                    0,
+                    "CATEGORY:".length()
+            )) {
+                var categoryName = exceptionRule
+                        .substring("CATEGORY:".length())
+                        .trim();
+
+                if (spec.category().name().equalsIgnoreCase(categoryName)) {
+                    return true;
+                }
+
+                continue;
+            }
+
+            if (spec.type().equalsIgnoreCase(exceptionRule)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    boolean matchesAny(String path, List<String> patterns) {
+        for (String pattern : patterns) {
+            if (pattern != null
+                    && !pattern.isBlank()
+                    && matches(path, pattern.trim())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    boolean matches(String path, String pattern) {
+        if (path == null || pattern == null || pattern.isBlank()) {
+            return false;
+        }
+
+        var normalizedPattern = pattern.trim();
+
+        /*
+         * Regra de arvore:
+         *
+         *   $.chosen_discount.**
+         *
+         * deve casar tanto com o proprio campo:
+         *
+         *   $.chosen_discount
+         *
+         * quanto com qualquer descendente:
+         *
+         *   $.chosen_discount.value
+         *   $.chosen_discount.items[0].id
+         *
+         * Na implementacao anterior, o ponto antes de ** era obrigatorio,
+         * portanto um campo escalar nunca era excluido.
+         */
+        if (normalizedPattern.endsWith(".**")) {
+            var basePattern = normalizedPattern.substring(
+                    0,
+                    normalizedPattern.length() - 3
+            );
+
+            return matches(path, basePattern)
+                    || matches(path, basePattern + ".*")
+                    || pathMatchesDescendantPattern(path, basePattern);
+        }
+
+        var regex = buildRegex(normalizedPattern);
+        return path.matches(regex);
+    }
+
+    boolean pathMatchesDescendantPattern(
+            String path,
+            String basePattern
+    ) {
+        var baseRegex = buildRegex(basePattern);
+
+        // Remove o marcador de fim para permitir "." ou "[" depois da base.
+        if (baseRegex.endsWith("$")) {
+            baseRegex = baseRegex.substring(
+                    0,
+                    baseRegex.length() - 1
+            );
+        }
+
+        return path.matches(
+                baseRegex + "(?:\\..+|\\[\\d+\\].*)$"
+        );
+    }
+
+    String buildRegex(String pattern) {
+        var regex = new StringBuilder("^");
+
+        for (int index = 0; index < pattern.length();) {
+            if (pattern.startsWith("[*]", index)) {
+                regex.append("\\[\\d+\\]");
+                index += 3;
+                continue;
+            }
+
+            if (pattern.startsWith("**", index)) {
+                regex.append(".*");
+                index += 2;
+                continue;
+            }
+
+            var current = pattern.charAt(index);
+
+            if (current == '*') {
+                regex.append("[^.\\[]+");
+                index++;
+                continue;
+            }
+
+            if ("\\\\.^$|?+(){}[]".indexOf(current) >= 0) {
+                regex.append("\\\\");
+            }
+
+            regex.append(current);
+            index++;
+        }
+
+        regex.append("$");
+        return regex.toString();
+    }
+}
+
 // ---------- Navegacao e geracao de mutacoes ----------
 class Paths {
 
@@ -253,60 +744,284 @@ class Paths {
         return sb.toString();
     }
 
-    static List<MutationSpec> specsFor(Object value, boolean testStructural, boolean testTypeConfusion,
-                                        boolean testBoundary, boolean testInjection) {
+    List<MutationSpec> specsFor(Object value) {
         var specs = new ArrayList<MutationSpec>();
 
-        if (testStructural) {
-            specs.add(new MutationSpec("NULL_VALUE", "Valor substituido por null", null, false, Category.STRUCTURAL));
-            specs.add(new MutationSpec("FIELD_REMOVED", "Campo removido do corpo", null, true, Category.STRUCTURAL));
-            specs.add(new MutationSpec("TYPE_EMPTY_OBJECT", "Valor substituido por objeto vazio {}", new LinkedHashMap<String, Object>(), false, Category.STRUCTURAL));
-            specs.add(new MutationSpec("TYPE_EMPTY_ARRAY", "Valor substituido por array vazio []", new ArrayList<Object>(), false, Category.STRUCTURAL));
+        if (TEST_STRUCTURAL) {
+            if (TEST_NULL_VALUE) {
+                specs.add(new MutationSpec(
+                        "NULL_VALUE",
+                        "Valor substituido por null",
+                        null,
+                        false,
+                        Category.STRUCTURAL
+                ));
+            }
+
+            if (TEST_FIELD_REMOVAL) {
+                specs.add(new MutationSpec(
+                        "FIELD_REMOVED",
+                        "Campo removido do corpo",
+                        null,
+                        true,
+                        Category.STRUCTURAL
+                ));
+            }
+
+            if (TEST_EMPTY_OBJECT) {
+                specs.add(new MutationSpec(
+                        "TYPE_EMPTY_OBJECT",
+                        "Valor substituido por objeto vazio {}",
+                        new LinkedHashMap<String, Object>(),
+                        false,
+                        Category.STRUCTURAL
+                ));
+            }
+
+            if (TEST_EMPTY_ARRAY) {
+                specs.add(new MutationSpec(
+                        "TYPE_EMPTY_ARRAY",
+                        "Valor substituido por array vazio []",
+                        new ArrayList<Object>(),
+                        false,
+                        Category.STRUCTURAL
+                ));
+            }
         }
 
         if (value instanceof String) {
-            if (testBoundary) {
-                specs.add(new MutationSpec("EMPTY_STRING", "String vazia", "", false, Category.BOUNDARY));
-                specs.add(new MutationSpec("STRING_LONG", "String muito longa (10000 chars)", "A".repeat(10000), false, Category.BOUNDARY));
+            if (TEST_BOUNDARY) {
+                if (TEST_EMPTY_STRING) {
+                    specs.add(new MutationSpec(
+                            "EMPTY_STRING",
+                            "String vazia",
+                            "",
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
+
+                if (TEST_LONG_STRING) {
+                    specs.add(new MutationSpec(
+                            "STRING_LONG",
+                            "String muito longa (" + LONG_STRING_LENGTH + " chars)",
+                            PAYLOAD_LONG_STRING_CHARACTER.repeat(LONG_STRING_LENGTH),
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
             }
-            if (testInjection) {
-                specs.add(new MutationSpec("STRING_SQLI", "Payload de SQL Injection", "' OR '1'='1", false, Category.INJECTION));
-                specs.add(new MutationSpec("STRING_XSS", "Payload de XSS", "<script>alert(1)</script>", false, Category.INJECTION));
-                specs.add(new MutationSpec("STRING_PATH_TRAVERSAL", "Payload de Path Traversal", "../../../../etc/passwd", false, Category.INJECTION));
-                specs.add(new MutationSpec("STRING_NOSQLI", "Payload de NoSQL Injection (string)", "{\"$ne\": null}", false, Category.INJECTION));
-                specs.add(new MutationSpec("STRING_FORMAT", "Format string payload", "%s%x%n", false, Category.INJECTION));
-                specs.add(new MutationSpec("STRING_UNICODE", "Payload unicode / RTL override", "\u202Etest\uD83D\uDE00", false, Category.INJECTION));
+
+            if (TEST_INJECTION) {
+                if (TEST_SQLI) {
+                    specs.add(new MutationSpec(
+                            "STRING_SQLI",
+                            "Payload de SQL Injection",
+                            PAYLOAD_SQLI,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+
+                if (TEST_XSS) {
+                    specs.add(new MutationSpec(
+                            "STRING_XSS",
+                            "Payload de XSS",
+                            PAYLOAD_XSS,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+
+                if (TEST_PATH_TRAVERSAL) {
+                    specs.add(new MutationSpec(
+                            "STRING_PATH_TRAVERSAL",
+                            "Payload de Path Traversal",
+                            PAYLOAD_PATH_TRAVERSAL,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+
+                if (TEST_NOSQLI) {
+                    specs.add(new MutationSpec(
+                            "STRING_NOSQLI",
+                            "Payload de NoSQL Injection (string)",
+                            PAYLOAD_NOSQLI,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+
+                if (TEST_FORMAT_STRING) {
+                    specs.add(new MutationSpec(
+                            "STRING_FORMAT",
+                            "Format string payload",
+                            PAYLOAD_FORMAT_STRING,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+
+                if (TEST_UNICODE) {
+                    specs.add(new MutationSpec(
+                            "STRING_UNICODE",
+                            "Payload unicode / RTL override",
+                            PAYLOAD_UNICODE,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
             }
-            if (testTypeConfusion) {
-                specs.add(new MutationSpec("TYPE_NUMBER", "String substituida por numero (0)", 0L, false, Category.TYPE_CONFUSION));
-                specs.add(new MutationSpec("TYPE_BOOLEAN", "String substituida por boolean (true)", Boolean.TRUE, false, Category.TYPE_CONFUSION));
+
+            if (TEST_TYPE_CONFUSION) {
+                if (TEST_STRING_AS_NUMBER) {
+                    specs.add(new MutationSpec(
+                            "TYPE_NUMBER",
+                            "String substituida por numero",
+                            STRING_AS_NUMBER_VALUE,
+                            false,
+                            Category.TYPE_CONFUSION
+                    ));
+                }
+
+                if (TEST_STRING_AS_BOOLEAN) {
+                    specs.add(new MutationSpec(
+                            "TYPE_BOOLEAN",
+                            "String substituida por boolean",
+                            Boolean.TRUE,
+                            false,
+                            Category.TYPE_CONFUSION
+                    ));
+                }
             }
         } else if (value instanceof Long || value instanceof Integer) {
-            if (testBoundary) {
-                specs.add(new MutationSpec("NUMBER_ZERO", "Valor zero", 0L, false, Category.BOUNDARY));
-                specs.add(new MutationSpec("NUMBER_NEGATIVE", "Valor negativo", -1L, false, Category.BOUNDARY));
-                specs.add(new MutationSpec("NUMBER_OVERFLOW", "Overflow (Long.MAX_VALUE)", Long.MAX_VALUE, false, Category.BOUNDARY));
-                specs.add(new MutationSpec("NUMBER_FLOAT", "Float onde inteiro era esperado", 1.5, false, Category.BOUNDARY));
+            if (TEST_BOUNDARY) {
+                if (TEST_NUMBER_ZERO) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_ZERO",
+                            "Valor zero",
+                            0L,
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
+
+                if (TEST_NUMBER_NEGATIVE) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_NEGATIVE",
+                            "Valor negativo",
+                            NEGATIVE_INTEGER_VALUE,
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
+
+                if (TEST_NUMBER_OVERFLOW) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_OVERFLOW",
+                            "Overflow (Long.MAX_VALUE)",
+                            Long.MAX_VALUE,
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
+
+                if (TEST_INTEGER_AS_FLOAT) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_FLOAT",
+                            "Float onde inteiro era esperado",
+                            INTEGER_AS_FLOAT_VALUE,
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
             }
-            if (testTypeConfusion) {
-                specs.add(new MutationSpec("TYPE_STRING", "Numero substituido por string nao numerica", "abc", false, Category.TYPE_CONFUSION));
-                specs.add(new MutationSpec("TYPE_STRING_NUMERIC", "Numero substituido por string numerica", "123", false, Category.TYPE_CONFUSION));
+
+            if (TEST_TYPE_CONFUSION) {
+                if (TEST_NUMBER_AS_STRING) {
+                    specs.add(new MutationSpec(
+                            "TYPE_STRING",
+                            "Numero substituido por string nao numerica",
+                            PAYLOAD_NON_NUMERIC_STRING,
+                            false,
+                            Category.TYPE_CONFUSION
+                    ));
+                }
+
+                if (TEST_NUMBER_AS_NUMERIC_STRING) {
+                    specs.add(new MutationSpec(
+                            "TYPE_STRING_NUMERIC",
+                            "Numero substituido por string numerica",
+                            PAYLOAD_NUMERIC_STRING,
+                            false,
+                            Category.TYPE_CONFUSION
+                    ));
+                }
             }
         } else if (value instanceof Double) {
-            if (testBoundary) {
-                specs.add(new MutationSpec("NUMBER_ZERO", "Valor zero", 0.0, false, Category.BOUNDARY));
-                specs.add(new MutationSpec("NUMBER_NEGATIVE", "Valor negativo", -1.5, false, Category.BOUNDARY));
+            if (TEST_BOUNDARY) {
+                if (TEST_NUMBER_ZERO) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_ZERO",
+                            "Valor zero",
+                            0.0,
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
+
+                if (TEST_NUMBER_NEGATIVE) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_NEGATIVE",
+                            "Valor negativo",
+                            NEGATIVE_DECIMAL_VALUE,
+                            false,
+                            Category.BOUNDARY
+                    ));
+                }
             }
-            if (testTypeConfusion) {
-                specs.add(new MutationSpec("TYPE_STRING", "Numero substituido por string", "abc", false, Category.TYPE_CONFUSION));
+
+            if (TEST_TYPE_CONFUSION && TEST_NUMBER_AS_STRING) {
+                specs.add(new MutationSpec(
+                        "TYPE_STRING",
+                        "Numero substituido por string",
+                        PAYLOAD_NON_NUMERIC_STRING,
+                        false,
+                        Category.TYPE_CONFUSION
+                ));
             }
         } else if (value instanceof Boolean b) {
-            if (testBoundary) {
-                specs.add(new MutationSpec("BOOLEAN_FLIP", "Boolean invertido", !b, false, Category.BOUNDARY));
+            if (TEST_BOUNDARY && TEST_BOOLEAN_FLIP) {
+                specs.add(new MutationSpec(
+                        "BOOLEAN_FLIP",
+                        "Boolean invertido",
+                        !b,
+                        false,
+                        Category.BOUNDARY
+                ));
             }
-            if (testTypeConfusion) {
-                specs.add(new MutationSpec("TYPE_STRING", "Boolean substituido por string \"true\"", "true", false, Category.TYPE_CONFUSION));
-                specs.add(new MutationSpec("TYPE_NUMBER", "Boolean substituido por numero (1)", 1L, false, Category.TYPE_CONFUSION));
+
+            if (TEST_TYPE_CONFUSION) {
+                if (TEST_BOOLEAN_AS_STRING) {
+                    specs.add(new MutationSpec(
+                            "TYPE_STRING",
+                            "Boolean substituido por string",
+                            PAYLOAD_BOOLEAN_STRING,
+                            false,
+                            Category.TYPE_CONFUSION
+                    ));
+                }
+
+                if (TEST_BOOLEAN_AS_NUMBER) {
+                    specs.add(new MutationSpec(
+                            "TYPE_NUMBER",
+                            "Boolean substituido por numero",
+                            BOOLEAN_AS_NUMBER_VALUE,
+                            false,
+                            Category.TYPE_CONFUSION
+                    ));
+                }
             }
         }
 
@@ -318,25 +1033,162 @@ class Paths {
 var originalRoot = Json.parse(originalBody);
 var allPaths = Paths.collect(originalRoot);
 
-var mutations = new ArrayList<Mutation>();
-outer:
-for (var path : allPaths) {
-    var leafValue = Paths.getAt(Json.parse(originalBody), path);
-    for (var spec : Paths.specsFor(leafValue, TEST_STRUCTURAL, TEST_TYPE_CONFUSION, TEST_BOUNDARY, TEST_INJECTION)) {
-        if (mutations.size() >= MAX_MUTATIONS) break outer;
-        var clonedRoot = Json.parse(originalBody);
-        var applied = Paths.applyAt(clonedRoot, path, spec);
-        if (!applied) continue;
-        mutations.add(new Mutation(Paths.pathToString(path), spec.type(), spec.description(), spec.category(), Json.write(clonedRoot)));
+if (LOG_DISCOVERED_JSON_PATHS) {
+    logging.logToOutput(
+            "[PATHS] " + allPaths.size() + " caminhos JSON encontrados:"
+    );
+
+    for (var discoveredPath : allPaths) {
+        logging.logToOutput(
+                "[PATH] " + Paths.pathToString(discoveredPath)
+        );
     }
 }
 
+var pathRules = new PathRules();
+
+var eligiblePaths = new ArrayList<List<Object>>();
+var skippedNotIncludedCount = 0;
+var skippedExcludedCount = 0;
+
+// Primeira etapa: avalia TODOS os caminhos antes de aplicar MAX_MUTATIONS.
+// Isso garante que exclusoes localizadas no fim do JSON sejam reconhecidas.
+for (var path : allPaths) {
+    var pathString = Paths.pathToString(path);
+
+    if (!pathRules.isIncluded(pathString)) {
+        skippedNotIncludedCount++;
+
+        if (LOG_PATH_RULE_SKIPS) {
+            logging.logToOutput(
+                    "[IGNORADO POR INCLUSAO] path=" + pathString
+            );
+        }
+
+        continue;
+    }
+
+    if (pathRules.isExcluded(pathString)) {
+        skippedExcludedCount++;
+
+        if (LOG_PATH_RULE_SKIPS) {
+            logging.logToOutput(
+                    "[IGNORADO POR EXCLUSAO] path=" + pathString
+            );
+        }
+
+        continue;
+    }
+
+    eligiblePaths.add(path);
+}
+
+var mutations = new ArrayList<Mutation>();
+var skippedExceptionCount = 0;
+var mutationLimitReached = false;
+
+// Segunda etapa: gera mutacoes somente para os caminhos elegiveis.
+outer:
+for (var path : eligiblePaths) {
+    var pathString = Paths.pathToString(path);
+
+    var leafValue = Paths.getAt(
+            Json.parse(originalBody),
+            path
+    );
+
+    for (var spec : new Paths().specsFor(leafValue)) {
+        if (pathRules.isException(pathString, spec)) {
+            skippedExceptionCount++;
+
+            if (LOG_PATH_RULE_SKIPS) {
+                logging.logToOutput(
+                        "[IGNORADO POR EXCECAO] path="
+                                + pathString
+                                + " | teste="
+                                + spec.type()
+                                + " | categoria="
+                                + spec.category()
+                );
+            }
+
+            continue;
+        }
+
+        if (mutations.size() >= MAX_MUTATIONS) {
+            mutationLimitReached = true;
+            break outer;
+        }
+
+        var clonedRoot = Json.parse(originalBody);
+        var applied = Paths.applyAt(
+                clonedRoot,
+                path,
+                spec
+        );
+
+        if (!applied) {
+            continue;
+        }
+
+        mutations.add(
+                new Mutation(
+                        pathString,
+                        spec.type(),
+                        spec.description(),
+                        spec.category(),
+                        Json.write(clonedRoot)
+                )
+        );
+    }
+}
+
+if (mutationLimitReached) {
+    logging.logToOutput(
+            "[LIMITE] MAX_MUTATIONS="
+                    + MAX_MUTATIONS
+                    + " atingido apos a avaliacao completa das regras de caminho."
+    );
+}
+
 if (mutations.isEmpty()) {
-    logging.logToOutput("Nenhum parametro mutavel encontrado no corpo JSON (ou todas as categorias de teste estao desligadas).");
+    logging.logToOutput(
+            "Nenhuma mutacao foi gerada. "
+                    + "Verifique as categorias habilitadas e as regras de caminho."
+    );
+
+    logging.logToOutput(
+            String.format(
+                    "Regras de caminho: %d fora da inclusao | "
+                            + "%d excluidos | %d testes excepcionados",
+                    skippedNotIncludedCount,
+                    skippedExcludedCount,
+                    skippedExceptionCount
+            )
+    );
+
     return;
 }
 
-logging.logToOutput("Gerando " + mutations.size() + " mutacoes a partir de " + allPaths.size() + " campos JSON...");
+logging.logToOutput(
+        "Gerando "
+                + mutations.size()
+                + " mutacoes a partir de "
+                + eligiblePaths.size()
+                + " caminhos elegiveis ("
+                + allPaths.size()
+                + " caminhos encontrados)..."
+);
+
+logging.logToOutput(
+        String.format(
+                "Regras de caminho: %d fora da inclusao | "
+                        + "%d excluidos | %d testes excepcionados",
+                skippedNotIncludedCount,
+                skippedExcludedCount,
+                skippedExceptionCount
+        )
+);
 
 // ---------- Checagem do servico HTTP ----------
 var service = request.httpService();
@@ -360,7 +1212,8 @@ if (baselineResult == null || baselineResult.response() == null) {
 
 var baselineStatus = baselineResult.response().statusCode();
 var baselineLength = baselineResult.response().body().length();
-var baselineIsSuccess = baselineStatus >= 200 && baselineStatus < 300;
+var baselineIsSuccess = baselineStatus >= BASELINE_STATUS_MIN
+        && baselineStatus <= BASELINE_STATUS_MAX;
 
 logging.logToOutput(
         String.format(
@@ -370,7 +1223,7 @@ logging.logToOutput(
         )
 );
 
-if (!baselineIsSuccess) {
+if (REQUIRE_SUCCESSFUL_BASELINE && !baselineIsSuccess) {
     logging.logToError(
             "A baseline retornou HTTP "
                     + baselineStatus
@@ -452,7 +1305,8 @@ for (int index = 0; index < analyzedCount; index++) {
     var mutatedResponse = mutatedResult.response();
     var status = mutatedResponse.statusCode();
     var length = mutatedResponse.body().length();
-    var accepted = status >= 200 && status < 300;
+    var accepted = status >= FINDING_STATUS_MIN
+            && status <= FINDING_STATUS_MAX;
 
     if (accepted) {
         findingCount++;
@@ -471,12 +1325,19 @@ for (int index = 0; index < analyzedCount; index++) {
 
         if (repeaterSentCount < MAX_REPEATER_SENDS) {
             try {
+                var repeaterTabName = RepeaterNames.create(
+                        REPEATER_TAB_PREFIX,
+                        mutation.type(),
+                        mutation.path(),
+                        findingCount,
+                        REPEATER_TAB_NAME_MAX_LENGTH,
+                        REPEATER_TAB_PATH_COMPONENTS,
+                        REPEATER_TAB_INCLUDE_COUNTER
+                );
+
                 api.repeater().sendToRepeater(
                         mutatedResult.request(),
-                        "JSON-INPUT-VALIDATION-"
-                                + mutation.type()
-                                + "-"
-                                + index
+                        repeaterTabName
                 );
 
                 repeaterSentCount++;
@@ -490,7 +1351,7 @@ for (int index = 0; index < analyzedCount; index++) {
                                 + exception.getMessage()
                 );
             }
-        } else {
+        } else if (SEND_EXCESS_TO_ORGANIZER) {
             try {
                 api.organizer().sendToOrganizer(
                         mutatedResult.request()
@@ -511,14 +1372,16 @@ for (int index = 0; index < analyzedCount; index++) {
     if (status >= 400 && status < 500) {
         rejectedCount++;
 
-        logging.logToOutput(
-                String.format(
-                        "[REJEITADO] path=%s | teste=%s | HTTP=%d",
-                        mutation.path(),
-                        mutation.type(),
-                        status
-                )
-        );
+        if (LOG_REJECTED_PAYLOADS) {
+            logging.logToOutput(
+                    String.format(
+                            "[REJEITADO] path=%s | teste=%s | HTTP=%d",
+                            mutation.path(),
+                            mutation.type(),
+                            status
+                    )
+            );
+        }
 
         continue;
     }
@@ -526,15 +1389,17 @@ for (int index = 0; index < analyzedCount; index++) {
     if (status >= 500 && status < 600) {
         serverErrorCount++;
 
-        logging.logToOutput(
-                String.format(
-                        "[ERRO 5XX] path=%s | teste=%s | HTTP=%d "
-                                + "| nao enviado ao Repeater",
-                        mutation.path(),
-                        mutation.type(),
-                        status
-                )
-        );
+        if (LOG_SERVER_ERRORS) {
+            logging.logToOutput(
+                    String.format(
+                            "[ERRO 5XX] path=%s | teste=%s | HTTP=%d "
+                                    + "| nao enviado ao Repeater",
+                            mutation.path(),
+                            mutation.type(),
+                            status
+                    )
+            );
+        }
 
         continue;
     }
@@ -542,29 +1407,33 @@ for (int index = 0; index < analyzedCount; index++) {
     if (status >= 300 && status < 400) {
         redirectCount++;
 
-        logging.logToOutput(
-                String.format(
-                        "[REDIRECIONAMENTO] path=%s | teste=%s | HTTP=%d "
-                                + "| nao enviado ao Repeater",
-                        mutation.path(),
-                        mutation.type(),
-                        status
-                )
-        );
+        if (LOG_REDIRECTS) {
+            logging.logToOutput(
+                    String.format(
+                            "[REDIRECIONAMENTO] path=%s | teste=%s | HTTP=%d "
+                                    + "| nao enviado ao Repeater",
+                            mutation.path(),
+                            mutation.type(),
+                            status
+                    )
+            );
+        }
 
         continue;
     }
 
     otherStatusCount++;
 
-    logging.logToOutput(
-            String.format(
-                    "[OUTRO STATUS] path=%s | teste=%s | HTTP=%d",
-                    mutation.path(),
-                    mutation.type(),
-                    status
-            )
-    );
+    if (LOG_OTHER_STATUS) {
+        logging.logToOutput(
+                String.format(
+                        "[OUTRO STATUS] path=%s | teste=%s | HTTP=%d",
+                        mutation.path(),
+                        mutation.type(),
+                        status
+                )
+        );
+    }
 }
 
 if (responses.size() < mutations.size()) {
@@ -590,9 +1459,11 @@ logging.logToOutput(
 logging.logToOutput(
         String.format(
                 "Destino: %d findings enviados ao Repeater "
-                        + "| %d excedentes enviados ao Organizer",
+                        + "| %d excedentes enviados ao Organizer "
+                        + "| grupo padrao esperado=%s",
                 repeaterSentCount,
-                organizerSentCount
+                organizerSentCount,
+                REPEATER_GROUP_NAME
         )
 );
 
@@ -603,10 +1474,19 @@ if (findingCount == 0) {
 }
 
 if (findingCount > MAX_REPEATER_SENDS) {
-    logging.logToOutput(
-            "O limite de "
-                    + MAX_REPEATER_SENDS
-                    + " abas do Repeater foi atingido. "
-                    + "Os findings excedentes foram enviados ao Organizer."
-    );
+    if (SEND_EXCESS_TO_ORGANIZER) {
+        logging.logToOutput(
+                "O limite de "
+                        + MAX_REPEATER_SENDS
+                        + " abas do Repeater foi atingido. "
+                        + "Os findings excedentes foram enviados ao Organizer."
+        );
+    } else {
+        logging.logToOutput(
+                "O limite de "
+                        + MAX_REPEATER_SENDS
+                        + " abas do Repeater foi atingido. "
+                        + "Os findings excedentes ficaram somente no log."
+        );
+    }
 }

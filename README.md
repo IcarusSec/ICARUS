@@ -66,6 +66,8 @@ It takes the current request and generates variations using alternate HTTP metho
 - **TRACE reflection detection**.
 - **Detailed configuration options** available directly within the `httpverbfuzz.java` script.
 
+[View HTTPVerbFuzz README →](HTTPVerbFuzz/README.md)
+
 ## Usage
 
 To use these custom actions in Burp Suite:

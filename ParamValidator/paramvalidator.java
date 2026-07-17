@@ -175,6 +175,10 @@ var FILTER_EXACT_BASELINE_MATCH = true;
 // If the XSS payload is reflected exactly in the response, flag it regardless of status code.
 var CHECK_XSS_REFLECTION = true;
 
+// ---------- Audit Issues ----------
+// Generates native Burp Scanner issues in the Dashboard for discovered vulnerabilities.
+var CREATE_AUDIT_ISSUES = true;
+
 // ---------- Repeater organization ----------
 //
 // The Montoya API used by Custom Actions does not allow creating or selecting
@@ -1450,6 +1454,26 @@ for (int index = 0; index < analyzedCount; index++) {
                         "Nao foi possivel enviar o finding excedente ao Organizer: "
                                 + exception.getMessage()
                 );
+            }
+        }
+
+        if (CREATE_AUDIT_ISSUES) {
+            try {
+                var issue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
+                    "ParamValidator: " + mutation.type(),
+                    "Found suspicious behavior at JSON path: " + mutation.path() + ".<br>" + findingMsg,
+                    "Review the validation logic for this parameter.",
+                    mutatedResult.request().url(),
+                    burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                    burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM,
+                    null,
+                    null,
+                    burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH,
+                    mutatedResult
+                );
+                api.siteMap().add(issue);
+            } catch (Exception e) {
+                logging.logToError("Failed to create Audit Issue: " + e.getMessage());
             }
         }
 

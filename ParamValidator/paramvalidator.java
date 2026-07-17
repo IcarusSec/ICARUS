@@ -138,6 +138,9 @@ var PAYLOAD_NOSQLI = "{\"$ne\": null}";
 var PAYLOAD_FORMAT_STRING = "%s%x%n";
 var PAYLOAD_UNICODE = "\u202Etest\uD83D\uDE00";
 
+var PAYLOAD_NUMBER_SQLI_MATH = "1/0";
+var PAYLOAD_NUMBER_SQLI_TIME = "1-(WAITFOR DELAY '0:0:10')";
+
 var PAYLOAD_NON_NUMERIC_STRING = "abc";
 var PAYLOAD_NUMERIC_STRING = "123";
 var PAYLOAD_BOOLEAN_STRING = "true";
@@ -1015,6 +1018,28 @@ class Paths {
                             NEGATIVE_DECIMAL_VALUE,
                             false,
                             Category.BOUNDARY
+                    ));
+                }
+            }
+
+            if (TEST_INJECTION) {
+                if (TEST_SQLI) {
+                    specs.add(new MutationSpec(
+                            "NUMBER_SQLI_MATH",
+                            "Mathematical SQL Injection payload (Number context)",
+                            PAYLOAD_NUMBER_SQLI_MATH,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+                
+                if (TEST_SQLI_TIME) {
+                    specs.add(new MutationSpec(
+                            "STRING_SQLI_TIME", // Using same type for detection
+                            "Time-based SQL Injection payload (Number context)",
+                            PAYLOAD_NUMBER_SQLI_TIME,
+                            false,
+                            Category.INJECTION
                     ));
                 }
             }

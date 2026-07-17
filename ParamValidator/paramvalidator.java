@@ -12,43 +12,43 @@
 // ============================================================
 
 // ============================================================
-// ================= USO BÁSICO =================
+// ================= BASIC USAGE =================
 // ------------------------------------------------------------
-// Cole este script em: Repeater > Custom actions > New > Blank
-// Rode com o botao direito sobre uma requisicao com corpo JSON.
+// Paste this script in: Repeater > Custom actions > New > Blank
+// Right-click on a request with a JSON body and run.
 //
-// Recursos principais:
-//  - Mutacoes sao categorizadas (STRUCTURAL / TYPE_CONFUSION /
-//    BOUNDARY / INJECTION) e cada categoria pode ser ligada ou
-//    desligada abaixo, para controlar volume/tempo de execucao
+// Key features:
+//  - Mutations are categorized (STRUCTURAL / TYPE_CONFUSION /
+//    BOUNDARY / INJECTION) and each category can be turned on or
+//    off below, to control volume/execution time.
 //
-//  - Respostas 4xx, 5xx, redirecionamentos e falhas de conexao
-//    nao sao enviadas ao Repeater; ficam apenas registradas no log.
-//  - Findings acima do limite de abas sao enviados ao Organizer.
-//  - Regras por caminho permitem inclusao, exclusao e excecoes
-//    especificas por teste ou categoria, com suporte a curingas.
+//  - 4xx, 5xx responses, redirects and connection failures
+//    are not sent to Repeater; they are only logged.
+//  - Findings above the tab limit are sent to Organizer.
+//  - Path rules allow inclusion, exclusion and specific exceptions
+//    per test or category, with wildcard support.
 //
-// Sem dependencias externas: parser/serializer JSON proprio,
-// ja que Custom Actions nao permitem adicionar bibliotecas.
+// No external dependencies: custom JSON parser/serializer,
+// since Custom Actions don't allow adding libraries.
 // ============================================================
 
-// ================= CONFIGURACAO DO USUÁRIO =================
+// ================= USER CONFIGURATION =================
 //
-// Altere somente esta secao para personalizar a execucao.
+// Change only this section to customize execution.
 
-// ---------- Categorias principais ----------
-var TEST_STRUCTURAL = true;       // null, remocao, objeto vazio e array vazio
-var TEST_TYPE_CONFUSION = true;   // troca entre string, numero e boolean
-var TEST_BOUNDARY = true;         // vazio, negativos, overflow e strings longas
+// ---------- Main categories ----------
+var TEST_STRUCTURAL = true;       // null, removal, empty object and empty array
+var TEST_TYPE_CONFUSION = true;   // swap between string, number and boolean
+var TEST_BOUNDARY = true;         // empty, negatives, overflow and long strings
 var TEST_INJECTION = true;        // XSS, SQLi, NoSQLi, traversal etc.
 
-// ---------- Testes estruturais individuais ----------
+// ---------- Individual structural tests ----------
 var TEST_NULL_VALUE = true;
 var TEST_FIELD_REMOVAL = true;
 var TEST_EMPTY_OBJECT = true;
 var TEST_EMPTY_ARRAY = true;
 
-// ---------- Testes de limite individuais ----------
+// ---------- Individual boundary tests ----------
 var TEST_EMPTY_STRING = true;
 var TEST_LONG_STRING = true;
 var TEST_NUMBER_ZERO = true;
@@ -57,7 +57,7 @@ var TEST_NUMBER_OVERFLOW = true;
 var TEST_INTEGER_AS_FLOAT = true;
 var TEST_BOOLEAN_FLIP = true;
 
-// ---------- Testes de injecao individuais ----------
+// ---------- Individual injection tests ----------
 var TEST_SQLI = true;
 var TEST_XSS = true;
 var TEST_PATH_TRAVERSAL = true;
@@ -65,7 +65,7 @@ var TEST_NOSQLI = true;
 var TEST_FORMAT_STRING = true;
 var TEST_UNICODE = true;
 
-// ---------- Testes de confusao de tipo ----------
+// ---------- Type confusion tests ----------
 var TEST_STRING_AS_NUMBER = true;
 var TEST_STRING_AS_BOOLEAN = true;
 var TEST_NUMBER_AS_STRING = true;
@@ -73,42 +73,42 @@ var TEST_NUMBER_AS_NUMERIC_STRING = true;
 var TEST_BOOLEAN_AS_STRING = true;
 var TEST_BOOLEAN_AS_NUMBER = true;
 
-// ---------- Regras por caminho JSON ----------
+// ---------- Rules by JSON path ----------
 //
-// Sintaxe de caminhos:
-//   $.user.email          caminho exato
-//   $.users[*].email      qualquer indice de array
-//   $.metadata.*          qualquer filho direto
-//   $.metadata.**         qualquer descendente
+// Path syntax:
+//   $.user.email          exact path
+//   $.users[*].email      any array index
+//   $.metadata.*          any direct child
+//   $.metadata.**         any descendant
 //
-// INCLUSAO:
-//   - Lista vazia: todos os caminhos podem ser testados.
-//   - Lista preenchida: somente caminhos que casarem com algum padrao.
+// INCLUSION:
+//   - Empty list: all paths can be tested.
+//   - Populated list: only paths that match some pattern.
 //
-// EXCLUSAO:
-//   - Caminhos que casarem aqui nao recebem nenhuma mutacao.
-//   - A exclusao tem prioridade sobre a inclusao.
+// EXCLUSION:
+//   - Paths matching here will receive no mutations.
+//   - Exclusion has priority over inclusion.
 //
-// EXCECOES:
-//   - Impedem apenas um teste ou uma categoria em determinado caminho.
-//   - Formato: "PADRAO_DO_CAMINHO::REGRA"
-//   - Regras aceitas:
+// EXCEPTIONS:
+//   - Prevent only a single test or category on a given path.
+//   - Format: "PATH_PATTERN::RULE"
+//   - Accepted rules:
 //       ALL
 //       CATEGORY:STRUCTURAL
 //       CATEGORY:TYPE_CONFUSION
 //       CATEGORY:BOUNDARY
 //       CATEGORY:INJECTION
-//       ou o nome exato do teste, como STRING_XSS ou NULL_VALUE.
+//       or the exact test name, like STRING_XSS or NULL_VALUE.
 
 List<String> INCLUDE_PATH_PATTERNS = List.of(
         // "$.user.**",
         // "$.items[*].**"
 );
 
-// Exemplos:
-// "$.chosen_discount"    -> exclui somente esse caminho
-// "$.chosen_discount.**" -> exclui o caminho e todos os descendentes
-// "$.items[*].internalId" -> exclui o campo em qualquer item do array
+// Examples:
+// "$.chosen_discount"    -> excludes only this path
+// "$.chosen_discount.**" -> excludes the path and all descendants
+// "$.items[*].internalId" -> excludes the field in any array item
 List<String> EXCLUDE_PATH_PATTERNS = List.of(
          "$.chosen_products.quantity"
         // "$.audit.**"
@@ -120,14 +120,14 @@ List<String> PATH_TEST_EXCEPTIONS = List.of(
         // "$.items[*].internalId::ALL"
 );
 
-// Mostra no log os caminhos ignorados pelas regras.
+// Shows skipped paths in the log.
 var LOG_PATH_RULE_SKIPS = true;
 
-// Mostra todos os caminhos JSON encontrados antes das mutacoes.
-// Util para confirmar o nome exato de um campo durante a configuracao.
+// Shows all JSON paths discovered before mutations.
+// Useful to confirm the exact field name during configuration.
 var LOG_DISCOVERED_JSON_PATHS = false;
 
-// ---------- Payloads editaveis ----------
+// ---------- Editable payloads ----------
 var PAYLOAD_SQLI = "' OR '1'='1";
 var PAYLOAD_XSS = "<script>alert(1)</script>";
 var PAYLOAD_PATH_TRAVERSAL = "../../../../etc/passwd";
@@ -140,7 +140,7 @@ var PAYLOAD_NUMERIC_STRING = "123";
 var PAYLOAD_BOOLEAN_STRING = "true";
 var PAYLOAD_LONG_STRING_CHARACTER = "A";
 
-// ---------- Valores de limite ----------
+// ---------- Boundary values ----------
 var LONG_STRING_LENGTH = 10000;
 var NEGATIVE_INTEGER_VALUE = -1L;
 var NEGATIVE_DECIMAL_VALUE = -1.5;
@@ -148,46 +148,46 @@ var INTEGER_AS_FLOAT_VALUE = 1.5;
 var STRING_AS_NUMBER_VALUE = 0L;
 var BOOLEAN_AS_NUMBER_VALUE = 1L;
 
-// ---------- Criterio de finding ----------
-// Qualquer resposta dentro deste intervalo e considerada aceitacao.
+// ---------- Finding criteria ----------
+// Any response within this range is considered acceptance.
 var FINDING_STATUS_MIN = 200;
 var FINDING_STATUS_MAX = 299;
 
-// Exige que a requisicao original tambem retorne um status neste intervalo.
+// Requires that the original request also returns a status in this range.
 var REQUIRE_SUCCESSFUL_BASELINE = true;
 var BASELINE_STATUS_MIN = 200;
 var BASELINE_STATUS_MAX = 299;
 
-// ---------- Volume e destinos ----------
+// ---------- Volume and destinations ----------
 var MAX_MUTATIONS = 60;
 var MAX_REPEATER_SENDS = 10;
 
-// Quando o limite do Repeater for atingido, envia o excedente ao Organizer.
+// When the Repeater limit is reached, send the excess to Organizer.
 var SEND_EXCESS_TO_ORGANIZER = true;
 
-// ---------- Organizacao no Repeater ----------
+// ---------- Repeater organization ----------
 //
-// A Montoya API usada pelas Custom Actions nao permite criar ou selecionar
-// grupos de abas por codigo. Para que os findings entrem em um grupo:
-// 1. crie o grupo manualmente no Repeater;
-// 2. selecione esse grupo em Settings > Tools > Repeater > Default tab group.
+// The Montoya API used by Custom Actions does not allow creating or selecting
+// tab groups via code. For findings to enter a group:
+// 1. create the group manually in Repeater;
+// 2. select this group in Settings > Tools > Repeater > Default tab group.
 //
-// Esta variavel identifica no log qual grupo deve ser configurado.
+// This variable identifies in the log which group should be configured.
 var REPEATER_GROUP_NAME = "JSON Validation";
 
-// Prefixo curto usado nos nomes das abas.
+// Short prefix used in tab names.
 var REPEATER_TAB_PREFIX = "IV";
 
-// Quantidade maxima de caracteres no nome completo da aba.
+// Maximum character limit in the full tab name.
 var REPEATER_TAB_NAME_MAX_LENGTH = 28;
 
-// Quantos componentes finais do caminho JSON aparecem no nome.
+// How many final JSON path components appear in the name.
 var REPEATER_TAB_PATH_COMPONENTS = 2;
 
-// Adiciona um contador curto ao final para evitar nomes repetidos.
+// Adds a short counter at the end to prevent duplicate names.
 var REPEATER_TAB_INCLUDE_COUNTER = true;
 
-// Exibe no inicio uma orientacao sobre o grupo padrao.
+// Displays guidance about the default group at the beginning.
 var LOG_REPEATER_GROUP_GUIDANCE = true;
 
 // ---------- Logs ----------
@@ -202,10 +202,10 @@ var request = requestResponse.request();
 
 if (LOG_REPEATER_GROUP_GUIDANCE) {
     logging.logToOutput(
-            "[REPEATER] Para agrupar automaticamente as abas desta action, "
-                    + "crie o grupo '"
+            "[REPEATER] To automatically group tabs for this action, "
+                    + "create the group '"
                     + REPEATER_GROUP_NAME
-                    + "' e selecione-o em Settings > Tools > Repeater "
+                    + "' and select it in Settings > Tools > Repeater "
                     + "> Default tab group."
     );
 }
@@ -217,11 +217,11 @@ var looksLikeJson = (contentType != null && contentType.toLowerCase().contains("
         || (originalBody != null && (originalBody.trim().startsWith("{") || originalBody.trim().startsWith("[")));
 
 if (originalBody == null || originalBody.isBlank() || !looksLikeJson) {
-    logging.logToOutput("Corpo da requisicao vazio ou nao parece ser JSON - nada para testar.");
+    logging.logToOutput("Request body is empty or does not seem to be JSON - nothing to test.");
     return;
 }
 
-// ---------- Parser/serializer JSON minimo ----------
+// ---------- Minimal JSON parser/serializer ----------
 class Json {
 
     static Object parse(String text) {
@@ -764,7 +764,7 @@ class Paths {
             if (TEST_NULL_VALUE) {
                 specs.add(new MutationSpec(
                         "NULL_VALUE",
-                        "Valor substituido por null",
+                        "Value replaced by null",
                         null,
                         false,
                         Category.STRUCTURAL
@@ -774,7 +774,7 @@ class Paths {
             if (TEST_FIELD_REMOVAL) {
                 specs.add(new MutationSpec(
                         "FIELD_REMOVED",
-                        "Campo removido do corpo",
+                        "Field removed from body",
                         null,
                         true,
                         Category.STRUCTURAL
@@ -784,7 +784,7 @@ class Paths {
             if (TEST_EMPTY_OBJECT) {
                 specs.add(new MutationSpec(
                         "TYPE_EMPTY_OBJECT",
-                        "Valor substituido por objeto vazio {}",
+                        "Value replaced by empty object {}",
                         new LinkedHashMap<String, Object>(),
                         false,
                         Category.STRUCTURAL
@@ -794,7 +794,7 @@ class Paths {
             if (TEST_EMPTY_ARRAY) {
                 specs.add(new MutationSpec(
                         "TYPE_EMPTY_ARRAY",
-                        "Valor substituido por array vazio []",
+                        "Value replaced by empty array []",
                         new ArrayList<Object>(),
                         false,
                         Category.STRUCTURAL
@@ -807,7 +807,7 @@ class Paths {
                 if (TEST_EMPTY_STRING) {
                     specs.add(new MutationSpec(
                             "EMPTY_STRING",
-                            "String vazia",
+                            "Empty string",
                             "",
                             false,
                             Category.BOUNDARY
@@ -817,7 +817,7 @@ class Paths {
                 if (TEST_LONG_STRING) {
                     specs.add(new MutationSpec(
                             "STRING_LONG",
-                            "String muito longa (" + LONG_STRING_LENGTH + " chars)",
+                            "Very long string (" + LONG_STRING_LENGTH + " chars)",
                             PAYLOAD_LONG_STRING_CHARACTER.repeat(LONG_STRING_LENGTH),
                             false,
                             Category.BOUNDARY
@@ -829,7 +829,7 @@ class Paths {
                 if (TEST_SQLI) {
                     specs.add(new MutationSpec(
                             "STRING_SQLI",
-                            "Payload de SQL Injection",
+                            "SQL Injection payload",
                             PAYLOAD_SQLI,
                             false,
                             Category.INJECTION
@@ -839,7 +839,7 @@ class Paths {
                 if (TEST_XSS) {
                     specs.add(new MutationSpec(
                             "STRING_XSS",
-                            "Payload de XSS",
+                            "XSS payload",
                             PAYLOAD_XSS,
                             false,
                             Category.INJECTION
@@ -849,7 +849,7 @@ class Paths {
                 if (TEST_PATH_TRAVERSAL) {
                     specs.add(new MutationSpec(
                             "STRING_PATH_TRAVERSAL",
-                            "Payload de Path Traversal",
+                            "Path Traversal payload",
                             PAYLOAD_PATH_TRAVERSAL,
                             false,
                             Category.INJECTION
@@ -859,7 +859,7 @@ class Paths {
                 if (TEST_NOSQLI) {
                     specs.add(new MutationSpec(
                             "STRING_NOSQLI",
-                            "Payload de NoSQL Injection (string)",
+                            "NoSQL Injection payload (string)",
                             PAYLOAD_NOSQLI,
                             false,
                             Category.INJECTION
@@ -891,7 +891,7 @@ class Paths {
                 if (TEST_STRING_AS_NUMBER) {
                     specs.add(new MutationSpec(
                             "TYPE_NUMBER",
-                            "String substituida por numero",
+                            "String replaced by number",
                             STRING_AS_NUMBER_VALUE,
                             false,
                             Category.TYPE_CONFUSION
@@ -901,7 +901,7 @@ class Paths {
                 if (TEST_STRING_AS_BOOLEAN) {
                     specs.add(new MutationSpec(
                             "TYPE_BOOLEAN",
-                            "String substituida por boolean",
+                            "String replaced by boolean",
                             Boolean.TRUE,
                             false,
                             Category.TYPE_CONFUSION
@@ -913,7 +913,7 @@ class Paths {
                 if (TEST_NUMBER_ZERO) {
                     specs.add(new MutationSpec(
                             "NUMBER_ZERO",
-                            "Valor zero",
+                            "Zero value",
                             0L,
                             false,
                             Category.BOUNDARY
@@ -923,7 +923,7 @@ class Paths {
                 if (TEST_NUMBER_NEGATIVE) {
                     specs.add(new MutationSpec(
                             "NUMBER_NEGATIVE",
-                            "Valor negativo",
+                            "Negative value",
                             NEGATIVE_INTEGER_VALUE,
                             false,
                             Category.BOUNDARY
@@ -943,7 +943,7 @@ class Paths {
                 if (TEST_INTEGER_AS_FLOAT) {
                     specs.add(new MutationSpec(
                             "NUMBER_FLOAT",
-                            "Float onde inteiro era esperado",
+                            "Float where integer was expected",
                             INTEGER_AS_FLOAT_VALUE,
                             false,
                             Category.BOUNDARY
@@ -955,7 +955,7 @@ class Paths {
                 if (TEST_NUMBER_AS_STRING) {
                     specs.add(new MutationSpec(
                             "TYPE_STRING",
-                            "Numero substituido por string nao numerica",
+                            "Number replaced by non-numeric string",
                             PAYLOAD_NON_NUMERIC_STRING,
                             false,
                             Category.TYPE_CONFUSION
@@ -965,7 +965,7 @@ class Paths {
                 if (TEST_NUMBER_AS_NUMERIC_STRING) {
                     specs.add(new MutationSpec(
                             "TYPE_STRING_NUMERIC",
-                            "Numero substituido por string numerica",
+                            "Number replaced by numeric string",
                             PAYLOAD_NUMERIC_STRING,
                             false,
                             Category.TYPE_CONFUSION
@@ -977,7 +977,7 @@ class Paths {
                 if (TEST_NUMBER_ZERO) {
                     specs.add(new MutationSpec(
                             "NUMBER_ZERO",
-                            "Valor zero",
+                            "Zero value",
                             0.0,
                             false,
                             Category.BOUNDARY
@@ -987,7 +987,7 @@ class Paths {
                 if (TEST_NUMBER_NEGATIVE) {
                     specs.add(new MutationSpec(
                             "NUMBER_NEGATIVE",
-                            "Valor negativo",
+                            "Negative value",
                             NEGATIVE_DECIMAL_VALUE,
                             false,
                             Category.BOUNDARY
@@ -998,7 +998,7 @@ class Paths {
             if (TEST_TYPE_CONFUSION && TEST_NUMBER_AS_STRING) {
                 specs.add(new MutationSpec(
                         "TYPE_STRING",
-                        "Numero substituido por string",
+                        "Number replaced by string",
                         PAYLOAD_NON_NUMERIC_STRING,
                         false,
                         Category.TYPE_CONFUSION
@@ -1008,7 +1008,7 @@ class Paths {
             if (TEST_BOUNDARY && TEST_BOOLEAN_FLIP) {
                 specs.add(new MutationSpec(
                         "BOOLEAN_FLIP",
-                        "Boolean invertido",
+                        "Boolean flipped",
                         !b,
                         false,
                         Category.BOUNDARY
@@ -1019,7 +1019,7 @@ class Paths {
                 if (TEST_BOOLEAN_AS_STRING) {
                     specs.add(new MutationSpec(
                             "TYPE_STRING",
-                            "Boolean substituido por string",
+                            "Boolean replaced by string",
                             PAYLOAD_BOOLEAN_STRING,
                             false,
                             Category.TYPE_CONFUSION
@@ -1029,7 +1029,7 @@ class Paths {
                 if (TEST_BOOLEAN_AS_NUMBER) {
                     specs.add(new MutationSpec(
                             "TYPE_NUMBER",
-                            "Boolean substituido por numero",
+                            "Boolean replaced by number",
                             BOOLEAN_AS_NUMBER_VALUE,
                             false,
                             Category.TYPE_CONFUSION
@@ -1074,7 +1074,7 @@ for (var path : allPaths) {
 
         if (LOG_PATH_RULE_SKIPS) {
             logging.logToOutput(
-                    "[IGNORADO POR INCLUSAO] path=" + pathString
+                    "[SKIPPED BY INCLUSION] path=" + pathString
             );
         }
 
@@ -1086,7 +1086,7 @@ for (var path : allPaths) {
 
         if (LOG_PATH_RULE_SKIPS) {
             logging.logToOutput(
-                    "[IGNORADO POR EXCLUSAO] path=" + pathString
+                    "[SKIPPED BY EXCLUSION] path=" + pathString
             );
         }
 
@@ -1116,11 +1116,11 @@ for (var path : eligiblePaths) {
 
             if (LOG_PATH_RULE_SKIPS) {
                 logging.logToOutput(
-                        "[IGNORADO POR EXCECAO] path="
+                        "[SKIPPED BY EXCEPTION] path="
                                 + pathString
-                                + " | teste="
+                                + " | test="
                                 + spec.type()
-                                + " | categoria="
+                                + " | category="
                                 + spec.category()
                 );
             }
@@ -1160,20 +1160,20 @@ if (mutationLimitReached) {
     logging.logToOutput(
             "[LIMITE] MAX_MUTATIONS="
                     + MAX_MUTATIONS
-                    + " atingido apos a avaliacao completa das regras de caminho."
+                    + " reached after full evaluation of path rules."
     );
 }
 
 if (mutations.isEmpty()) {
     logging.logToOutput(
-            "Nenhuma mutacao foi gerada. "
-                    + "Verifique as categorias habilitadas e as regras de caminho."
+            "No mutation was generated. "
+                    + "Check enabled categories and path rules."
     );
 
     logging.logToOutput(
             String.format(
-                    "Regras de caminho: %d fora da inclusao | "
-                            + "%d excluidos | %d testes excepcionados",
+                    "Path rules: %d outside inclusion | "
+                            + "%d excluded | %d exception tests",
                     skippedNotIncludedCount,
                     skippedExcludedCount,
                     skippedExceptionCount
@@ -1184,13 +1184,13 @@ if (mutations.isEmpty()) {
 }
 
 logging.logToOutput(
-        "Gerando "
+        "Generating "
                 + mutations.size()
-                + " mutacoes a partir de "
+                + " mutations from "
                 + eligiblePaths.size()
-                + " caminhos elegiveis ("
+                + " eligible paths ("
                 + allPaths.size()
-                + " caminhos encontrados)..."
+                + " paths found)..."
 );
 
 logging.logToOutput(
@@ -1261,7 +1261,7 @@ try {
     responses = api.http().sendRequests(mutatedRequests);
 } catch (Exception exception) {
     logging.logToError(
-            "Falha ao enviar as requisicoes mutadas: "
+            "Failed to send mutated requests: "
                     + exception.getMessage()
     );
     return;
@@ -1269,7 +1269,7 @@ try {
 
 if (responses == null) {
     logging.logToError(
-            "O Burp nao retornou a lista de respostas das mutacoes."
+            "Burp did not return the list of responses for mutations."
     );
     return;
 }
@@ -1306,7 +1306,7 @@ for (int index = 0; index < analyzedCount; index++) {
 
         logging.logToOutput(
                 String.format(
-                        "[SEM RESPOSTA] path=%s | teste=%s",
+                        "[NO RESPONSE] path=%s | test=%s",
                         mutation.path(),
                         mutation.type()
                 )
@@ -1327,7 +1327,7 @@ for (int index = 0; index < analyzedCount; index++) {
         logging.logToOutput(
                 String.format(
                         "[FINDING] path=%s | teste=%s | categoria=%s "
-                                + "| HTTP=%d | tamanho=%d | payload aceito",
+                                + "| HTTP=%d | size=%d | payload accepted",
                         mutation.path(),
                         mutation.type(),
                         mutation.category(),
@@ -1356,7 +1356,7 @@ for (int index = 0; index < analyzedCount; index++) {
                 repeaterSentCount++;
             } catch (Exception exception) {
                 logging.logToError(
-                        "Nao foi possivel enviar o finding ao Repeater: "
+                        "Could not send finding to Repeater: "
                                 + mutation.type()
                                 + " em "
                                 + mutation.path()
@@ -1388,7 +1388,7 @@ for (int index = 0; index < analyzedCount; index++) {
         if (LOG_REJECTED_PAYLOADS) {
             logging.logToOutput(
                     String.format(
-                            "[REJEITADO] path=%s | teste=%s | HTTP=%d",
+                            "[REJECTED] path=%s | test=%s | HTTP=%d",
                             mutation.path(),
                             mutation.type(),
                             status
@@ -1405,8 +1405,8 @@ for (int index = 0; index < analyzedCount; index++) {
         if (LOG_SERVER_ERRORS) {
             logging.logToOutput(
                     String.format(
-                            "[ERRO 5XX] path=%s | teste=%s | HTTP=%d "
-                                    + "| nao enviado ao Repeater",
+                            "[5XX ERROR] path=%s | test=%s | HTTP=%d "
+                                    + "| not sent to Repeater",
                             mutation.path(),
                             mutation.type(),
                             status
@@ -1423,8 +1423,8 @@ for (int index = 0; index < analyzedCount; index++) {
         if (LOG_REDIRECTS) {
             logging.logToOutput(
                     String.format(
-                            "[REDIRECIONAMENTO] path=%s | teste=%s | HTTP=%d "
-                                    + "| nao enviado ao Repeater",
+                            "[REDIRECT] path=%s | test=%s | HTTP=%d "
+                                    + "| not sent to Repeater",
                             mutation.path(),
                             mutation.type(),
                             status
@@ -1440,7 +1440,7 @@ for (int index = 0; index < analyzedCount; index++) {
     if (LOG_OTHER_STATUS) {
         logging.logToOutput(
                 String.format(
-                        "[OUTRO STATUS] path=%s | teste=%s | HTTP=%d",
+                        "[OTHER STATUS] path=%s | test=%s | HTTP=%d",
                         mutation.path(),
                         mutation.type(),
                         status
@@ -1456,9 +1456,9 @@ if (responses.size() < mutations.size()) {
 logging.logToOutput("------------------------------------------------------------");
 logging.logToOutput(
         String.format(
-                "Resumo: %d findings | %d rejeitados | %d erros 5xx "
-                        + "| %d redirecionamentos | %d outros status "
-                        + "| %d sem resposta | %d mutacoes",
+                "Summary: %d findings | %d rejected | %d 5xx errors "
+                        + "| %d redirects | %d other status "
+                        + "| %d no response | %d mutations",
                 findingCount,
                 rejectedCount,
                 serverErrorCount,
@@ -1471,9 +1471,9 @@ logging.logToOutput(
 
 logging.logToOutput(
         String.format(
-                "Destino: %d findings enviados ao Repeater "
-                        + "| %d excedentes enviados ao Organizer "
-                        + "| grupo padrao esperado=%s",
+                "Destination: %d findings sent to Repeater "
+                        + "| %d excess sent to Organizer "
+                        + "| expected default group=%s",
                 repeaterSentCount,
                 organizerSentCount,
                 REPEATER_GROUP_NAME
@@ -1482,7 +1482,7 @@ logging.logToOutput(
 
 if (findingCount == 0) {
     logging.logToOutput(
-            "Nenhum payload de teste recebeu resposta HTTP 2xx."
+            "No test payload received an HTTP 2xx response."
     );
 }
 

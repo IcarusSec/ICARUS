@@ -12,32 +12,32 @@
 // ============================================================
 
 // ============================================================
-// ================= USO BÁSICO =================
+// ================= BASIC USAGE =================
 // ------------------------------------------------------------
-// Cole este script em:
+// Paste this script in:
 // Repeater > Custom actions > New > Blank
 //
-// Execute somente em sistemas que voce possui autorizacao para testar.
+// Execute only on systems you have authorization to test.
 //
-// Objetivo:
-//  - Criar variacoes da requisicao atual usando outros metodos HTTP.
-//  - Identificar metodos alternativos que retornam status configurados
-//    como "aceitos".
-//  - Enviar resultados relevantes ao Repeater.
+// Objective:
+//  - Create variations of the current request using other HTTP methods.
+//  - Identify alternative methods that return statuses configured
+//    as "accepted".
+//  - Send relevant results to the Repeater.
 //
-// Observacao:
-//  - Um metodo alternativo retornar 2xx nao confirma vulnerabilidade.
-//    O resultado significa "metodo aceito e deve ser revisado".
-//  - Metodos que alteram estado ficam desabilitados por padrao.
+// Observation:
+//  - An alternative method returning 2xx does not confirm a vulnerability.
+//    The result means "method accepted and should be reviewed".
+//  - Methods that change state are disabled by default.
 // ============================================================
 
 
-// ================= CONFIGURACAO DO USUÁRIO =================
+// ================= USER CONFIGURATION =================
 //
-// Altere somente esta secao para personalizar a execucao.
+// Change only this section to customize execution.
 
 
-// ---------- Metodos testados ----------
+// ---------- Tested methods ----------
 
 var TEST_GET = true;
 var TEST_HEAD = true;
@@ -48,81 +48,81 @@ var TEST_DELETE = false;
 var TEST_OPTIONS = true;
 var TEST_TRACE = true;
 
-// CONNECT fica desabilitado por padrao.
-// Pode ter comportamento especial em proxies e servidores.
+// CONNECT is disabled by default.
+// It may have special behavior on proxies and servers.
 var TEST_CONNECT = false;
 
 
-// ---------- Metodo original ----------
+// ---------- Original method ----------
 //
-// TEST_POST=true apenas habilita POST na lista.
-// Se a requisicao original ja for POST e SKIP_ORIGINAL_METHOD=true,
-// ele ainda sera removido do plano.
+// TEST_POST=true only enables POST in the list.
+// If the original request is already POST and SKIP_ORIGINAL_METHOD=true,
+// it will still be removed from the plan.
 //
-// Para testar novamente o metodo original:
+// To re-test the original method:
 //   TEST_POST = true;
 //   SKIP_ORIGINAL_METHOD = false;
 
 var SKIP_ORIGINAL_METHOD = true;
 
 
-// ---------- Modo de envio ----------
+// ---------- Submission mode ----------
 //
-// "SEQUENTIAL" e o modo recomendado para Custom Actions.
-// Cada requisicao e enviada individualmente e sua resposta e analisada.
+// "SEQUENTIAL" is the recommended mode for Custom Actions.
+// Each request is sent individually and its response is analyzed.
 //
-// "BATCH" usa sendRequests(). Pode ser mais rapido, mas algumas versoes
-// ou configuracoes do Burp podem retornar itens sem resposta.
+// "BATCH" uses sendRequests(). It can be faster, but some versions
+// or configurations of Burp may return items without a response.
 
 var REQUEST_MODE = "SEQUENTIAL";
 
-// Intervalo opcional entre requisicoes no modo sequencial.
+// Optional interval between requests in sequential mode.
 var DELAY_BETWEEN_REQUESTS_MS = 0;
 
 
-// ---------- Protecao contra alteracao de estado ----------
+// ---------- State change protection ----------
 //
-// Quando false, POST, PUT, PATCH e DELETE nao serao enviados,
-// mesmo que os testes individuais acima estejam habilitados.
+// When false, POST, PUT, PATCH, and DELETE will not be sent,
+// even if individual tests above are enabled.
 
 var ENABLE_STATE_CHANGING_METHODS = true;
 
 
-// ---------- Estrategia de corpo ----------
+// ---------- Body strategy ----------
 //
-// Valores permitidos:
+// Allowed values:
 //
 // "AUTO"
-//   GET, HEAD, OPTIONS, TRACE e CONNECT: remove o corpo.
-//   POST, PUT, PATCH e DELETE: mantem o corpo original.
+//   GET, HEAD, OPTIONS, TRACE and CONNECT: removes the body.
+//   POST, PUT, PATCH and DELETE: keeps the original body.
 //
 // "KEEP"
-//   Mantem o corpo original em todos os metodos.
+//   Keeps the original body for all methods.
 //
 // "REMOVE"
-//   Remove o corpo em todos os metodos.
+//   Removes the body for all methods.
 
 var BODY_STRATEGY = "AUTO";
 
-// Remove Content-Type quando o corpo for removido.
+// Removes Content-Type when the body is removed.
 var REMOVE_CONTENT_TYPE_WITH_BODY = true;
 
-// Remove Transfer-Encoding quando o corpo for removido.
+// Removes Transfer-Encoding when the body is removed.
 var REMOVE_TRANSFER_ENCODING_WITH_BODY = true;
 
 
-// ---------- Criterio de metodo aceito ----------
+// ---------- Accepted method criteria ----------
 //
-// Qualquer resposta neste intervalo sera tratada como metodo aceito.
+// Any response in this range will be treated as an accepted method.
 
 var ACCEPTED_STATUS_MIN = 200;
 var ACCEPTED_STATUS_MAX = 299;
 
 
-// ---------- Tratamento de autenticacao/autorizacao ----------
+// ---------- Authentication/Authorization handling ----------
 //
-// 401 e 403 podem indicar que o metodo existe, mas exige credenciais
-// ou privilegios diferentes. Por padrao ficam apenas no log.
+// 401 and 403 can indicate the method exists, but requires credentials
+// or different privileges. By default they are only logged.
 
 var REPORT_401_AS_POSSIBLE_SUPPORTED = true;
 var REPORT_403_AS_POSSIBLE_SUPPORTED = true;
@@ -130,16 +130,16 @@ var REPORT_403_AS_POSSIBLE_SUPPORTED = true;
 var SEND_AUTH_RESPONSES_TO_REPEATER = false;
 
 
-// ---------- Redirecionamentos ----------
+// ---------- Redirects ----------
 //
-// O envio HTTP da Montoya API segue a configuracao do Burp.
-// Esta opcao controla apenas a classificacao do resultado recebido.
+// HTTP submission in Montoya API follows Burp's configuration.
+// This option only controls the classification of the received result.
 
 var REPORT_REDIRECTS = true;
 var SEND_REDIRECTS_TO_REPEATER = false;
 
 
-// ---------- Erros de servidor ----------
+// ---------- Server errors ----------
 
 var REPORT_SERVER_ERRORS = true;
 var SEND_SERVER_ERRORS_TO_REPEATER = false;
@@ -149,65 +149,65 @@ var SEND_SERVER_ERRORS_TO_REPEATER = false;
 
 var CHECK_ALLOW_HEADER = true;
 
-// Quando true, OPTIONS e adicionado ao plano mesmo se TEST_OPTIONS=false.
+// When true, OPTIONS is added to the plan even if TEST_OPTIONS=false.
 var FORCE_OPTIONS_FOR_ALLOW_CHECK = true;
 
-// Reporta metodos que retornaram 2xx, mas nao aparecem no Allow.
+// Reports methods that returned 2xx, but do not appear in Allow.
 var REPORT_ACCEPTED_NOT_IN_ALLOW = true;
 
-// Reporta metodos declarados no Allow, mas que nao foram testados.
+// Reports methods declared in Allow, but that were not tested.
 var LOG_UNTESTED_ALLOW_METHODS = true;
 
-// Envia ao Repeater um metodo aceito que nao foi declarado no Allow.
+// Sends to Repeater an accepted method that was not declared in Allow.
 var SEND_ALLOW_MISMATCH_TO_REPEATER = true;
 
 
 // ---------- TRACE ----------
 //
-// Quando TRACE retornar 2xx, verifica se partes da requisicao
-// aparecem refletidas na resposta.
+// When TRACE returns 2xx, checks if parts of the request
+// appear reflected in the response.
 
 var CHECK_TRACE_REFLECTION = true;
 
-// Texto procurado na resposta TRACE.
-// O script adiciona este header somente na requisicao TRACE.
+// Text searched in the TRACE response.
+// The script adds this header only in the TRACE request.
 var TRACE_MARKER_HEADER_NAME = "X-HTTP-Verb-Test";
 var TRACE_MARKER_VALUE = "burp-http-verb-check";
 
 
-// ---------- Baseline opcional ----------
+// ---------- Optional baseline ----------
 //
-// Reenviar a requisicao original pode repetir uma operacao.
-// Por isso esta desabilitado por padrao.
+// Resending the original request might repeat an operation.
+// Therefore, this is disabled by default.
 
 var SEND_BASELINE_REQUEST = false;
 
 
-// ---------- Destinos ----------
+// ---------- Destinations ----------
 
 var SEND_ACCEPTED_TO_REPEATER = true;
 var SEND_EXCESS_TO_ORGANIZER = true;
 
-// Envia ao Organizer toda requisicao executada que nao tenha gerado
-// uma aba no Repeater.
+// Sends to Organizer every executed request that did not generate
+// a tab in Repeater.
 //
-// Inclui, conforme o resultado:
-// - metodos rejeitados
-// - respostas 401/403
-// - redirecionamentos
-// - erros 5xx
-// - outros status
+// Includes, according to the result:
+// - rejected methods
+// - 401/403 responses
+// - redirects
+// - 5xx errors
+// - other statuses
 //
-// Requisicoes sem resposta nao podem ser enviadas ao Organizer,
-// pois nao existe HttpRequestResponse completo para armazenar.
+// Requests without a response cannot be sent to Organizer,
+// since there is no complete HttpRequestResponse to store.
 var SEND_NON_REPEATER_RESULTS_TO_ORGANIZER = true;
 
 var MAX_REPEATER_TABS = 12;
 
-// Prefixo curto para nomes de abas.
+// Short prefix for tab names.
 var REPEATER_TAB_PREFIX = "HV";
 
-// Tamanho maximo do nome da aba.
+// Maximum length for tab name.
 var REPEATER_TAB_NAME_MAX_LENGTH = 22;
 
 
@@ -222,11 +222,11 @@ var LOG_REQUEST_PLAN = true;
 
 
 // ============================================================
-// FIM DA CONFIGURACAO
+// END OF CONFIGURATION
 // ============================================================
 
 
-// ---------- Tipos auxiliares ----------
+// ---------- Auxiliary types ----------
 
 record VerbResult(
         String method,
@@ -387,20 +387,20 @@ class VerbTools {
 }
 
 
-// ---------- Requisicao selecionada ----------
+// ---------- Selected request ----------
 
 var originalRequest = requestResponse.request();
 
 if (originalRequest == null) {
     logging.logToError(
-            "Nao foi possivel obter a requisicao selecionada."
+            "Could not get the selected request."
     );
     return;
 }
 
 if (originalRequest.httpService() == null) {
     logging.logToError(
-            "A requisicao nao possui HttpService valido."
+            "Request does not have a valid HttpService."
     );
     return;
 }
@@ -412,7 +412,7 @@ logging.logToOutput(
 );
 
 logging.logToOutput(
-        "HTTP Verb Tester iniciado para "
+        "HTTP Verb Tester started for "
                 + originalMethod
                 + " "
                 + originalRequest.path()
@@ -428,7 +428,7 @@ logging.logToOutput(
 );
 
 
-// ---------- Montagem do plano ----------
+// ---------- Plan assembly ----------
 
 List<String> configuredMethods = new ArrayList<String>();
 
@@ -484,9 +484,9 @@ for (String method : configuredMethods) {
                     && !ENABLE_STATE_CHANGING_METHODS
     ) {
         logging.logToOutput(
-                "[BLOQUEADO] "
+                "[BLOCKED] "
                         + method
-                        + " exige ENABLE_STATE_CHANGING_METHODS=true"
+                        + " requires ENABLE_STATE_CHANGING_METHODS=true"
         );
 
         continue;
@@ -497,31 +497,31 @@ for (String method : configuredMethods) {
 
 if (methodsToTest.isEmpty() && !SEND_BASELINE_REQUEST) {
     logging.logToOutput(
-            "Nenhum metodo ficou habilitado para teste."
+            "No methods were enabled for testing."
     );
     return;
 }
 
 if (LOG_REQUEST_PLAN) {
     logging.logToOutput(
-            "Metodo original: " + originalMethod
+            "Original method: " + originalMethod
     );
 
     logging.logToOutput(
-            "Metodos planejados: " + methodsToTest
+            "Planned methods: " + methodsToTest
     );
 
     logging.logToOutput(
-            "Estrategia de corpo: " + BODY_STRATEGY
+            "Body strategy: " + BODY_STRATEGY
     );
 
     logging.logToOutput(
-            "Modo de envio: " + REQUEST_MODE
+            "Submission mode: " + REQUEST_MODE
     );
 
     if (!TEST_POST && "POST".equals(originalMethod)) {
         logging.logToOutput(
-                "[CONFIG] POST nao sera testado porque TEST_POST=false."
+                "[CONFIG] POST will not be tested because TEST_POST=false."
         );
     } else if (
             TEST_POST
@@ -529,14 +529,14 @@ if (LOG_REQUEST_PLAN) {
                     && SKIP_ORIGINAL_METHOD
     ) {
         logging.logToOutput(
-                "[CONFIG] POST foi habilitado, mas removido porque "
-                        + "e o metodo original e SKIP_ORIGINAL_METHOD=true."
+                "[CONFIG] POST was enabled, but removed because "
+                        + "it is the original method and SKIP_ORIGINAL_METHOD=true."
         );
     }
 }
 
 
-// ---------- Baseline opcional ----------
+// ---------- Optional baseline ----------
 
 Integer baselineStatus = null;
 Integer baselineLength = null;
@@ -559,24 +559,24 @@ if (SEND_BASELINE_REQUEST) {
             logging.logToOutput(
                     "[BASELINE] HTTP="
                             + baselineStatus
-                            + " | tamanho="
+                            + " | size="
                             + baselineLength
             );
         } else {
             logging.logToOutput(
-                    "[BASELINE] sem resposta"
+                    "[BASELINE] no response"
             );
         }
     } catch (Exception exception) {
         logging.logToError(
-                "Falha ao enviar baseline: "
+                "Failed to send baseline: "
                         + exception.getMessage()
         );
     }
 }
 
 
-// ---------- Criacao das requisicoes ----------
+// ---------- Request creation ----------
 
 List<HttpRequest> testRequests = new ArrayList<HttpRequest>();
 List<String> requestMethods = new ArrayList<String>();
@@ -606,7 +606,7 @@ for (String method : methodsToTest) {
 }
 
 
-// ---------- Envio e analise inicial ----------
+// ---------- Submission and initial analysis ----------
 
 List<VerbResult> results = new ArrayList<VerbResult>();
 var noResponseCount = 0;
@@ -622,7 +622,7 @@ if ("BATCH".equals(normalizedRequestMode)) {
         responses = api.http().sendRequests(testRequests);
     } catch (Exception exception) {
         logging.logToError(
-                "Falha ao enviar os testes em lote: "
+                "Failed to send batch tests: "
                         + exception.getMessage()
         );
         return;
@@ -630,7 +630,7 @@ if ("BATCH".equals(normalizedRequestMode)) {
 
     if (responses == null) {
         logging.logToError(
-                "O Burp nao retornou a lista de respostas."
+                "Burp did not return the list of responses."
         );
         return;
     }
@@ -642,9 +642,9 @@ if ("BATCH".equals(normalizedRequestMode)) {
             noResponseCount++;
 
             logging.logToOutput(
-                    "[SEM RESPOSTA] metodo="
+                    "[NO RESPONSE] method="
                             + method
-                            + " | resultado ausente no lote"
+                            + " | result missing in batch"
             );
 
             continue;
@@ -656,9 +656,9 @@ if ("BATCH".equals(normalizedRequestMode)) {
             noResponseCount++;
 
             logging.logToOutput(
-                    "[SEM RESPOSTA] metodo="
+                    "[NO RESPONSE] method="
                             + method
-                            + " | item do lote sem response"
+                            + " | batch item without response"
             );
 
             continue;
@@ -709,13 +709,13 @@ if ("BATCH".equals(normalizedRequestMode)) {
         );
     }
 } else {
-    // Modo recomendado: uma requisicao por vez.
+    // Recommended mode: one request at a time.
     for (int index = 0; index < testRequests.size(); index++) {
         var method = requestMethods.get(index);
         var testRequest = testRequests.get(index);
 
         logging.logToOutput(
-                "[ENVIANDO] metodo=" + method
+                "[SENDING] method=" + method
         );
 
         try {
@@ -725,9 +725,9 @@ if ("BATCH".equals(normalizedRequestMode)) {
                 noResponseCount++;
 
                 logging.logToOutput(
-                        "[SEM RESPOSTA] metodo="
+                        "[NO RESPONSE] method="
                                 + method
-                                + " | sendRequest retornou sem response"
+                                + " | sendRequest returned without response"
                 );
 
                 continue;
@@ -778,18 +778,18 @@ if ("BATCH".equals(normalizedRequestMode)) {
             );
 
             logging.logToOutput(
-                    "[RECEBIDO] metodo="
+                    "[RECEIVED] method="
                             + method
                             + " | HTTP="
                             + status
-                            + " | tamanho="
+                            + " | size="
                             + length
             );
         } catch (Exception exception) {
             noResponseCount++;
 
             logging.logToError(
-                    "[ERRO DE ENVIO] metodo="
+                    "[SEND ERROR] method="
                             + method
                             + " | "
                             + exception.getMessage()
@@ -806,7 +806,7 @@ if ("BATCH".equals(normalizedRequestMode)) {
                 Thread.currentThread().interrupt();
 
                 logging.logToError(
-                        "A pausa entre requisicoes foi interrompida."
+                        "Pause between requests was interrupted."
                 );
 
                 break;
@@ -909,7 +909,7 @@ for (VerbResult result : results) {
                         + method
                         + " | HTTP="
                         + status
-                        + " | tamanho="
+                        + " | size="
                         + result.responseLength()
                         + details
         );

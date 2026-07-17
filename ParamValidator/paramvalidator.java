@@ -173,7 +173,8 @@ var SEND_EXCESS_TO_ORGANIZER = true;
 
 // ---------- Advanced Detection ----------
 // If the mutation response length is exactly the same as the baseline length, ignore it as false positive.
-var FILTER_EXACT_BASELINE_MATCH = true;
+// Set to false by default because identical responses (e.g., 201 Created with 0 bytes) often indicate successful payload processing!
+var FILTER_EXACT_BASELINE_MATCH = false;
 
 // If the XSS payload is reflected exactly in the response, flag it regardless of status code.
 var CHECK_XSS_REFLECTION = true;
@@ -1400,6 +1401,7 @@ for (int index = 0; index < analyzedCount; index++) {
                         length
                 )
         );
+        continue;
     }
 
     if (accepted) {

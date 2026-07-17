@@ -68,6 +68,21 @@ It takes the current request and generates variations using alternate HTTP metho
 
 [View HTTPVerbFuzz README →](HTTPVerbFuzz/README.md)
 
+### JWT / Bearer Token Checker (`JWTChecker`)
+
+Located in the `JWTChecker` directory, this action is a comprehensive script for detecting and testing JSON Web Tokens (JWTs) and Bearer tokens for common security vulnerabilities directly from the Burp Repeater.
+
+It automatically identifies JWTs using regex in `Authorization` headers and `Cookie` headers, and automatically tests them for various tampering and misconfiguration flaws.
+
+**Key Features:**
+- **Automated Discovery**: Detects multiple JWTs across standard headers.
+- **Algorithm Analysis**: Detects weak configurations like `alg=none` and checks for potentially vulnerable embedded claims (`jwk`, `jku`, `kid`).
+- **Payload Tampering**: Attempts automated privilege escalation by tampering with common claims (`admin`, `role`, `scope`) without resigning.
+- **Signature Removal**: Tests for improper signature validation by removing the signature.
+- **Time-based Attacks**: Detects missing `exp`/`iat` claims and injects excessive expiration times.
+
+[View JWTChecker README →](JWTChecker/README.md)
+
 ## Usage
 
 To use these custom actions in Burp Suite:

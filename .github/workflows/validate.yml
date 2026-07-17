@@ -35,6 +35,19 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare validation directory
+        run: |
+          mkdir validation
+
+          find . \
+            -path "./validation" -prune -o \
+            -name "*.bambda" \
+            -exec cp {} validation/ \;
+
+          echo "Bambdas encontrados:"
+          ls -l validation
+
       - name: Validate Bambdas
         run: |
-          java -jar BambdaChecker-1.5.jar validateonly
+          cd validation
+          java -jar ../BambdaChecker-1.5.jar validateonly

@@ -83,6 +83,7 @@ This project automates those checks.
 ### Injection Payloads
 
 - SQL Injection
+- Time-based SQLi
 - XSS
 - NoSQL Injection
 - Path Traversal

@@ -59,6 +59,7 @@ var TEST_BOOLEAN_FLIP = true;
 
 // ---------- Individual injection tests ----------
 var TEST_SQLI = true;
+var TEST_SQLI_TIME = true;
 var TEST_XSS = true;
 var TEST_PATH_TRAVERSAL = true;
 var TEST_NOSQLI = true;
@@ -129,6 +130,8 @@ var LOG_DISCOVERED_JSON_PATHS = false;
 
 // ---------- Editable payloads ----------
 var PAYLOAD_SQLI = "' OR '1'='1";
+var PAYLOAD_SQLI_TIME = "'; WAITFOR DELAY '0:0:10'--"; // 10 second delay
+var PAYLOAD_SQLI_TIME_DELAY_MS = 10000;
 var PAYLOAD_XSS = "<script>alert(1)</script>";
 var PAYLOAD_PATH_TRAVERSAL = "../../../../etc/passwd";
 var PAYLOAD_NOSQLI = "{\"$ne\": null}";
@@ -836,6 +839,16 @@ class Paths {
                     ));
                 }
 
+                if (TEST_SQLI_TIME) {
+                    specs.add(new MutationSpec(
+                            "STRING_SQLI_TIME",
+                            "Time-based SQL Injection payload",
+                            PAYLOAD_SQLI_TIME,
+                            false,
+                            Category.INJECTION
+                    ));
+                }
+
                 if (TEST_XSS) {
                     specs.add(new MutationSpec(
                             "STRING_XSS",
@@ -1247,6 +1260,15 @@ if (REQUIRE_SUCCESSFUL_BASELINE && !baselineIsSuccess) {
 }
 
 // ---------- Envio em lote das mutacoes ----------
+// Move time-based payloads to the end so they don't delay other fast tests
+mutations.sort((a, b) -> {
+    boolean aIsTime = a.type().equals("STRING_SQLI_TIME");
+    boolean bIsTime = b.type().equals("STRING_SQLI_TIME");
+    if (aIsTime && !bIsTime) return 1;
+    if (!aIsTime && bIsTime) return -1;
+    return 0;
+});
+
 var mutatedRequests = new ArrayList<HttpRequest>();
 
 for (var mutation : mutations) {
@@ -1255,16 +1277,22 @@ for (var mutation : mutations) {
     );
 }
 
-List<HttpRequestResponse> responses;
+var requestTimes = new long[mutatedRequests.size()];
 
-try {
-    responses = api.http().sendRequests(mutatedRequests);
-} catch (Exception exception) {
-    logging.logToError(
-            "Failed to send mutated requests: "
-                    + exception.getMessage()
-    );
-    return;
+List<HttpRequestResponse> responses = new ArrayList<>();
+for (int i = 0; i < mutatedRequests.size(); i++) {
+    long startTime = System.currentTimeMillis();
+    try {
+        HttpRequestResponse result = api.http().sendRequest(mutatedRequests.get(i));
+        responses.add(result);
+    } catch (Exception exception) {
+        logging.logToError(
+                "Failed to send mutated requests: "
+                        + exception.getMessage()
+        );
+        responses.add(null);
+    }
+    requestTimes[i] = System.currentTimeMillis() - startTime;
 }
 
 if (responses == null) {
@@ -1318,23 +1346,38 @@ for (int index = 0; index < analyzedCount; index++) {
     var mutatedResponse = mutatedResult.response();
     var status = mutatedResponse.statusCode();
     var length = mutatedResponse.body().length();
-    var accepted = status >= FINDING_STATUS_MIN
-            && status <= FINDING_STATUS_MAX;
+    var responseTime = requestTimes[index];
+    
+    var timeDelayHit = mutation.type().equals("STRING_SQLI_TIME") && responseTime >= PAYLOAD_SQLI_TIME_DELAY_MS;
+
+    var accepted = (status >= FINDING_STATUS_MIN && status <= FINDING_STATUS_MAX) || timeDelayHit;
 
     if (accepted) {
         findingCount++;
 
-        logging.logToOutput(
-                String.format(
-                        "[FINDING] path=%s | teste=%s | categoria=%s "
-                                + "| HTTP=%d | size=%d | payload accepted",
-                        mutation.path(),
-                        mutation.type(),
-                        mutation.category(),
-                        status,
-                        length
-                )
-        );
+        String findingMsg;
+        if (timeDelayHit) {
+            findingMsg = String.format(
+                    "[FINDING] path=%s | test=%s | category=%s "
+                            + "| HTTP=%d | time=%dms | time delay detected",
+                    mutation.path(),
+                    mutation.type(),
+                    mutation.category(),
+                    status,
+                    responseTime
+            );
+        } else {
+            findingMsg = String.format(
+                    "[FINDING] path=%s | test=%s | category=%s "
+                            + "| HTTP=%d | size=%d | payload accepted",
+                    mutation.path(),
+                    mutation.type(),
+                    mutation.category(),
+                    status,
+                    length
+            );
+        }
+        logging.logToOutput(findingMsg);
 
         if (repeaterSentCount < MAX_REPEATER_SENDS) {
             try {

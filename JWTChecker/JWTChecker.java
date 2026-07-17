@@ -1,8 +1,35 @@
-// ================= JWT / BEARER TOKEN CHECKER =================
-// Detect multiple JWTs by regex in Authorization and Cookie headers
-// Focus: tampering, alg=none, signature removal, permission escalation,
-// time-claim checks, aud/iss, kid/jku/x5u/jwk/x5c probes
-// Logs only; does not send anything to Repeater
+// ============================================================
+// JWT / Bearer Token Checker
+// Burp Suite Custom Action
+//
+// Authors: Victor Lima | Adan Ferreira
+//
+// Description:
+// JWT validation and tampering for API security testing.
+//
+// Version: 0.1.0
+// Last update: 2026-07-17
+// ============================================================
+
+// ============================================================
+// ================= BASIC USAGE =================
+// ------------------------------------------------------------
+// Paste this script in:
+// Repeater > Custom actions > New > Blank
+//
+// Execute only on systems you have authorization to test.
+//
+// Objective:
+//  - Detect multiple JWTs by regex in Authorization and Cookie headers
+//  - Focus: tampering, alg=none, signature removal, permission escalation,
+//    time-claim checks, aud/iss, kid/jku/x5u/jwk/x5c probes
+//
+// Observation:
+//  - Logs only; does not send anything to Repeater.
+// ============================================================
+
+
+// ---------- Initialization ----------
 
 var baseReq = requestResponse.request();
 var baseRes = requestResponse.response();
@@ -11,6 +38,8 @@ if (baseRes == null) {
     logging.logToOutput("[!] No response available. Send the request first.");
     return;
 }
+
+// ---------- JWT Regex and Models ----------
 
 var jwtRegex = java.util.regex.Pattern.compile("eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]*)?");
 
@@ -29,6 +58,8 @@ class JwtCandidate {
         this.globalIndex = globalIndex;
     }
 }
+
+// ---------- JWT Extraction ----------
 
 var jwtCandidates = new java.util.ArrayList<JwtCandidate>();
 int globalCounter = 0;
@@ -59,6 +90,8 @@ if (jwtCandidates.isEmpty()) {
     logging.logToOutput("[!] No JWTs found by regex in Authorization/Cookie headers.");
     return;
 }
+
+// ---------- Utility Functions ----------
 
 java.util.function.Function<String, byte[]> b64UrlDecode = (input) -> {
     try {
@@ -97,6 +130,8 @@ java.util.function.Function<burp.api.montoya.utilities.json.JsonNode, String> no
     }
 };
 
+// ---------- Error Detection Logic ----------
+
 var verboseErrorPatterns = java.util.List.of(
     java.util.regex.Pattern.compile("(?i)\\bstack ?trace\\b"),
     java.util.regex.Pattern.compile("(?i)Traceback \\(most recent call last\\)"),
@@ -120,6 +155,8 @@ var verboseErrorPatterns = java.util.List.of(
 
 java.util.function.Function<String, Boolean> hasVerboseError = (body) ->
     verboseErrorPatterns.stream().anyMatch(p -> p.matcher(body).find());
+
+// ---------- Token Analysis and Testing ----------
 
 logging.logToOutput("========== JWT / BEARER CHECKER ==========");
 logging.logToOutput("[*] JWTs found: " + jwtCandidates.size());
@@ -210,6 +247,8 @@ for (var candidate : jwtCandidates) {
     logging.logToOutput("[*] JWT #" + finalJwtIndex + " payload: " + decodedPayload);
     logging.logToOutput("[*] JWT #" + finalJwtIndex + " alg=" + algValue + " | typ=" + typValue + " | parts=" + jwtParts.length);
 
+    // ---------- Alg & Typ checks ----------
+
     if (algValue == null) jwtFindings.add("[HIGH] JWT missing alg field in header");
     else jwtPassed.add("JWT contains alg field: " + algValue);
 
@@ -229,6 +268,8 @@ for (var candidate : jwtCandidates) {
     if (hasKidHeader) jwtManual.add("JWT header contains kid - test for path traversal, SQLi, or command injection in the key resolver");
     if (hasX5uHeader) jwtFindings.add("[HIGH] JWT header contains x5u - potential SSRF / trusted key abuse surface");
     if (hasX5cHeader) jwtFindings.add("[HIGH] JWT header contains x5c - assess certificate injection / trust abuse");
+
+    // ---------- Claims Analysis ----------
 
     boolean hasExp = false;
     boolean hasNbf = false;

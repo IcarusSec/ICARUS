@@ -168,6 +168,13 @@ var MAX_REPEATER_SENDS = 10;
 // When the Repeater limit is reached, send the excess to Organizer.
 var SEND_EXCESS_TO_ORGANIZER = true;
 
+// ---------- Advanced Detection ----------
+// If the mutation response length is exactly the same as the baseline length, ignore it as false positive.
+var FILTER_EXACT_BASELINE_MATCH = true;
+
+// If the XSS payload is reflected exactly in the response, flag it regardless of status code.
+var CHECK_XSS_REFLECTION = true;
+
 // ---------- Repeater organization ----------
 //
 // The Montoya API used by Custom Actions does not allow creating or selecting
@@ -1347,10 +1354,24 @@ for (int index = 0; index < analyzedCount; index++) {
     var status = mutatedResponse.statusCode();
     var length = mutatedResponse.body().length();
     var responseTime = requestTimes[index];
+    var bodyStr = mutatedResponse.bodyToString();
     
     var timeDelayHit = mutation.type().equals("STRING_SQLI_TIME") && responseTime >= PAYLOAD_SQLI_TIME_DELAY_MS;
+    var xssReflectionHit = CHECK_XSS_REFLECTION && mutation.type().equals("STRING_XSS") && bodyStr.contains(PAYLOAD_XSS);
 
-    var accepted = (status >= FINDING_STATUS_MIN && status <= FINDING_STATUS_MAX) || timeDelayHit;
+    var accepted = (status >= FINDING_STATUS_MIN && status <= FINDING_STATUS_MAX) || timeDelayHit || xssReflectionHit;
+
+    if (accepted && FILTER_EXACT_BASELINE_MATCH && length == baselineLength && !timeDelayHit && !xssReflectionHit) {
+        accepted = false;
+        logging.logToOutput(
+                String.format(
+                        "[IGNORED] path=%s | test=%s | Exact baseline match (%d bytes) filtered as false positive",
+                        mutation.path(),
+                        mutation.type(),
+                        length
+                )
+        );
+    }
 
     if (accepted) {
         findingCount++;
@@ -1365,6 +1386,16 @@ for (int index = 0; index < analyzedCount; index++) {
                     mutation.category(),
                     status,
                     responseTime
+            );
+        } else if (xssReflectionHit) {
+            findingMsg = String.format(
+                    "[FINDING] path=%s | test=%s | category=%s "
+                            + "| HTTP=%d | size=%d | XSS payload reflected!",
+                    mutation.path(),
+                    mutation.type(),
+                    mutation.category(),
+                    status,
+                    length
             );
         } else {
             findingMsg = String.format(

@@ -1,5 +1,18 @@
 // ============================================================
-// JSON Parameter Validation Tester - Burp Custom Action (v3)
+// JSON Parameter Validation Tester
+// Burp Suite Custom Action
+//
+// Authors: Victor Lima | Adan Ferreira
+//
+// Description:
+// JSON Parameter validation for API security testing.
+//
+// Version: 0.1.0
+// Last update: 2026-07-16
+// ============================================================
+
+// ============================================================
+// ================= USO BÁSICO =================
 // ------------------------------------------------------------
 // Cole este script em: Repeater > Custom actions > New > Blank
 // Rode com o botao direito sobre uma requisicao com corpo JSON.

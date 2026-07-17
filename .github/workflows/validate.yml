@@ -22,3 +22,19 @@ jobs:
         with:
           distribution: oracle
           java-version: "21"
+
+      - name: Verify BambdaChecker checksum
+        run: |
+          expected="085787c80b9f70f431c6f5a329cf59385b67e69d74116b11e5c4ccbc021ec3d6"
+          actual=$(sha256sum BambdaChecker-1.5.jar | awk '{print $1}')
+
+          if [ "$actual" != "$expected" ]; then
+            echo "Checksum mismatch!"
+            echo "Expected: $expected"
+            echo "Actual:   $actual"
+            exit 1
+          fi
+
+      - name: Validate Bambdas
+        run: |
+          java -jar BambdaChecker-1.5.jar validateonly

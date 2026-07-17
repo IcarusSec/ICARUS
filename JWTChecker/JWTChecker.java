@@ -41,7 +41,9 @@ if (baseRes == null) {
 
 // ---------- JWT Regex and Models ----------
 
-var jwtRegex = java.util.regex.Pattern.compile("eyJ[a-zA-Z0-9_-]+\\.eyJ[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]*)?");
+var jwtRegex = java.util.regex.Pattern.compile(
+    "eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]*)?"
+);
 
 class JwtCandidate {
     String token;

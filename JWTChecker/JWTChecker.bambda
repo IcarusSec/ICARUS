@@ -2,7 +2,17 @@ id: c1fd1a76-8f7a-41d6-8beb-2e02d54cc5db
 name: JWTChecker
 function: CUSTOM_ACTION
 location: REPEATER
-source: "// ============================================================\r\n// JWT\
+source: |
+  /**
+  * HTTP Verb Tester
+  *
+  * Performs HTTP verb tampering by replaying the current request
+  * with alternative HTTP methods and reports the responses.
+  *
+  * @author Victor Lima
+  * @author Adan Ferreira
+  */
+  "// ============================================================\r\n// JWT\
   \ / Bearer Token Checker\r\n// Burp Suite Custom Action\r\n//\r\n// Authors: Victor\
   \ Lima | Adan Ferreira\r\n//\r\n// Description:\r\n// JWT validation and tampering\
   \ for API security testing.\r\n//\r\n// Version: 0.1.0\r\n// Last update: 2026-07-17\r\

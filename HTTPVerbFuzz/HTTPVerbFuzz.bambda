@@ -2,7 +2,17 @@ id: bddf625b-3ff6-4800-b4d6-752697189a86
 name: HTTPVerbFuzz
 function: CUSTOM_ACTION
 location: REPEATER
-source: "// ============================================================\r\n// HTTP\
+source: |
+  /**
+  * HTTP Verb Tester
+  *
+  * Performs HTTP verb tampering by replaying the current request
+  * with alternative HTTP methods and reports the responses.
+  *
+  * @author Victor Lima
+  * @author Adan Ferreira
+  */
+  "// ============================================================\r\n// HTTP\
   \ Verb Tester\r\n// Burp Suite Custom Action\r\n//\r\n// Authors: Victor Lima |\
   \ Adan Ferreira\r\n//\r\n// Description:\r\n// Basic HTTP verb validation for API\
   \ security testing.\r\n//\r\n// Version: 0.1.0\r\n// Last update: 2026-07-16\r\n\

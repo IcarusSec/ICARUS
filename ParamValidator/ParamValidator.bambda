@@ -2,7 +2,17 @@ id: 40ead4f9-225d-4251-ab6f-687b8ca2c952
 name: ParamValidator
 function: CUSTOM_ACTION
 location: REPEATER
-source: "// ============================================================\r\n// JSON\
+source: |
+  /**
+  * HTTP Verb Tester
+  *
+  * Performs HTTP verb tampering by replaying the current request
+  * with alternative HTTP methods and reports the responses.
+  *
+  * @author Victor Lima
+  * @author Adan Ferreira
+  */
+  "// ============================================================\r\n// JSON\
   \ Parameter Validation Tester\r\n// Burp Suite Custom Action\r\n//\r\n// Authors:\
   \ Victor Lima | Adan Ferreira\r\n//\r\n// Description:\r\n// JSON Parameter validation\
   \ for API security testing.\r\n//\r\n// Version: 0.1.0\r\n// Last update: 2026-07-16\r\

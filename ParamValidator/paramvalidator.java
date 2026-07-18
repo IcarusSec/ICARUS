@@ -7,7 +7,7 @@
 // Description:
 // JSON Parameter validation for API security testing.
 //
-// Version: 0.1.0
+// Version: 0.1.2
 // Last update: 2026-07-16
 // ============================================================
 
@@ -111,7 +111,7 @@ List<String> INCLUDE_PATH_PATTERNS = List.of(
 // "$.chosen_discount.**" -> excludes the path and all descendants
 // "$.items[*].internalId" -> excludes the field in any array item
 List<String> EXCLUDE_PATH_PATTERNS = List.of(
-         "$.chosen_products.quantity"
+        //"$.chosen_discount.**"
         // "$.audit.**"
 );
 
@@ -127,6 +127,10 @@ var LOG_PATH_RULE_SKIPS = true;
 // Shows all JSON paths discovered before mutations.
 // Useful to confirm the exact field name during configuration.
 var LOG_DISCOVERED_JSON_PATHS = false;
+
+// Shows each configured inclusion/exclusion pattern and how many
+// discovered JSON paths matched it.
+var LOG_PATH_RULE_DIAGNOSTICS = true;
 
 // ---------- Editable payloads ----------
 var PAYLOAD_SQLI = "' OR '1'='1";
@@ -663,6 +667,49 @@ class PathRules {
         );
     }
 
+    int countMatches(
+            List<List<Object>> discoveredPaths,
+            String pattern
+    ) {
+        if (
+                discoveredPaths == null
+                        || pattern == null
+                        || pattern.isBlank()
+        ) {
+            return 0;
+        }
+
+        var count = 0;
+
+        for (List<Object> discoveredPath : discoveredPaths) {
+            /*
+             * PathRules is declared before Paths in this Bambda script.
+             * Local classes cannot reference a class declared later in the
+             * same block, so build the JSONPath locally for diagnostics.
+             */
+            var pathBuilder = new StringBuilder("$");
+
+            for (Object pathPart : discoveredPath) {
+                if (pathPart instanceof String propertyName) {
+                    pathBuilder.append(".").append(propertyName);
+                } else {
+                    pathBuilder
+                            .append("[")
+                            .append(pathPart)
+                            .append("]");
+                }
+            }
+
+            var pathString = pathBuilder.toString();
+
+            if (matches(pathString, pattern.trim())) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     String buildRegex(String pattern) {
         var regex = new StringBuilder("^");
 
@@ -688,7 +735,14 @@ class PathRules {
             }
 
             if ("\\\\.^$|?+(){}[]".indexOf(current) >= 0) {
-                regex.append("\\\\");
+                /*
+                 * Append exactly one regex escape character.
+                 *
+                 * The previous implementation appended two backslashes,
+                 * so exact JSON paths containing '$', '.' or brackets
+                 * did not match the generated regular expression.
+                 */
+                regex.append("\\");
             }
 
             regex.append(current);
@@ -1110,6 +1164,44 @@ if (LOG_DISCOVERED_JSON_PATHS) {
 
 var pathRules = new PathRules();
 
+if (LOG_PATH_RULE_DIAGNOSTICS) {
+    if (
+            INCLUDE_PATH_PATTERNS != null
+                    && !INCLUDE_PATH_PATTERNS.isEmpty()
+    ) {
+        for (String pattern : INCLUDE_PATH_PATTERNS) {
+            if (pattern == null || pattern.isBlank()) {
+                continue;
+            }
+
+            logging.logToOutput(
+                    "[PATH RULE][INCLUDE] pattern="
+                            + pattern
+                            + " | matches="
+                            + pathRules.countMatches(allPaths, pattern)
+            );
+        }
+    }
+
+    if (
+            EXCLUDE_PATH_PATTERNS != null
+                    && !EXCLUDE_PATH_PATTERNS.isEmpty()
+    ) {
+        for (String pattern : EXCLUDE_PATH_PATTERNS) {
+            if (pattern == null || pattern.isBlank()) {
+                continue;
+            }
+
+            logging.logToOutput(
+                    "[PATH RULE][EXCLUDE] pattern="
+                            + pattern
+                            + " | matches="
+                            + pathRules.countMatches(allPaths, pattern)
+            );
+        }
+    }
+}
+
 var eligiblePaths = new ArrayList<List<Object>>();
 var skippedNotIncludedCount = 0;
 var skippedExcludedCount = 0;
@@ -1144,6 +1236,19 @@ for (var path : allPaths) {
     }
 
     eligiblePaths.add(path);
+}
+
+if (
+        LOG_PATH_RULE_DIAGNOSTICS
+                && EXCLUDE_PATH_PATTERNS != null
+                && !EXCLUDE_PATH_PATTERNS.isEmpty()
+                && skippedExcludedCount == 0
+) {
+    logging.logToOutput(
+            "[PATH RULE][WARNING] Nenhum caminho foi excluido. "
+                    + "Ative LOG_DISCOVERED_JSON_PATHS=true e copie "
+                    + "o caminho exibido exatamente como aparece no log."
+    );
 }
 
 var mutations = new ArrayList<Mutation>();

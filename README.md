@@ -83,6 +83,20 @@ It automatically identifies JWTs using regex in `Authorization` headers and `Coo
 
 [View JWTChecker README →](JWTChecker/README.md)
 
+### Export to Postman (`ExportToPostman`)
+
+Located in the `ExportToPostman` directory, this action exports the current request in the Repeater to a Postman Collection JSON format.
+
+Sometimes you want to quickly port your crafted request from Burp Repeater directly into Postman for team sharing, API documentation, or testing workflows. This Custom Action creates a complete, valid Postman Collection JSON for the active request directly in the Custom Actions log.
+
+**Key Features:**
+- **Postman Collection v2.1.0:** Generates fully compatible Postman Collection JSON objects.
+- **Accurate Method & URL:** Extracts the exact HTTP method and parses the URL into Postman's `host`, `path`, and `query` block structures.
+- **Header Preservation:** Preserves all HTTP headers accurately.
+- **Body Preservation:** Preserves raw body payload securely with proper JSON escaping.
+
+[View ExportToPostman README →](ExportToPostman/README.md)
+
 ## Usage
 
 To use these custom actions in Burp Suite:

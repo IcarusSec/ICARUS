@@ -88,8 +88,24 @@ public class IcarusTab {
         resultsPanel.add(new JScrollPane(table), BorderLayout.CENTER);
 
         JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        JButton btnPassiveLogs = new JButton("View Security Header Logs");
+        btnPassiveLogs.addActionListener(e -> {
+            var passive = orchestrator.getPassiveFindings();
+            if (passive.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "No security header logs recorded yet.");
+            } else {
+                orchestrator.showFindingsDialog(passive);
+            }
+        });
+
         JButton btnClear = new JButton("Clear Results");
-        btnClear.addActionListener(e -> tableModel.setRowCount(0));
+        btnClear.addActionListener(e -> {
+            tableModel.setRowCount(0);
+            orchestrator.clearPassiveFindings();
+        });
+
+        bottomBar.add(btnPassiveLogs);
         bottomBar.add(btnClear);
         resultsPanel.add(bottomBar, BorderLayout.SOUTH);
 

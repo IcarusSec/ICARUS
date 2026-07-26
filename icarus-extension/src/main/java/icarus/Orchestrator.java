@@ -36,6 +36,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     // Listeners for the UI results table
     private final List<ScanListener> listeners = new ArrayList<>();
 
+    // Store passive findings in memory to display on demand
+    private final List<Finding> passiveFindingsLog = new ArrayList<>();
+
     public Orchestrator(MontoyaApi api,
                         List<IcarusModule> modules,
                         ModuleConfig config,
@@ -93,6 +96,21 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(runAll);
 
+        // CREATE EVIDENCE Manual Option
+        var createEvidence = new JMenuItem("ICARUS → CREATE EVIDENCE");
+        createEvidence.addActionListener(e -> {
+            for (var rr : requestResponses) {
+                Finding manualFinding = Finding.builder("Manual", "MANUAL_EVIDENCE")
+                        .description("Manual evidence capture triggered by user.")
+                        .severity(Severity.INFO)
+                        .category(Category.MANUAL)
+                        .evidence(rr)
+                        .build();
+                evidenceCapture.captureInteractive(manualFinding);
+            }
+        });
+        items.add(createEvidence);
+
         // Individual module entries
         for (var module : modules) {
             var item = new JMenuItem("ICARUS → " + module.name());
@@ -133,7 +151,8 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                     if (module instanceof SensitiveHeaderModule shm) {
                         var findings = shm.analyzeResponse(response, config);
                         if (!findings.isEmpty()) {
-                            routeFindings(findings);
+                            // Route passive findings without triggering popups
+                            routeFindingsPassive(findings);
                         }
                     }
                 }
@@ -143,6 +162,30 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
 
         return ResponseReceivedAction.continueWith(response);
+    }
+
+    private void routeFindingsPassive(List<Finding> findings) {
+        // Add to internal list
+        synchronized(passiveFindingsLog) {
+            passiveFindingsLog.addAll(findings);
+        }
+
+        // Log all findings to extension output
+        for (var finding : findings) {
+            api.logging().logToOutput(finding.toString());
+
+            // Audit issues
+            if (config.getBool("pv.create_audit_issues", true) && finding.evidence() != null) {
+                try {
+                    createAuditIssue(finding);
+                } catch (Exception e) {
+                    api.logging().logToError("Failed to create audit issue: " + e.getMessage());
+                }
+            }
+        }
+
+        // Only notify the UI table, do NOT pop up a dialog
+        notifyListeners(findings);
     }
 
     // ── Internal ────────────────────────────────────────────────
@@ -229,13 +272,25 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         }
 
-        // Show interactive pop-up for findings if there are any
-        if (!findings.isEmpty()) {
+        // Show interactive pop-up for findings if there are any and configured to do so
+        if (!findings.isEmpty() && config.getBool("ui.show_popups", true)) {
             SwingUtilities.invokeLater(() -> showFindingsDialog(findings));
         }
     }
 
-    private void showFindingsDialog(List<Finding> findings) {
+    public List<Finding> getPassiveFindings() {
+        synchronized(passiveFindingsLog) {
+            return new ArrayList<>(passiveFindingsLog);
+        }
+    }
+
+    public void clearPassiveFindings() {
+        synchronized(passiveFindingsLog) {
+            passiveFindingsLog.clear();
+        }
+    }
+
+    public void showFindingsDialog(List<Finding> findings) {
         JDialog dialog = new JDialog();
         dialog.setTitle("ICARUS Scan Results");
         dialog.setModal(false);

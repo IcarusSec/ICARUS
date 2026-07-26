@@ -259,6 +259,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnRepeater = new JButton("Send to Repeater");
         JButton btnEvidence = new JButton("Save as Evidence");
+        JButton btnReport = new JButton("Generate HTML Report");
         JButton btnClose = new JButton("Close");
 
         btnRepeater.addActionListener(e -> {
@@ -279,7 +280,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             if (row >= 0) {
                 Finding f = findings.get(row);
                 if (f.evidence() != null) {
-                    // This will now trigger the interactive editor instead of just saving
                     evidenceCapture.captureInteractive(f);
                 } else {
                     JOptionPane.showMessageDialog(dialog, "No HTTP request evidence attached to this finding.");
@@ -287,10 +287,20 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         });
 
+        btnReport.addActionListener(e -> {
+            try {
+                reportGenerator.generate(findings, config, evidenceCapture);
+                JOptionPane.showMessageDialog(dialog, "HTML Report generated from saved evidence.");
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(dialog, "Report generation failed: " + ex.getMessage());
+            }
+        });
+
         btnClose.addActionListener(e -> dialog.dispose());
 
         btnPanel.add(btnRepeater);
         btnPanel.add(btnEvidence);
+        btnPanel.add(btnReport);
         btnPanel.add(btnClose);
         dialog.add(btnPanel, BorderLayout.SOUTH);
 

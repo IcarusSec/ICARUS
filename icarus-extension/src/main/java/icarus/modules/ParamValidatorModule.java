@@ -27,7 +27,7 @@ public final class ParamValidatorModule implements IcarusModule {
     }
 
     record MutationSpec(String type, String description, Object value, boolean remove, Category category) {}
-    record Mutation(String path, String type, String description, Category category, String body) {}
+    record Mutation(String path, String type, String description, Category category, String body, Object value) {}
 
     @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
@@ -79,7 +79,8 @@ public final class ParamValidatorModule implements IcarusModule {
                             spec.type(),
                             spec.description(),
                             spec.category(),
-                            JsonParser.write(clonedRoot)
+                            JsonParser.write(clonedRoot),
+                            spec.value()
                     ));
                 }
             }
@@ -143,41 +144,83 @@ public final class ParamValidatorModule implements IcarusModule {
         boolean filterExactMatch = config.getBool("pv.filter_exact_match", false);
         boolean checkXssReflection = config.getBool("pv.check_xss_reflection", true);
         int timeDelayMs = config.getInt("pv.payload_sqli_time_delay_ms", 10000);
-        String payloadXss = config.getString("pv.payload_xss", "<script>alert(1)</script>");
+
+        boolean behavioralAnalysis = config.getBool("pv.behavioral_analysis", false);
+        long baselineTime = 0;
+        String baselineBodyLower = "";
+        if (requireBaseline) {
+            long st = System.currentTimeMillis();
+            try {
+                HttpRequestResponse bl = api.http().sendRequest(request);
+                if (bl != null && bl.response() != null) baselineBodyLower = bl.response().bodyToString().toLowerCase();
+            } catch (Exception ignored) {}
+            baselineTime = System.currentTimeMillis() - st;
+        }
 
         List<Finding> findings = new ArrayList<>();
-        
+
         int analyzedCount = Math.min(mutations.size(), responses.size());
         for (int i = 0; i < analyzedCount; i++) {
             Mutation mutation = mutations.get(i);
             HttpRequestResponse mutatedResult = responses.get(i);
-            
+
             if (mutatedResult == null || mutatedResult.response() == null) continue;
-            
+
             HttpResponse mutatedResponse = mutatedResult.response();
             int status = mutatedResponse.statusCode();
             int length = mutatedResponse.body().length();
             long responseTime = requestTimes[i];
             String bodyStr = mutatedResponse.bodyToString();
-            
+
             boolean timeDelayHit = mutation.type().equals("STRING_SQLI_TIME") && responseTime >= timeDelayMs;
-            boolean xssReflectionHit = checkXssReflection && mutation.type().equals("STRING_XSS") && bodyStr.contains(payloadXss);
-            
+
+            boolean xssReflectionHit = false;
+            if (checkXssReflection && mutation.type().equals("STRING_XSS") && mutation.value() instanceof String payload) {
+                xssReflectionHit = bodyStr.contains(payload);
+            }
+
             boolean accepted = (status >= findingStatusMin && status <= findingStatusMax) || timeDelayHit || xssReflectionHit;
-            
+
             if (accepted && filterExactMatch && length == baselineLength && !timeDelayHit && !xssReflectionHit) {
                 accepted = false;
             }
-            
+
+            boolean behavioralHit = false;
+            String behavioralReason = "";
+            if (behavioralAnalysis && baselineLength != -1 && !accepted) {
+                double diffRatio = baselineLength == 0 ? 0 : Math.abs(length - baselineLength) / (double) baselineLength;
+                if (diffRatio > 0.20) {
+                    behavioralHit = true;
+                    behavioralReason = "Size anomaly (" + length + " vs baseline " + baselineLength + ")";
+                } else if (baselineTime > 0 && responseTime > baselineTime * 5 && responseTime > 3000) {
+                    behavioralHit = true;
+                    behavioralReason = "Time anomaly (" + responseTime + "ms vs baseline " + baselineTime + "ms)";
+                } else {
+                    String lowerBody = bodyStr.toLowerCase();
+                    if ((lowerBody.contains("syntax error") || lowerBody.contains("sql syntax")
+                            || lowerBody.contains("ora-") || lowerBody.contains("warning: mysql_")) &&
+                        (requireBaseline ? !baselineBodyLower.contains("syntax error") : true)) {
+                        behavioralHit = true;
+                        behavioralReason = "Backend error anomaly";
+                    }
+                }
+                if (behavioralHit) {
+                    accepted = true;
+                }
+            }
+
             if (accepted) {
                 Severity severity = Severity.HIGH;
-                if (mutation.category() == Category.STRUCTURAL) severity = Severity.MEDIUM;
-                else if (mutation.category() == Category.BOUNDARY) severity = Severity.MEDIUM;
-                else if (mutation.category() == Category.TYPE_CONFUSION) severity = Severity.MEDIUM;
-                
+                if (!behavioralHit && !timeDelayHit && !xssReflectionHit) {
+                    if (mutation.category() == Category.STRUCTURAL) severity = Severity.MEDIUM;
+                    else if (mutation.category() == Category.BOUNDARY) severity = Severity.MEDIUM;
+                    else if (mutation.category() == Category.TYPE_CONFUSION) severity = Severity.MEDIUM;
+                }
+
                 String findingDesc = mutation.description() + " | HTTP=" + status + " | size=" + length;
                 if (timeDelayHit) findingDesc += " | time=" + responseTime + "ms";
                 else if (xssReflectionHit) findingDesc += " | XSS payload reflected!";
+                else if (behavioralHit) findingDesc += " | Behavioral: " + behavioralReason;
                 else findingDesc += " | payload accepted";
                 
                 findings.add(Finding.builder(name(), mutation.type())
@@ -232,22 +275,34 @@ public final class ParamValidatorModule implements IcarusModule {
                 }
                 if (testInjection) {
                     if (config.getBool("pv.sqli", true)) {
-                        specs.add(new MutationSpec("STRING_SQLI", "SQL Injection payload", config.getString("pv.payload_sqli", "' OR '1'='1"), false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_sqli", "' OR '1'='1").split("\n")) {
+                            specs.add(new MutationSpec("STRING_SQLI", "SQL Injection payload", payload, false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.sqli_time", true)) {
-                        specs.add(new MutationSpec("STRING_SQLI_TIME", "Time-based SQL Injection payload", config.getString("pv.payload_sqli_time", "'; WAITFOR DELAY '0:0:10'--"), false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_sqli_time", "'; WAITFOR DELAY '0:0:10'--").split("\n")) {
+                            specs.add(new MutationSpec("STRING_SQLI_TIME", "Time-based SQL Injection payload", payload, false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.xss", true)) {
-                        specs.add(new MutationSpec("STRING_XSS", "XSS payload", config.getString("pv.payload_xss", "<script>alert(1)</script>"), false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_xss", "<script>alert(1)</script>").split("\n")) {
+                            specs.add(new MutationSpec("STRING_XSS", "XSS payload", payload, false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.path_traversal", true)) {
-                        specs.add(new MutationSpec("STRING_PATH_TRAVERSAL", "Path Traversal payload", config.getString("pv.payload_path_traversal", "../../../../etc/passwd"), false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_path_traversal", "../../../../etc/passwd").split("\n")) {
+                            specs.add(new MutationSpec("STRING_PATH_TRAVERSAL", "Path Traversal payload", payload, false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.nosqli", true)) {
-                        specs.add(new MutationSpec("STRING_NOSQLI", "NoSQL Injection payload", config.getString("pv.payload_nosqli", "{\"$ne\": null}"), false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_nosqli", "{\"$ne\": null}").split("\n")) {
+                            specs.add(new MutationSpec("STRING_NOSQLI", "NoSQL Injection payload", payload, false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.format_string", true)) {
-                        specs.add(new MutationSpec("STRING_FORMAT", "Format string payload", config.getString("pv.payload_format_string", "%s%x%n"), false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_format_string", "%s%x%n").split("\n")) {
+                            specs.add(new MutationSpec("STRING_FORMAT", "Format string payload", payload, false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.unicode", true)) {
                         specs.add(new MutationSpec("STRING_UNICODE", "Payload unicode / RTL override", config.getString("pv.payload_unicode", "‮test😀"), false, Category.INJECTION));
@@ -298,7 +353,9 @@ public final class ParamValidatorModule implements IcarusModule {
                         specs.add(new MutationSpec("NUMBER_SQLI_MATH", "Mathematical SQL Injection payload", "1/0", false, Category.INJECTION));
                     }
                     if (config.getBool("pv.sqli_time", true)) {
-                        specs.add(new MutationSpec("STRING_SQLI_TIME", "Time-based SQL Injection payload (Number context)", "1-(WAITFOR DELAY '0:0:10')", false, Category.INJECTION));
+                        for (String payload : config.getString("pv.payload_sqli_time", "1-(WAITFOR DELAY '0:0:10')").split("\n")) {
+                            specs.add(new MutationSpec("STRING_SQLI_TIME", "Time-based SQL Injection payload (Number context)", payload, false, Category.INJECTION));
+                        }
                     }
                 }
                 if (testTypeConfusion && config.getBool("pv.number_as_string", true)) {

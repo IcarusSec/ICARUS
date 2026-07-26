@@ -5,7 +5,6 @@ import icarus.Orchestrator;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
-import icarus.screenshot.ScreenshotEditor;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
@@ -23,18 +22,16 @@ public class IcarusTab {
     private final ModuleConfig config;
     private final List<IcarusModule> modules;
     private final Orchestrator orchestrator;
-    private final ScreenshotEditor screenshotEditor;
 
     private final JPanel mainPanel;
     private final DefaultTableModel tableModel;
 
     public IcarusTab(MontoyaApi api, ModuleConfig config, List<IcarusModule> modules,
-                     Orchestrator orchestrator, ScreenshotEditor screenshotEditor) {
+                     Orchestrator orchestrator) {
         this.api = api;
         this.config = config;
         this.modules = modules;
         this.orchestrator = orchestrator;
-        this.screenshotEditor = screenshotEditor;
 
         this.mainPanel = new JPanel(new BorderLayout());
         this.tableModel = new DefaultTableModel(new String[]{"Severity", "Module", "Type", "Path", "Description"}, 0) {
@@ -97,16 +94,6 @@ public class IcarusTab {
         resultsPanel.add(bottomBar, BorderLayout.SOUTH);
 
         tabs.addTab("Results", resultsPanel);
-
-        // ── Tools Tab ──
-        JPanel toolsPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 20, 20));
-
-        JButton btnScreenshot = new JButton("Open Screenshot Editor");
-        btnScreenshot.setPreferredSize(new Dimension(200, 40));
-        btnScreenshot.addActionListener(e -> screenshotEditor.startCapture());
-
-        toolsPanel.add(btnScreenshot);
-        tabs.addTab("Tools", toolsPanel);
 
         mainPanel.add(tabs, BorderLayout.CENTER);
     }

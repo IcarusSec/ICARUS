@@ -154,6 +154,32 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         context.log("ICARUS scan started — " + target.request().method()
                 + " " + target.request().path());
 
+        // WAF Detection
+        if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
+            String server = target.response().headerValue("Server");
+            if (server != null && server.toLowerCase().contains("akamai")) {
+                int choice = JOptionPane.showOptionDialog(null,
+                        "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",
+                        "WAF Detected",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE,
+                        null,
+                        new String[]{"Run Default", "Run Safe Mode (Safelist)"},
+                        "Run Safe Mode (Safelist)");
+
+                if (choice == 1) {
+                    context.log("User chose SAFE MODE (WAF bypass)");
+                    // Override injection payloads temporarily for this scan run
+                    String safePayloads = config.getString("waf.safelist_payloads", "' OR 1=1--");
+                    config.set("pv.payload_sqli", safePayloads);
+                    config.set("pv.payload_xss", safePayloads);
+                    config.set("pv.payload_path_traversal", safePayloads);
+                    config.set("pv.payload_nosqli", safePayloads);
+                    config.set("pv.payload_format_string", safePayloads);
+                }
+            }
+        }
+
         for (var module : modules) {
             if (!isModuleEnabled(module)) continue;
 
@@ -170,16 +196,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         }
 
         routeFindings(context.findings());
-
-        // Generate report
-        if (config.getBool("evidence.enabled", true)) {
-            try {
-                reportGenerator.generate(context.findings(), config);
-                context.log("Evidence report generated.");
-            } catch (Exception e) {
-                context.error("Report generation failed: " + e.getMessage());
-            }
-        }
 
         context.log("ICARUS scan complete — " + context.findings().size() + " total findings.");
         context.log("════════════════════════════════════════════════");
@@ -199,29 +215,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     private void routeFindings(List<Finding> findings) {
-        int repeaterCount = 0;
-        int maxRepeater = config.getInt("pv.max_repeater", 10);
-
+        // Log all findings to extension output
         for (var finding : findings) {
-            // Log
             api.logging().logToOutput(finding.toString());
-
-            // Repeater
-            if (finding.evidence() != null && repeaterCount < maxRepeater) {
-                try {
-                    String tabName = buildTabName(finding, repeaterCount + 1);
-                    api.repeater().sendToRepeater(finding.evidence().request(), tabName);
-                    repeaterCount++;
-                } catch (Exception e) {
-                    api.logging().logToError("Failed to send to Repeater: " + e.getMessage());
-                }
-            } else if (finding.evidence() != null && config.getBool("pv.send_excess_organizer", true)) {
-                try {
-                    api.organizer().sendToOrganizer(finding.evidence().request());
-                } catch (Exception e) {
-                    api.logging().logToError("Failed to send to Organizer: " + e.getMessage());
-                }
-            }
 
             // Audit issues
             if (config.getBool("pv.create_audit_issues", true) && finding.evidence() != null) {
@@ -231,16 +227,74 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                     api.logging().logToError("Failed to create audit issue: " + e.getMessage());
                 }
             }
+        }
 
-            // Evidence capture
-            if (config.getBool("evidence.auto_capture", true) && finding.evidence() != null) {
-                try {
-                    evidenceCapture.capture(finding);
-                } catch (Exception e) {
-                    // Non-critical — don't stop the scan
+        // Show interactive pop-up for findings if there are any
+        if (!findings.isEmpty()) {
+            SwingUtilities.invokeLater(() -> showFindingsDialog(findings));
+        }
+    }
+
+    private void showFindingsDialog(List<Finding> findings) {
+        JDialog dialog = new JDialog();
+        dialog.setTitle("ICARUS Scan Results");
+        dialog.setModal(false);
+        dialog.setSize(900, 500);
+        dialog.setLocationRelativeTo(null);
+
+        String[] cols = {"Severity", "Module", "Type", "Path", "Description"};
+        Object[][] data = new Object[findings.size()][5];
+        for (int i = 0; i < findings.size(); i++) {
+            Finding f = findings.get(i);
+            data[i] = new Object[]{f.severity().name(), f.module(), f.type(), f.path(), f.description()};
+        }
+
+        JTable table = new JTable(data, cols) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        dialog.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JButton btnRepeater = new JButton("Send to Repeater");
+        JButton btnEvidence = new JButton("Save as Evidence");
+        JButton btnClose = new JButton("Close");
+
+        btnRepeater.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row >= 0) {
+                Finding f = findings.get(row);
+                if (f.evidence() != null) {
+                    api.repeater().sendToRepeater(f.evidence().request(), buildTabName(f, row + 1));
+                    JOptionPane.showMessageDialog(dialog, "Sent to Repeater.");
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "No HTTP request evidence attached to this finding.");
                 }
             }
-        }
+        });
+
+        btnEvidence.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row >= 0) {
+                Finding f = findings.get(row);
+                if (f.evidence() != null) {
+                    // This will now trigger the interactive editor instead of just saving
+                    evidenceCapture.captureInteractive(f);
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "No HTTP request evidence attached to this finding.");
+                }
+            }
+        });
+
+        btnClose.addActionListener(e -> dialog.dispose());
+
+        btnPanel.add(btnRepeater);
+        btnPanel.add(btnEvidence);
+        btnPanel.add(btnClose);
+        dialog.add(btnPanel, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
     }
 
     private String buildTabName(Finding finding, int index) {

@@ -8,7 +8,6 @@ import icarus.modules.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
 import icarus.ui.IcarusTab;
-import icarus.screenshot.ScreenshotEditor;
 
 import java.util.List;
 
@@ -46,12 +45,11 @@ public class Icarus implements BurpExtension {
 
         var evidenceCapture = new EvidenceCapture(api);
         var reportGenerator = new ReportGenerator(api);
-        var screenshotEditor = new ScreenshotEditor();
 
         var orchestrator = new Orchestrator(api, modules, config, evidenceCapture, reportGenerator);
 
         // Register UI tab
-        var tab = new IcarusTab(api, config, modules, orchestrator, screenshotEditor);
+        var tab = new IcarusTab(api, config, modules, orchestrator);
         api.userInterface().registerSuiteTab(NAME, tab.getComponent());
 
         // Register context menu
@@ -102,16 +100,19 @@ public class Icarus implements BurpExtension {
         config.set("pv.filter_exact_match", false);
         config.set("pv.check_xss_reflection", true);
         config.set("pv.create_audit_issues", true);
-        config.set("pv.send_excess_organizer", true);
         config.set("pv.long_string_length", 10000);
-        config.set("pv.payload_sqli", "' OR '1'='1");
-        config.set("pv.payload_sqli_time", "'; WAITFOR DELAY '0:0:10'--");
+        config.set("pv.payload_sqli", "' OR '1'='1\n1' ORDER BY 1--\n' UNION SELECT NULL--\nadmin' --");
+        config.set("pv.payload_sqli_time", "'; WAITFOR DELAY '0:0:10'--\npg_sleep(10)\nSLEEP(10)");
         config.set("pv.payload_sqli_time_delay_ms", 10000);
-        config.set("pv.payload_xss", "<script>alert(1)</script>");
-        config.set("pv.payload_path_traversal", "../../../../etc/passwd");
-        config.set("pv.payload_nosqli", "{\"$ne\": null}");
-        config.set("pv.payload_format_string", "%s%x%n");
+        config.set("pv.payload_xss", "<script>alert(1)</script>\n\"><img src=x onerror=prompt()>\njavascript:alert(1)");
+        config.set("pv.payload_path_traversal", "../../../../etc/passwd\n..%2f..%2f..%2fwindows%2fwin.ini\n/etc/shadow");
+        config.set("pv.payload_nosqli", "{\"$ne\": null}\n{\"$gt\": \"\"}");
+        config.set("pv.payload_format_string", "%s%x%n\n%p%p%p");
         config.set("pv.payload_unicode", "‮test😀");
+
+        // WAF defaults
+        config.set("waf.detect_akamai", true);
+        config.set("waf.safelist_payloads", "' OR 1=1--\n<svg/onload=alert(1)>");
 
         // ── HTTPVerbFuzz defaults ──
         config.set("hv.enabled", true);

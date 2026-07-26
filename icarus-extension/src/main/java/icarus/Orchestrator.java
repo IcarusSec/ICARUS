@@ -15,15 +15,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Central coordinator that runs modules, collects findings,
- * routes them to evidence capture, Repeater, Organizer, and audit issues.
- *
- * Also serves as the context menu provider and passive HTTP handler.
- */
 public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler {
 
     private final MontoyaApi api;
@@ -33,11 +28,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ReportGenerator reportGenerator;
     private final ExecutorService executor;
 
-    // Listeners for the UI results table
-    private final List<ScanListener> listeners = new ArrayList<>();
+    private final Map<String, FindingRecord> activeFindings = new java.util.concurrent.ConcurrentHashMap<>();
+    private final List<String> auditLog = new java.util.ArrayList<>();
 
-    // Store passive findings in memory to display on demand
-    private final List<Finding> passiveFindingsLog = new ArrayList<>();
+    private final List<ScanListener> listeners = new ArrayList<>();
 
     public Orchestrator(MontoyaApi api,
                         List<IcarusModule> modules,
@@ -54,14 +48,66 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             t.setDaemon(true);
             return t;
         });
+
+        for (String hash : config.getStringList("suppressed_hashes")) {
+            Finding dummy = Finding.builder("System", "DUMMY").build();
+            FindingRecord fr = new FindingRecord(dummy);
+            fr.setSuppressed(true);
+            activeFindings.put(hash, fr);
+        }
+        logAudit("System initialized. Loaded " + config.getStringList("suppressed_hashes").size() + " suppression rules.");
     }
 
-    // ── Public API ──────────────────────────────────────────────
+    public void logAudit(String action) {
+        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        String entry = "[" + timestamp + "] " + action;
+        synchronized(auditLog) {
+            auditLog.add(entry);
+        }
+        api.logging().logToOutput(entry);
+    }
 
-    /**
-     * Run all enabled modules against the given request/response.
-     * Executes off the EDT in a background thread.
-     */
+    public List<String> getAuditLog() {
+        synchronized(auditLog) {
+            return new ArrayList<>(auditLog);
+        }
+    }
+
+    public void suppressFinding(String hash, String reason) {
+        var record = activeFindings.get(hash);
+        if (record != null) {
+            record.setSuppressed(true);
+            logAudit("User suppressed finding: " + hash + " (Reason: " + reason + ")");
+            saveSuppressionConfig();
+            notifyListenersOfUpdate();
+        }
+    }
+
+    public void unsuppressFinding(String hash) {
+        var record = activeFindings.get(hash);
+        if (record != null) {
+            record.setSuppressed(false);
+            logAudit("User removed suppression for: " + hash);
+            saveSuppressionConfig();
+            notifyListenersOfUpdate();
+        }
+    }
+
+    private void saveSuppressionConfig() {
+        List<String> suppressed = new ArrayList<>();
+        for (var entry : activeFindings.entrySet()) {
+            if (entry.getValue().isSuppressed()) {
+                suppressed.add(entry.getKey());
+            }
+        }
+        config.set("suppressed_hashes", String.join("\n", suppressed));
+        StringBuilder sb = new StringBuilder();
+        for (var entry : config.snapshot().entrySet()) {
+            sb.append(entry.getKey()).append("=").append(entry.getValue().replace("\n", "\\n")).append("\n");
+        }
+        api.persistence().extensionData().setString("config", sb.toString());
+    }
+
     public void runScan(HttpRequestResponse target) {
         executor.submit(() -> {
             try {
@@ -75,8 +121,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     public void addListener(ScanListener listener) {
         listeners.add(listener);
     }
-
-    // ── Context Menu ────────────────────────────────────────────
 
     @Override
     public List<Component> provideMenuItems(ContextMenuEvent event) {
@@ -96,7 +140,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(runAll);
 
-        // CREATE EVIDENCE Manual Option
         var createEvidence = new JMenuItem("ICARUS → CREATE EVIDENCE");
         createEvidence.addActionListener(e -> {
             for (var rr : requestResponses) {
@@ -111,7 +154,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(createEvidence);
 
-        // Individual module entries
         for (var module : modules) {
             var item = new JMenuItem("ICARUS → " + module.name());
             item.addActionListener(e -> {
@@ -131,8 +173,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         return items;
     }
 
-    // ── Passive HTTP Handler (SensitiveHeaders) ─────────────────
-
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent request) {
         return RequestToBeSentAction.continueWith(request);
@@ -144,60 +184,29 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             return ResponseReceivedAction.continueWith(response);
         }
 
-        // Run sensitive header checks passively in background
         executor.submit(() -> {
             try {
                 for (var module : modules) {
                     if (module instanceof SensitiveHeaderModule shm) {
                         var findings = shm.analyzeResponse(response, config);
                         if (!findings.isEmpty()) {
-                            // Route passive findings without triggering popups
                             routeFindingsPassive(findings);
                         }
                     }
                 }
             } catch (Exception e) {
-                // Don't spam logs for passive scan errors
             }
         });
 
         return ResponseReceivedAction.continueWith(response);
     }
 
-    private void routeFindingsPassive(List<Finding> findings) {
-        // Add to internal list
-        synchronized(passiveFindingsLog) {
-            passiveFindingsLog.addAll(findings);
-        }
-
-        // Log all findings to extension output
-        for (var finding : findings) {
-            api.logging().logToOutput(finding.toString());
-
-            // Audit issues
-            if (config.getBool("pv.create_audit_issues", true) && finding.evidence() != null) {
-                try {
-                    createAuditIssue(finding);
-                } catch (Exception e) {
-                    api.logging().logToError("Failed to create audit issue: " + e.getMessage());
-                }
-            }
-        }
-
-        // Only notify the UI table, do NOT pop up a dialog
-        notifyListeners(findings);
-    }
-
-    // ── Internal ────────────────────────────────────────────────
-
     private void doScan(HttpRequestResponse target) {
         var context = new ScanContext(api, target, config);
 
         context.log("════════════════════════════════════════════════");
-        context.log("ICARUS scan started — " + target.request().method()
-                + " " + target.request().path());
+        context.log("ICARUS scan started — " + target.request().method() + " " + target.request().path());
 
-        // WAF Detection
         if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
             String server = target.response().headerValue("Server");
             if (server != null && server.toLowerCase().contains("akamai")) {
@@ -212,7 +221,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
                 if (choice == 1) {
                     context.log("User chose SAFE MODE (WAF bypass)");
-                    // Override injection payloads temporarily for this scan run
                     String safePayloads = config.getString("waf.safelist_payloads", "' OR 1=1--");
                     config.set("pv.payload_sqli", safePayloads);
                     config.set("pv.payload_xss", safePayloads);
@@ -231,7 +239,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             try {
                 var findings = module.run(target, config);
                 context.addFindings(findings);
-
                 context.log(module.name() + " → " + findings.size() + " findings");
             } catch (Exception e) {
                 context.error(module.name() + " failed: " + e.getMessage());
@@ -242,74 +249,163 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         context.log("ICARUS scan complete — " + context.findings().size() + " total findings.");
         context.log("════════════════════════════════════════════════");
-
-        notifyListeners(context.findings());
     }
 
     private void runSingleModule(IcarusModule module, HttpRequestResponse target) {
         api.logging().logToOutput("ICARUS → Running " + module.name());
-
         var findings = module.run(target, config);
         routeFindings(findings);
-
         api.logging().logToOutput("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
+    }
 
-        notifyListeners(findings);
+    private void routeFindingsPassive(List<Finding> findings) {
+        processDeduplication(findings, true);
     }
 
     private void routeFindings(List<Finding> findings) {
-        // Log all findings to extension output
-        for (var finding : findings) {
-            api.logging().logToOutput(finding.toString());
+        List<Finding> newOrUpdated = processDeduplication(findings, false);
 
-            // Audit issues
-            if (config.getBool("pv.create_audit_issues", true) && finding.evidence() != null) {
-                try {
-                    createAuditIssue(finding);
-                } catch (Exception e) {
-                    api.logging().logToError("Failed to create audit issue: " + e.getMessage());
-                }
+        if (!newOrUpdated.isEmpty() && config.getBool("ui.show_popups", true)) {
+            List<FindingRecord> recordsToShow = new ArrayList<>();
+            for (Finding f : newOrUpdated) {
+                FindingRecord r = activeFindings.get(f.similarityHash());
+                if (r != null) recordsToShow.add(r);
             }
-        }
-
-        // Show interactive pop-up for findings if there are any and configured to do so
-        if (!findings.isEmpty() && config.getBool("ui.show_popups", true)) {
-            SwingUtilities.invokeLater(() -> showFindingsDialog(findings));
+            SwingUtilities.invokeLater(() -> showFindingsDialog(recordsToShow));
         }
     }
 
-    public List<Finding> getPassiveFindings() {
-        synchronized(passiveFindingsLog) {
-            return new ArrayList<>(passiveFindingsLog);
+    private List<Finding> processDeduplication(List<Finding> findings, boolean passive) {
+        List<Finding> actionable = new ArrayList<>();
+
+        for (var finding : findings) {
+            String hash = finding.similarityHash();
+            var record = activeFindings.get(hash);
+
+            if (record != null) {
+                if (record.isSuppressed()) {
+                    continue;
+                }
+                record.incrementCount();
+                logAudit("Duplicate finding incremented to " + record.getCount() + "x: " + hash);
+                notifyListenersOfUpdate();
+            } else {
+                var newRecord = new FindingRecord(finding);
+                activeFindings.put(hash, newRecord);
+
+                logAudit("New finding identified: " + hash);
+                actionable.add(finding);
+
+                if (!passive && config.getBool("pv.create_audit_issues", true) && finding.evidence() != null) {
+                    try {
+                        createAuditIssue(finding);
+                    } catch (Exception e) {
+                        api.logging().logToError("Failed to create audit issue: " + e.getMessage());
+                    }
+                }
+                notifyListenersOfUpdate();
+            }
         }
+        return actionable;
+    }
+
+    public List<FindingRecord> getAllFindingRecords() {
+        return new ArrayList<>(activeFindings.values());
+    }
+
+    public List<FindingRecord> getPassiveFindings() {
+        List<FindingRecord> results = new ArrayList<>();
+        for (FindingRecord r : activeFindings.values()) {
+            if (!r.isSuppressed() && r.getFinding().evidence() == null) {
+                results.add(r);
+            }
+        }
+        return results;
     }
 
     public void clearPassiveFindings() {
-        synchronized(passiveFindingsLog) {
-            passiveFindingsLog.clear();
-        }
+        activeFindings.entrySet().removeIf(e -> e.getValue().getFinding().evidence() == null);
+        notifyListenersOfUpdate();
+        logAudit("User cleared passive findings.");
     }
 
-    public void showFindingsDialog(List<Finding> findings) {
+    public void showFindingsDialog(List<FindingRecord> records) {
         JDialog dialog = new JDialog();
         dialog.setTitle("ICARUS Scan Results");
         dialog.setModal(false);
-        dialog.setSize(900, 500);
+        dialog.setSize(1200, 800);
         dialog.setLocationRelativeTo(null);
 
-        String[] cols = {"Severity", "Module", "Type", "Path", "Description"};
-        Object[][] data = new Object[findings.size()][5];
-        for (int i = 0; i < findings.size(); i++) {
-            Finding f = findings.get(i);
-            data[i] = new Object[]{f.severity().name(), f.module(), f.type(), f.path(), f.description()};
+        String[] cols = {"Count", "Severity", "Module", "Type", "Path", "Description"};
+        Object[][] data = new Object[records.size()][6];
+        for (int i = 0; i < records.size(); i++) {
+            FindingRecord r = records.get(i);
+            Finding f = r.getFinding();
+            data[i] = new Object[]{r.getCount(), f.severity().name(), f.module(), f.type(), f.path(), f.description()};
         }
 
         JTable table = new JTable(data, cols) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
+        table.setAutoCreateRowSorter(true);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        dialog.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        JPanel topPanel = new JPanel(new BorderLayout());
+
+        // Add filtering
+        JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        filterPanel.add(new JLabel("Filter: "));
+        JTextField txtFilter = new JTextField(20);
+        filterPanel.add(txtFilter);
+        javax.swing.table.TableRowSorter<javax.swing.table.TableModel> sorter = new javax.swing.table.TableRowSorter<>(table.getModel());
+        table.setRowSorter(sorter);
+        txtFilter.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
+            private void applyFilter() {
+                String text = txtFilter.getText();
+                if (text.trim().length() == 0) sorter.setRowFilter(null);
+                else sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
+            }
+        });
+
+        topPanel.add(filterPanel, BorderLayout.NORTH);
+        topPanel.add(new JScrollPane(table), BorderLayout.CENTER);
+
+        // Editors for Request/Response
+        burp.api.montoya.ui.editor.HttpRequestEditor reqEditor = api.userInterface().createHttpRequestEditor(burp.api.montoya.ui.editor.EditorOptions.READ_ONLY);
+        burp.api.montoya.ui.editor.HttpResponseEditor resEditor = api.userInterface().createHttpResponseEditor(burp.api.montoya.ui.editor.EditorOptions.READ_ONLY);
+
+        JTabbedPane editorsTab = new JTabbedPane();
+        editorsTab.addTab("Request", reqEditor.uiComponent());
+        editorsTab.addTab("Response", resEditor.uiComponent());
+
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int viewRow = table.getSelectedRow();
+                if (viewRow >= 0) {
+                    int modelRow = table.convertRowIndexToModel(viewRow);
+                    Finding f = records.get(modelRow).getFinding();
+                    if (f.evidence() != null) {
+                        reqEditor.setRequest(f.evidence().request());
+                        if (f.evidence().response() != null) {
+                            resEditor.setResponse(f.evidence().response());
+                        } else {
+                            resEditor.setResponse(burp.api.montoya.http.message.responses.HttpResponse.httpResponse(""));
+                        }
+                    } else {
+                        reqEditor.setRequest(burp.api.montoya.http.message.requests.HttpRequest.httpRequest(""));
+                        resEditor.setResponse(burp.api.montoya.http.message.responses.HttpResponse.httpResponse(""));
+                    }
+                }
+            }
+        });
+
+        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, topPanel, editorsTab);
+        splitPane.setResizeWeight(0.5);
+        dialog.add(splitPane, BorderLayout.CENTER);
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         JButton btnRepeater = new JButton("Send to Repeater");
@@ -320,9 +416,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         btnRepeater.addActionListener(e -> {
             int row = table.getSelectedRow();
             if (row >= 0) {
-                Finding f = findings.get(row);
+                int modelRow = table.convertRowIndexToModel(row);
+                Finding f = records.get(modelRow).getFinding();
                 if (f.evidence() != null) {
-                    api.repeater().sendToRepeater(f.evidence().request(), buildTabName(f, row + 1));
+                    api.repeater().sendToRepeater(f.evidence().request(), buildTabName(f, modelRow + 1));
                     JOptionPane.showMessageDialog(dialog, "Sent to Repeater.");
                 } else {
                     JOptionPane.showMessageDialog(dialog, "No HTTP request evidence attached to this finding.");
@@ -333,7 +430,8 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         btnEvidence.addActionListener(e -> {
             int row = table.getSelectedRow();
             if (row >= 0) {
-                Finding f = findings.get(row);
+                int modelRow = table.convertRowIndexToModel(row);
+                Finding f = records.get(modelRow).getFinding();
                 if (f.evidence() != null) {
                     evidenceCapture.captureInteractive(f);
                 } else {
@@ -344,7 +442,11 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         btnReport.addActionListener(e -> {
             try {
-                reportGenerator.generate(findings, config, evidenceCapture);
+                List<Finding> reportFindings = new ArrayList<>();
+                for (FindingRecord r : records) {
+                    reportFindings.add(r.getFinding());
+                }
+                reportGenerator.generate(reportFindings, config, evidenceCapture);
                 JOptionPane.showMessageDialog(dialog, "HTML Report generated from saved evidence.");
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, "Report generation failed: " + ex.getMessage());
@@ -367,7 +469,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         String label = finding.shortLabel();
         String path = finding.path();
 
-        // Take last 2 path components
         if (path != null && path.startsWith("$.")) {
             String[] parts = path.substring(2).split("\\.");
             int start = Math.max(0, parts.length - 2);
@@ -416,18 +517,15 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         };
     }
 
-    private void notifyListeners(List<Finding> findings) {
+    private void notifyListenersOfUpdate() {
         SwingUtilities.invokeLater(() -> {
             for (var listener : listeners) {
-                listener.onScanComplete(findings);
+                listener.onScanComplete(new ArrayList<>(activeFindings.values()));
             }
         });
     }
 
-    /**
-     * Callback for the UI to receive scan results.
-     */
     public interface ScanListener {
-        void onScanComplete(List<Finding> findings);
+        void onScanComplete(List<FindingRecord> records);
     }
 }

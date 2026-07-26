@@ -45,6 +45,13 @@ public final class Finding {
     public Map<String, String> metadata() { return metadata; }
 
     /**
+     * Hash used for deduplication.
+     */
+    public String similarityHash() {
+        return module + "|" + type + "|" + path;
+    }
+
+    /**
      * Compact label for Repeater tab names and log lines.
      */
     public String shortLabel() {

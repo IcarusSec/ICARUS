@@ -26,14 +26,13 @@ public final class ReportGenerator {
         this.api = api;
     }
 
-    public void generate(List<Finding> findings, ModuleConfig config) throws IOException {
+    public void generate(List<Finding> findings, ModuleConfig config, EvidenceCapture capture) throws IOException {
         if (!config.getBool("evidence.html_report", true) || findings.isEmpty()) {
             return;
         }
 
-        // 1. Capture PNGs for all findings
-        var capture = new EvidenceCapture(api);
-        var captured = capture.captureAll(findings, config);
+        // Only generate report for findings that were actually captured by the user
+        var captured = capture.getCaptured();
 
         if (captured.isEmpty()) return;
 

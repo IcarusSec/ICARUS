@@ -38,9 +38,14 @@ public final class EvidenceCapture {
     private static final Color HIGHLIGHT_COLOR = new Color(255, 255, 0, 80); // Semi-transparent yellow
 
     private final MontoyaApi api;
+    private final List<CapturedEvidence> captured = new ArrayList<>();
 
     public EvidenceCapture(MontoyaApi api) {
         this.api = api;
+    }
+
+    public List<CapturedEvidence> getCaptured() {
+        return List.copyOf(captured);
     }
 
     public void captureInteractive(Finding finding) {
@@ -374,6 +379,7 @@ public final class EvidenceCapture {
                 if (fc.showSaveDialog(editor) == JFileChooser.APPROVE_OPTION) {
                     File f = fc.getSelectedFile();
                     ImageIO.write(out, "png", f);
+                    captured.add(new CapturedEvidence(finding, f.toPath(), out));
                     JOptionPane.showMessageDialog(editor, "Saved: " + f.getAbsolutePath());
                 }
                 editor.dispose();

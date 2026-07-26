@@ -49,6 +49,27 @@ public final class EvidenceCapture {
     // PHASE 1: TEXT CLEANUP
     // ===================================================================================
 
+    private JScrollPane createSmoothScrollPane(Component c) {
+        JScrollPane scroll = new JScrollPane(c);
+        scroll.setBorder(BorderFactory.createLineBorder(new Color(60, 60, 60), 1));
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        return scroll;
+    }
+
+    private JButton createModernButton(String text, Color bg) {
+        JButton btn = new JButton(text);
+        btn.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        btn.setBackground(bg);
+        btn.setForeground(Color.WHITE);
+        btn.setFocusPainted(false);
+        btn.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(bg.darker(), 1),
+            new EmptyBorder(8, 16, 8, 16)
+        ));
+        btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
     private void showPhase1(Finding finding) {
         JDialog editor = new JDialog();
         editor.setTitle("ICARUS Evidence Editor - Phase 1: Text Cleanup");
@@ -60,13 +81,23 @@ public final class EvidenceCapture {
         // Top Metadata Bar
         JPanel pnlTop = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
         pnlTop.setBorder(new EmptyBorder(10, 10, 10, 10));
-        
+        pnlTop.setBackground(HEADER_BG);
+
+        JLabel lblTitle = new JLabel("Evidence Title:");
+        lblTitle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        lblTitle.setForeground(Color.WHITE);
         JTextField txtName = new JTextField(finding.type(), 20);
+        txtName.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
+        JLabel lblDesc = new JLabel("Description:");
+        lblDesc.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        lblDesc.setForeground(Color.WHITE);
         JTextField txtDesc = new JTextField(finding.description() != null ? finding.description() : "", 40);
-        
-        pnlTop.add(new JLabel("Evidence Title:"));
+        txtDesc.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
+        pnlTop.add(lblTitle);
         pnlTop.add(txtName);
-        pnlTop.add(new JLabel("Description:"));
+        pnlTop.add(lblDesc);
         pnlTop.add(txtDesc);
 
         // Text Areas
@@ -90,15 +121,23 @@ public final class EvidenceCapture {
         attachSmartContextMenu(reqArea);
         attachSmartContextMenu(resArea);
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(reqArea), new JScrollPane(resArea));
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        split.setLeftComponent(createSmoothScrollPane(reqArea));
+        split.setRightComponent(createSmoothScrollPane(resArea));
         split.setResizeWeight(0.5);
+        split.setDividerSize(4);
+        split.setBorder(null);
 
         // Bottom Bar
-        JPanel pnlBottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton btnCleanNoise = new JButton("Clean Standard Noise");
+        JPanel pnlBottom = new JPanel(new FlowLayout(FlowLayout.RIGHT, 15, 10));
+        pnlBottom.setBorder(new EmptyBorder(5, 10, 10, 10));
+
+        JButton btnCleanNoise = createModernButton("Clean Standard Noise", new Color(70, 70, 70));
         JCheckBox chk1080 = new JCheckBox("Force 1920x1080", true);
-        JButton btnProceed = new JButton("Proceed to Annotation ➔");
-        btnProceed.setFont(btnProceed.getFont().deriveFont(Font.BOLD));
+        chk1080.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
+        JButton btnProceed = createModernButton("Proceed to Annotation ➔", ACCENT_COLOR);
+        btnProceed.setForeground(Color.WHITE);
 
         btnCleanNoise.addActionListener(e -> {
             reqArea.setText(cleanNoise(reqArea.getText()));
@@ -129,6 +168,31 @@ public final class EvidenceCapture {
         ta.setBackground(BG_COLOR);
         ta.setForeground(TEXT_COLOR);
         ta.setCaretColor(Color.WHITE);
+        ta.setMargin(new Insets(10, 15, 10, 15));
+        ta.setTabSize(4);
+
+        javax.swing.undo.UndoManager undoManager = new javax.swing.undo.UndoManager();
+        ta.getDocument().addUndoableEditListener(e -> undoManager.addEdit(e.getEdit()));
+
+        InputMap im = ta.getInputMap(JComponent.WHEN_FOCUSED);
+        ActionMap am = ta.getActionMap();
+
+        int ctrl = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl), "Undo");
+        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, ctrl), "Redo");
+        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl | InputEvent.SHIFT_DOWN_MASK), "Redo");
+
+        am.put("Undo", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                if (undoManager.canUndo()) undoManager.undo();
+            }
+        });
+        am.put("Redo", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                if (undoManager.canRedo()) undoManager.redo();
+            }
+        });
+
         return ta;
     }
 
@@ -364,19 +428,18 @@ public final class EvidenceCapture {
         bar.setBorder(new EmptyBorder(8, 8, 8, 8));
         root.add(bar, BorderLayout.EAST);
 
-        JButton colourBtn = new JButton("Colour"); colourBtn.setOpaque(true);
-        colourBtn.setBackground(curCol[0]);
+        JButton colourBtn = createModernButton("Colour", curCol[0]);
         JToggleButton boxBtn = new JToggleButton("Box", true);
         JToggleButton arrowBtn = new JToggleButton("Arrow");
         JToggleButton hiBtn = new JToggleButton("Highlight");
         JToggleButton redactBtn = new JToggleButton("Redact");
-        JButton undoBtn = new JButton("Undo");
-        JButton saveBtn = new JButton("Save Evidence");
+        JButton undoBtn = createModernButton("Undo", new Color(70, 70, 70));
+        JButton saveBtn = createModernButton("Save Evidence", ACCENT_COLOR);
 
         ButtonGroup grp = new ButtonGroup();
         grp.add(boxBtn); grp.add(arrowBtn); grp.add(hiBtn); grp.add(redactBtn);
 
-        Arrays.asList(colourBtn, boxBtn, arrowBtn, hiBtn, redactBtn, undoBtn, saveBtn)
+        Arrays.asList(boxBtn, arrowBtn, hiBtn, redactBtn)
                 .forEach(b -> b.setFont(b.getFont().deriveFont(Font.BOLD, 14f)));
 
         ActionListener modeSel = a -> {

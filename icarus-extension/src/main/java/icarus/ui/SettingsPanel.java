@@ -10,9 +10,6 @@ import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Settings UI. Maps directly to ModuleConfig.
- */
 public class SettingsPanel {
 
     private final MontoyaApi api;
@@ -20,6 +17,7 @@ public class SettingsPanel {
     private final JPanel mainPanel;
 
     private final List<Runnable> saveHooks = new ArrayList<>();
+    private final List<JComponent> expandableLists = new ArrayList<>();
 
     public SettingsPanel(MontoyaApi api, ModuleConfig config) {
         this.api = api;
@@ -38,6 +36,23 @@ public class SettingsPanel {
     }
 
     private void buildUI() {
+        JPanel pnlTop = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JCheckBox chkExpand = new JCheckBox("Expand Lists");
+        chkExpand.addActionListener(e -> {
+            boolean visible = chkExpand.isSelected();
+            for (JComponent c : expandableLists) {
+                c.setVisible(visible);
+            }
+            mainPanel.revalidate();
+            mainPanel.repaint();
+        });
+        pnlTop.add(chkExpand);
+        
+        JButton btnSave = new JButton("Save Settings");
+        btnSave.addActionListener(e -> saveAll());
+        pnlTop.add(btnSave);
+        mainPanel.add(pnlTop);
+
         // Global Toggles
         JPanel pnlGlobal = createSection("Enabled Modules");
         addCheckbox(pnlGlobal, "pv.enabled", "ParamValidator (JSON Mutation Fuzzer)");
@@ -48,23 +63,29 @@ public class SettingsPanel {
         addCheckbox(pnlGlobal, "export.enabled", "Postman Export");
         mainPanel.add(pnlGlobal);
 
-        // Evidence
-        JPanel pnlEvidence = createSection("Evidence & Reporting");
-        addCheckbox(pnlEvidence, "evidence.enabled", "Enable Report Generation");
-        addCheckbox(pnlEvidence, "evidence.auto_capture", "Auto-capture screenshots of requests/responses");
-        addCheckbox(pnlEvidence, "evidence.html_report", "Generate HTML Report");
-        addField(pnlEvidence, "evidence.output_dir", "Output Directory:");
-        mainPanel.add(pnlEvidence);
+        // WAF & Safe Lists
+        JPanel pnlWaf = createSection("WAF Evasion & Safe Lists");
+        addCheckbox(pnlWaf, "waf.detect_akamai", "Detect Akamai and prompt for Safe Mode");
+        addTextArea(pnlWaf, "waf.safelist_payloads", "Safe List Payloads (one per line):", true);
+        mainPanel.add(pnlWaf);
 
         // ParamValidator
         JPanel pnlPv = createSection("ParamValidator");
-        addCheckbox(pnlPv, "pv.structural", "Structural mutations (null, empty, remove)");
-        addCheckbox(pnlPv, "pv.type_confusion", "Type confusion (string/number/boolean swaps)");
-        addCheckbox(pnlPv, "pv.boundary", "Boundary (overflow, negative, long string)");
-        addCheckbox(pnlPv, "pv.injection", "Injection (SQLi, XSS, Path Traversal)");
-        addCheckbox(pnlPv, "pv.require_baseline", "Require successful baseline (HTTP 2xx)");
+        addCheckbox(pnlPv, "pv.structural", "Structural mutations");
+        addCheckbox(pnlPv, "pv.type_confusion", "Type confusion");
+        addCheckbox(pnlPv, "pv.boundary", "Boundary mutations");
+        addCheckbox(pnlPv, "pv.injection", "Injection mutations");
+        addCheckbox(pnlPv, "pv.behavioral_analysis", "Behavioral Analysis (Detect anomalies via diffing)");
         addField(pnlPv, "pv.max_mutations", "Max mutations per request:");
         addField(pnlPv, "pv.max_repeater", "Max Repeater tabs:");
+        
+        // Expandable payload lists
+        addTextArea(pnlPv, "pv.payload_sqli", "SQLi Payloads:", true);
+        addTextArea(pnlPv, "pv.payload_xss", "XSS Payloads:", true);
+        addTextArea(pnlPv, "pv.payload_path_traversal", "Path Traversal Payloads:", true);
+        addTextArea(pnlPv, "pv.payload_nosqli", "NoSQLi Payloads:", true);
+        addTextArea(pnlPv, "pv.payload_format_string", "Format String Payloads:", true);
+        
         mainPanel.add(pnlPv);
 
         // HTTP Verb
@@ -78,52 +99,69 @@ public class SettingsPanel {
         addCheckbox(pnlHv, "hv.enable_state_changing", "Enable state-changing methods (POST/PUT/DELETE/PATCH)");
         addField(pnlHv, "hv.body_strategy", "Body Strategy (AUTO/KEEP/REMOVE):");
         mainPanel.add(pnlHv);
-
-        // Save Button
-        JPanel pnlSave = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton btnSave = new JButton("Save Settings");
-        btnSave.addActionListener(e -> saveAll());
-        pnlSave.add(btnSave);
-        mainPanel.add(pnlSave);
+        
+        // Initially hide expandable lists
+        for (JComponent c : expandableLists) {
+            c.setVisible(false);
+        }
     }
 
     private JPanel createSection(String title) {
-        JPanel panel = new JPanel(new GridLayout(0, 1, 5, 5));
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(BorderFactory.createTitledBorder(
                 BorderFactory.createEtchedBorder(), title, TitledBorder.LEFT, TitledBorder.TOP));
         panel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        // Wrapper to stop it stretching vertically in BoxLayout
+        
         JPanel wrapper = new JPanel(new BorderLayout());
         wrapper.add(panel, BorderLayout.NORTH);
         wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
-        wrapper.setMaximumSize(new Dimension(800, 300));
-        return panel; // return the inner panel so we can add to grid
+        wrapper.setMaximumSize(new Dimension(800, 1000));
+        return panel;
     }
 
     private void addCheckbox(JPanel parent, String key, String label) {
         JCheckBox cb = new JCheckBox(label, config.getBool(key, true));
+        cb.setAlignmentX(Component.LEFT_ALIGNMENT);
         parent.add(cb);
         saveHooks.add(() -> config.set(key, cb.isSelected()));
     }
 
     private void addField(JPanel parent, String key, String label) {
         JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
         p.add(new JLabel(label));
         JTextField tf = new JTextField(config.getString(key, ""), 20);
         p.add(tf);
         parent.add(p);
         saveHooks.add(() -> config.set(key, tf.getText()));
     }
+    
+    private void addTextArea(JPanel parent, String key, String label, boolean expandable) {
+        JPanel p = new JPanel(new BorderLayout(5, 5));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        p.add(new JLabel(label), BorderLayout.NORTH);
+        
+        JTextArea ta = new JTextArea(config.getString(key, ""), 5, 40);
+        JScrollPane scroll = new JScrollPane(ta);
+        p.add(scroll, BorderLayout.CENTER);
+        
+        parent.add(p);
+        saveHooks.add(() -> config.set(key, ta.getText()));
+        
+        if (expandable) {
+            expandableLists.add(p);
+        }
+    }
 
     private void saveAll() {
         for (Runnable hook : saveHooks) {
             hook.run();
         }
-
-        // Persist
         StringBuilder sb = new StringBuilder();
         for (var entry : config.snapshot().entrySet()) {
-            sb.append(entry.getKey()).append("=").append(entry.getValue()).append("\n");
+            sb.append(entry.getKey()).append("=").append(entry.getValue().replace("\n", "\\n")).append("\n");
         }
         api.persistence().extensionData().setString("config", sb.toString());
         api.logging().logToOutput("Settings saved.");

@@ -115,6 +115,9 @@ public final class EvidenceCapture {
                     .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
 
+        reqText = wrapEvidenceText(reqText, 120);
+        resText = wrapEvidenceText(resText, 120);
+
         JTextArea reqArea = createStyledTextArea(reqText);
         JTextArea resArea = createStyledTextArea(resText);
 
@@ -250,6 +253,24 @@ public final class EvidenceCapture {
             }
             if (!isNoise) {
                 sb.append(line).append("\n");
+            }
+        }
+        return sb.toString();
+    }
+
+    private String wrapEvidenceText(String text, int maxLineLength) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : text.split("\n")) {
+            if (line.length() <= maxLineLength) {
+                sb.append(line).append("\n");
+                continue;
+            }
+
+            int start = 0;
+            while (start < line.length()) {
+                int end = Math.min(start + maxLineLength, line.length());
+                sb.append(line, start, end).append("\n");
+                start = end;
             }
         }
         return sb.toString();

@@ -24,8 +24,9 @@
 
 ## What is ICARUS?
 
-**ICARUS** is a collection of custom actions for Burp Suite, designed to automate and streamline specific API security testing tasks directly from the Burp Repeater.
+**ICARUS** is a collection of security testing tools for Burp Suite, designed to automate and streamline specific API security testing tasks directly from the Burp Repeater. It includes custom Bambda scripts (Custom Actions) and a full-fledged Burp Extension.
 
+### Bambda Scripts (Custom Actions)
 These scripts leverage the **Custom Actions** feature in Burp Suite, allowing analysts to execute automated checks and mutations on selected requests without the need for complex, heavy extensions.
 
 ```bash
@@ -34,11 +35,25 @@ These scripts leverage the **Custom Actions** feature in Burp Suite, allowing an
 
 Instead of managing bulky extension code, you only need these focused, self-contained Java snippets to run advanced checks directly on your target endpoints. They are significantly faster to set up and usable in existing testing workflows with little to no friction.
 
-## Included Custom Actions
+### Icarus Extension
+A fully integrated Burp Suite extension providing a unified interface, automated scanning, and advanced evidence capture for the same security testing methodologies.
 
-### JSON Input Validation (`ParamValidator`)
+## Included Tools
 
-Located in the `ParamValidator` directory, this action focuses on testing JSON request parameter validation.
+### Icarus Extension (`icarus-extension`)
+
+The official ICARUS Burp Suite extension brings the power of the standalone Bambda scripts into a unified, integrated experience.
+
+**Key Features:**
+- **Unified Interface:** Centralized control panel for all ICARUS modules.
+- **Smart Evidence Capture:** Advanced 2-phase workflow (Smart Text Cleanup & Visual Annotation) for generating clean, actionable reports.
+- **Automated Scanning:** Run comprehensive checks with a single click.
+
+[View Icarus Extension README →](icarus-extension/README.md)
+
+### JSON Input Validation (`bambda-scripts/ParamValidator`)
+
+Located in the `bambda-scripts/ParamValidator` directory, this action focuses on testing JSON request parameter validation.
 
 Instead of targeting specific vulnerabilities, it answers a simpler question: **Did the API accept input that should have been rejected?**
 
@@ -51,11 +66,11 @@ If a payload intentionally crafted to violate the expected contract is accepted 
 - **Injection payload tests** (SQLi, XSS, NoSQL, Path Traversal, etc.).
 - **Fully self-contained JSON parser** with recursive traversal.
 
-[View ParamValidator README →](ParamValidator/README.md)
+[View ParamValidator README →](bambda-scripts/ParamValidator/README.md)
 
-### HTTP Verb Tester (`HTTPVerbFuzz`)
+### HTTP Verb Tester (`bambda-scripts/HTTPVerbFuzz`)
 
-Located in the `HTTPVerbFuzz` directory, this action performs basic HTTP verb validation for API security testing.
+Located in the `bambda-scripts/HTTPVerbFuzz` directory, this action performs basic HTTP verb validation for API security testing.
 
 It takes the current request and generates variations using alternate HTTP methods (such as `GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to identify if alternative methods are accepted by the server.
 
@@ -66,11 +81,11 @@ It takes the current request and generates variations using alternate HTTP metho
 - **TRACE reflection detection**.
 - **Detailed configuration options** available directly within the `httpverbfuzz.java` script.
 
-[View HTTPVerbFuzz README →](HTTPVerbFuzz/README.md)
+[View HTTPVerbFuzz README →](bambda-scripts/HTTPVerbFuzz/README.md)
 
-### JWT / Bearer Token Checker (`JWTChecker`)
+### JWT / Bearer Token Checker (`bambda-scripts/JWTChecker`)
 
-Located in the `JWTChecker` directory, this action is a comprehensive script for detecting and testing JSON Web Tokens (JWTs) and Bearer tokens for common security vulnerabilities directly from the Burp Repeater.
+Located in the `bambda-scripts/JWTChecker` directory, this action is a comprehensive script for detecting and testing JSON Web Tokens (JWTs) and Bearer tokens for common security vulnerabilities directly from the Burp Repeater.
 
 It automatically identifies JWTs using regex in `Authorization` headers and `Cookie` headers, and automatically tests them for various tampering and misconfiguration flaws.
 
@@ -81,11 +96,11 @@ It automatically identifies JWTs using regex in `Authorization` headers and `Coo
 - **Signature Removal**: Tests for improper signature validation by removing the signature.
 - **Time-based Attacks**: Detects missing `exp`/`iat` claims and injects excessive expiration times.
 
-[View JWTChecker README →](JWTChecker/README.md)
+[View JWTChecker README →](bambda-scripts/JWTChecker/README.md)
 
-### Export to Postman (`ExportToPostman`)
+### Export to Postman (`bambda-scripts/ExportToPostman`)
 
-Located in the `ExportToPostman` directory, this action exports the current request in the Repeater to a Postman Collection JSON format.
+Located in the `bambda-scripts/ExportToPostman` directory, this action exports the current request in the Repeater to a Postman Collection JSON format.
 
 Sometimes you want to quickly port your crafted request from Burp Repeater directly into Postman for team sharing, API documentation, or testing workflows. This Custom Action creates a complete, valid Postman Collection JSON for the active request directly in the Custom Actions log.
 
@@ -95,9 +110,16 @@ Sometimes you want to quickly port your crafted request from Burp Repeater direc
 - **Header Preservation:** Preserves all HTTP headers accurately.
 - **Body Preservation:** Preserves raw body payload securely with proper JSON escaping.
 
-[View ExportToPostman README →](ExportToPostman/README.md)
+[View ExportToPostman README →](bambda-scripts/ExportToPostman/README.md)
 
 ## Usage
+
+### Extension Usage
+1. Build the extension or download the latest JAR from releases.
+2. In Burp Suite, go to **Extensions** -> **Add**.
+3. Select the `icarus-extension.jar` file.
+
+### Bambda Script Usage
 
 To use these custom actions in Burp Suite:
 

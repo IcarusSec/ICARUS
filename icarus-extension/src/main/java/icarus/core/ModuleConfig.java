@@ -78,4 +78,44 @@ public final class ModuleConfig {
     public Map<String, String> snapshot() {
         return Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
+
+    // ── Persistence (round-trips through a single string, e.g. Burp's extensionData) ──
+
+    /** Serializes all entries as "key=value\n" pairs, escaping embedded backslashes/newlines in values. */
+    public String serialize() {
+        StringBuilder sb = new StringBuilder();
+        for (var entry : values.entrySet()) {
+            sb.append(entry.getKey()).append('=').append(escape(entry.getValue())).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** Loads entries from a string produced by {@link #serialize()}, unescaping values back to their original form. */
+    public void loadSerialized(String serialized) {
+        if (serialized == null) return;
+        for (String line : serialized.split("\n")) {
+            int eq = line.indexOf('=');
+            if (eq > 0) {
+                values.put(line.substring(0, eq), unescape(line.substring(eq + 1)));
+            }
+        }
+    }
+
+    private static String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\n", "\\n");
+    }
+
+    private static String unescape(String value) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\' && i + 1 < value.length()) {
+                char next = value.charAt(++i);
+                sb.append(next == 'n' ? '\n' : next);
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
 }

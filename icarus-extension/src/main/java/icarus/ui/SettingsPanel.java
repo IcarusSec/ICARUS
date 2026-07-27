@@ -232,11 +232,7 @@ public class SettingsPanel {
         for (Runnable hook : saveHooks) {
             hook.run();
         }
-        StringBuilder sb = new StringBuilder();
-        for (var entry : config.snapshot().entrySet()) {
-            sb.append(entry.getKey()).append("=").append(entry.getValue().replace("\n", "\\n")).append("\n");
-        }
-        api.persistence().extensionData().setString("config", sb.toString());
+        api.persistence().extensionData().setString("config", config.serialize());
         api.logging().logToOutput("Settings saved.");
     }
 }

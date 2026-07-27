@@ -7,7 +7,11 @@ import icarus.core.FindingRecord;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
 
+import burp.api.montoya.ui.editor.HttpRequestEditor;
+import burp.api.montoya.ui.editor.HttpResponseEditor;
+
 import javax.swing.*;
+import javax.swing.event.ListSelectionEvent;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -95,6 +99,50 @@ public class IcarusTab {
         table.setAutoCreateRowSorter(true);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
+        JScrollPane tableScroll = new JScrollPane(table);
+        tableScroll.setBorder(BorderFactory.createEmptyBorder());
+        themeHelper.applyTheme(tableScroll);
+
+        // Editors
+        HttpRequestEditor reqEditor = api.userInterface().createHttpRequestEditor();
+        HttpResponseEditor resEditor = api.userInterface().createHttpResponseEditor();
+
+        JSplitPane reqResSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        reqResSplit.setLeftComponent(reqEditor.uiComponent());
+        reqResSplit.setRightComponent(resEditor.uiComponent());
+        reqResSplit.setResizeWeight(0.5);
+        reqResSplit.setBorder(null);
+
+        // Update editors when selection changes
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int viewRow = table.getSelectedRow();
+                if (viewRow >= 0) {
+                    int modelRow = table.convertRowIndexToModel(viewRow);
+                    String hash = (String) tableModel.getValueAt(modelRow, 0);
+                    Finding finding = orchestrator.getFindingByHash(hash);
+                    if (finding != null && finding.evidence() != null) {
+                        reqEditor.setRequest(finding.evidence().request());
+                        if (finding.evidence().response() != null) {
+                            resEditor.setResponse(finding.evidence().response());
+                        } else {
+                            resEditor.setResponse(null);
+                        }
+                    } else {
+                        reqEditor.setRequest(null);
+                        resEditor.setResponse(null);
+                    }
+                }
+            }
+        });
+
+        JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+        verticalSplit.setTopComponent(tableScroll);
+        verticalSplit.setBottomComponent(reqResSplit);
+        verticalSplit.setResizeWeight(0.4);
+        verticalSplit.setBorder(null);
+        resultsPanel.add(verticalSplit, BorderLayout.CENTER);
+
         // Context menu for results table
         JPopupMenu popup = new JPopupMenu();
         themeHelper.applyTheme(popup);
@@ -124,6 +172,19 @@ public class IcarusTab {
         table.addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) { showPopup(e); }
             public void mouseReleased(MouseEvent e) { showPopup(e); }
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2) {
+                    int viewRow = table.getSelectedRow();
+                    if (viewRow >= 0) {
+                        int modelRow = table.convertRowIndexToModel(viewRow);
+                        String hash = (String) tableModel.getValueAt(modelRow, 0);
+                        Finding finding = orchestrator.getFindingByHash(hash);
+                        if (finding != null) {
+                            orchestrator.showEvidenceInteractive(finding);
+                        }
+                    }
+                }
+            }
             private void showPopup(MouseEvent e) {
                 if (e.isPopupTrigger()) {
                     int r = table.rowAtPoint(e.getPoint());
@@ -137,22 +198,22 @@ public class IcarusTab {
             }
         });
 
-        JScrollPane tableScroll = new JScrollPane(table);
-        tableScroll.setBorder(BorderFactory.createEmptyBorder());
-        themeHelper.applyTheme(tableScroll);
-        resultsPanel.add(tableScroll, BorderLayout.CENTER);
-
         JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         themeHelper.applyTheme(bottomBar);
 
-        JButton btnPassiveLogs = new JButton("View Security Header Logs");
+        JButton btnPassiveLogs = new JButton("View Current Log");
         themeHelper.styleButton(btnPassiveLogs);
         btnPassiveLogs.addActionListener(e -> {
-            var passive = orchestrator.getPassiveFindings();
-            if (passive.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel, "No security header logs recorded yet.");
+            int viewRow = table.getSelectedRow();
+            if (viewRow >= 0) {
+                int modelRow = table.convertRowIndexToModel(viewRow);
+                String hash = (String) tableModel.getValueAt(modelRow, 0);
+                Finding finding = orchestrator.getFindingByHash(hash);
+                if (finding != null) {
+                    orchestrator.showEvidenceInteractive(finding);
+                }
             } else {
-                orchestrator.showFindingsDialog(passive);
+                JOptionPane.showMessageDialog(mainPanel, "Please select a finding first.");
             }
         });
 

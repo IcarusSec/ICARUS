@@ -1,0 +1,40 @@
+# IntelliJ / IDEA
+.idea/
+*.iml
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Gradle
+.gradle/
+build/
+build_manual/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Dependencies (Raw JARs)
+libs/
+
+# Temp
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# Anthropic Claude
+.claude/

@@ -20,6 +20,7 @@ public class IcarusTab {
     private final ModuleConfig config;
     private final List<IcarusModule> modules;
     private final Orchestrator orchestrator;
+    private final ThemeHelper themeHelper;
 
     private final JPanel mainPanel;
     private final DefaultTableModel tableModel;
@@ -31,8 +32,11 @@ public class IcarusTab {
         this.config = config;
         this.modules = modules;
         this.orchestrator = orchestrator;
+        this.themeHelper = new ThemeHelper(api.userInterface());
 
         this.mainPanel = new JPanel(new BorderLayout());
+        themeHelper.applyTheme(this.mainPanel);
+
         this.tableModel = new DefaultTableModel(new String[]{"Hash", "Count", "Severity", "Module", "Type", "Path", "Description"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
@@ -73,22 +77,30 @@ public class IcarusTab {
 
     private void buildUI() {
         JTabbedPane tabs = new JTabbedPane();
+        themeHelper.applyTheme(tabs);
 
         // ── Settings Tab ──
-        tabs.addTab("Settings", new SettingsPanel(api, config).getComponent());
+        tabs.addTab("Settings", new SettingsPanel(api, config, themeHelper).getComponent());
 
         // ── Results Tab ──
         JPanel resultsPanel = new JPanel(new BorderLayout());
+        themeHelper.applyTheme(resultsPanel);
+
         JTable table = new JTable(tableModel);
+        themeHelper.styleTable(table);
+
         // Hide the Hash column
         table.removeColumn(table.getColumnModel().getColumn(0));
-        
+
         table.setAutoCreateRowSorter(true);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
         // Context menu for results table
         JPopupMenu popup = new JPopupMenu();
+        themeHelper.applyTheme(popup);
+
         JMenuItem suppressItem = new JMenuItem("Suppress Finding");
+        themeHelper.applyTheme(suppressItem);
         suppressItem.addActionListener(e -> {
             int viewRow = table.getSelectedRow();
             if (viewRow >= 0) {
@@ -100,10 +112,11 @@ public class IcarusTab {
                 }
             }
         });
-        
+
         JMenuItem clearItem = new JMenuItem("Clear display (doesn't suppress)");
+        themeHelper.applyTheme(clearItem);
         clearItem.addActionListener(e -> tableModel.setRowCount(0));
-        
+
         popup.add(suppressItem);
         popup.addSeparator();
         popup.add(clearItem);
@@ -124,11 +137,16 @@ public class IcarusTab {
             }
         });
 
-        resultsPanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        JScrollPane tableScroll = new JScrollPane(table);
+        tableScroll.setBorder(BorderFactory.createEmptyBorder());
+        themeHelper.applyTheme(tableScroll);
+        resultsPanel.add(tableScroll, BorderLayout.CENTER);
 
         JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        themeHelper.applyTheme(bottomBar);
 
         JButton btnPassiveLogs = new JButton("View Security Header Logs");
+        themeHelper.styleButton(btnPassiveLogs);
         btnPassiveLogs.addActionListener(e -> {
             var passive = orchestrator.getPassiveFindings();
             if (passive.isEmpty()) {
@@ -139,6 +157,7 @@ public class IcarusTab {
         });
 
         JButton btnClearBtn = new JButton("Clear Results");
+        themeHelper.styleButton(btnClearBtn);
         btnClearBtn.addActionListener(e -> {
             tableModel.setRowCount(0);
             orchestrator.clearPassiveFindings();
@@ -152,9 +171,18 @@ public class IcarusTab {
 
         // ── Audit Log Tab ──
         JPanel auditPanel = new JPanel(new BorderLayout());
+        themeHelper.applyTheme(auditPanel);
+
         JList<String> auditList = new JList<>(auditModel);
         auditList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        auditPanel.add(new JScrollPane(auditList), BorderLayout.CENTER);
+        auditList.setBackground(themeHelper.getBackgroundColor());
+        auditList.setForeground(themeHelper.getForegroundColor());
+
+        JScrollPane auditScroll = new JScrollPane(auditList);
+        auditScroll.setBorder(BorderFactory.createEmptyBorder());
+        themeHelper.applyTheme(auditScroll);
+
+        auditPanel.add(auditScroll, BorderLayout.CENTER);
         tabs.addTab("Audit Log", auditPanel);
 
         mainPanel.add(tabs, BorderLayout.CENTER);

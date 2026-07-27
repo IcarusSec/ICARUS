@@ -47,9 +47,14 @@ public final class ReportGenerator {
         Files.createDirectories(reportDir);
 
         for (var c : captured) {
-            Path dest = reportDir.resolve(c.imagePath().getFileName());
-            if (!c.imagePath().toAbsolutePath().equals(dest)) {
-                Files.copy(c.imagePath(), dest, StandardCopyOption.REPLACE_EXISTING);
+            Path src = c.imagePath().toAbsolutePath().normalize();
+            Path dest = reportDir.resolve(c.imagePath().getFileName()).normalize();
+            if (!src.equals(dest)) {
+                try {
+                    Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    api.logging().logToError("Failed to copy evidence image " + src.getFileName() + " into report directory: " + e);
+                }
             }
         }
 

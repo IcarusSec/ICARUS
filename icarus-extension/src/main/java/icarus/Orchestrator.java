@@ -280,6 +280,16 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 return;
             }
 
+            java.io.File selectedFile = fc.getSelectedFile();
+            if (selectedFile.exists()) {
+                int overwrite = JOptionPane.showConfirmDialog(dialog,
+                        selectedFile.getName() + " already exists. Overwrite?",
+                        "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                if (overwrite != JOptionPane.YES_OPTION) {
+                    return;
+                }
+            }
+
             try {
                 List<Finding> reportFindings = new ArrayList<>();
                 for (FindingRecord r : records) {

@@ -166,8 +166,15 @@ public final class EvidenceCapture {
         chk1080.addItemListener(e -> {
             if (e.getStateChange() == ItemEvent.DESELECTED) {
                 int narrowWidth = maxCharsForColumnWidth(1200);
+                // setText() resets the caret to 0, which would jump the view to the top of
+                // a long payload — restore the caret's prior offset (clamped to the new,
+                // slightly longer re-wrapped length) so the user doesn't lose their place.
+                int reqCaret = reqArea.getCaretPosition();
+                int resCaret = resArea.getCaretPosition();
                 reqArea.setText(wrapEvidenceText(reqArea.getText(), narrowWidth));
                 resArea.setText(wrapEvidenceText(resArea.getText(), narrowWidth));
+                reqArea.setCaretPosition(Math.min(reqCaret, reqArea.getDocument().getLength()));
+                resArea.setCaretPosition(Math.min(resCaret, resArea.getDocument().getLength()));
             }
         });
 

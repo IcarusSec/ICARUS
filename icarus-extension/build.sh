@@ -32,8 +32,8 @@ javac -d build_manual/classes \
 # 5. Package into JAR
 echo "[*] Packaging JAR..."
 cd build_manual/classes
-jar cf ../libs/icarus-1.1.0.jar .
+jar cf ../libs/icarus-1.1.1.jar .
 cd ../..
 
 echo "[+] Build complete!"
-echo "[+] Output: $PWD/build_manual/libs/icarus-1.1.0.jar"
+echo "[+] Output: $PWD/build_manual/libs/icarus-1.1.1.jar"

@@ -81,28 +81,41 @@ public final class ModuleConfig {
 
     // ── Persistence (round-trips through a single string, e.g. Burp's extensionData) ──
 
-    /** Serializes all entries as "key=value\n" pairs, escaping embedded backslashes/newlines in values. */
+    /** Serializes all entries as "key=value\n" pairs, escaping embedded backslashes/newlines/equals-signs in both. */
     public String serialize() {
         StringBuilder sb = new StringBuilder();
         for (var entry : values.entrySet()) {
-            sb.append(entry.getKey()).append('=').append(escape(entry.getValue())).append('\n');
+            sb.append(escape(entry.getKey())).append('=').append(escape(entry.getValue())).append('\n');
         }
         return sb.toString();
     }
 
-    /** Loads entries from a string produced by {@link #serialize()}, unescaping values back to their original form. */
+    /** Loads entries from a string produced by {@link #serialize()}, unescaping keys/values back to their original form. */
     public void loadSerialized(String serialized) {
         if (serialized == null) return;
         for (String line : serialized.split("\n")) {
-            int eq = line.indexOf('=');
-            if (eq > 0) {
-                values.put(line.substring(0, eq), unescape(line.substring(eq + 1)));
+            int eq = indexOfUnescapedEquals(line);
+            if (eq >= 0) {
+                values.put(unescape(line.substring(0, eq)), unescape(line.substring(eq + 1)));
             }
         }
     }
 
+    /** Finds the first '=' not preceded by an escaping backslash, so escaped "\=" inside a key is not mistaken for the separator. */
+    private static int indexOfUnescapedEquals(String line) {
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            if (c == '\\') {
+                i++; // skip the escaped character, whatever it is
+            } else if (c == '=') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     private static String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\n", "\\n");
+        return value.replace("\\", "\\\\").replace("\n", "\\n").replace("=", "\\=");
     }
 
     private static String unescape(String value) {

@@ -134,7 +134,7 @@ public final class ParamValidatorModule implements IcarusModule {
                 HttpRequestResponse result = api.http().sendRequest(mutatedRequests.get(i));
                 responses.add(result);
             } catch (Exception e) {
-                api.logging().logToError("Param Validator: mutation request failed: " + e.getMessage());
+                api.logging().logToError("Param Validator: mutation request failed: " + e);
                 responses.add(null);
             }
             requestTimes[i] = System.currentTimeMillis() - startTime;
@@ -155,7 +155,7 @@ public final class ParamValidatorModule implements IcarusModule {
                 HttpRequestResponse bl = api.http().sendRequest(request);
                 if (bl != null && bl.response() != null) baselineBodyLower = bl.response().bodyToString().toLowerCase();
             } catch (Exception e) {
-                api.logging().logToError("Param Validator: baseline request failed: " + e.getMessage());
+                api.logging().logToError("Param Validator: baseline request failed: " + e);
             }
             baselineTime = System.currentTimeMillis() - st;
         }

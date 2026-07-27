@@ -64,7 +64,7 @@ public class HttpVerbModule implements IcarusModule {
                     results.add(analyzeResult(method, result, config));
                 }
             } catch (Exception e) {
-                api.logging().logToError("HTTP Verb Tester: request failed for " + method + ": " + e.getMessage());
+                api.logging().logToError("HTTP Verb Tester: request failed for " + method + ": " + e);
             }
 
             if (delayMs > 0 && i < methodsToTest.size() - 1) {

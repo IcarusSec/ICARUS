@@ -281,6 +281,11 @@ public final class EvidenceCapture {
         return text + dot;
     }
 
+    /**
+     * Wraps text to maxLineLength, breaking on the last whitespace before the limit when
+     * one exists (so prose doesn't split mid-word) and falling back to a hard character
+     * break when a single token (URL, base64 blob, etc.) has no whitespace to break on.
+     */
     private String wrapEvidenceText(String text, int maxLineLength) {
         StringBuilder sb = new StringBuilder();
         for (String line : text.split("\n")) {
@@ -292,8 +297,15 @@ public final class EvidenceCapture {
             int start = 0;
             while (start < line.length()) {
                 int end = Math.min(start + maxLineLength, line.length());
+                if (end < line.length()) {
+                    int lastSpace = line.lastIndexOf(' ', end);
+                    if (lastSpace > start) {
+                        end = lastSpace;
+                    }
+                }
                 sb.append(line, start, end).append("\n");
                 start = end;
+                while (start < line.length() && line.charAt(start) == ' ') start++;
             }
         }
         return sb.toString();
@@ -305,7 +317,21 @@ public final class EvidenceCapture {
 
     private BufferedImage renderTextToImage(String req, String res, String title, String desc, String severity, boolean force1080) {
         int imgWidth = force1080 ? 1920 : 1200;
-        int imgHeight = force1080 ? 1080 : 800;
+        int defaultHeight = force1080 ? 1080 : 800;
+
+        // Split once and reuse for both the height calculation and drawing, so the two
+        // never disagree on line count.
+        String[] reqLines = req.split("\n");
+        String[] resLines = res.split("\n");
+
+        int colLabelY = 90;
+        int y = colLabelY + 22;
+
+        // Grow the image to fit all content instead of silently clipping whatever doesn't
+        // fit the default size — a fixed height previously cut off long request/response
+        // bodies with no indication anything was missing.
+        int maxLineCount = Math.max(reqLines.length, resLines.length);
+        int imgHeight = Math.max(defaultHeight, y + maxLineCount * 18 + 20);
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
 
@@ -333,7 +359,6 @@ public final class EvidenceCapture {
         g.drawString(severity + "  ·  " + desc, 20, 55);
 
         // Column labels + divider
-        int colLabelY = 90;
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         g.setColor(cs.dim());
         g.drawString("REQUEST", 20, colLabelY);
@@ -342,7 +367,6 @@ public final class EvidenceCapture {
         g.setColor(cs.divider());
         g.drawLine(imgWidth / 2, 70, imgWidth / 2, imgHeight);
 
-        int y = colLabelY + 22;
         g.setFont(MONO_FONT);
 
         // Clip columns
@@ -351,19 +375,17 @@ public final class EvidenceCapture {
         // Request (left)
         g.setClip(0, 70, imgWidth / 2 - 5, imgHeight - 70);
         int reqY = y;
-        for (String line : req.split("\n")) {
+        for (String line : reqLines) {
             drawLine(g, line, 20, reqY, cs, true);
             reqY += 18;
-            if (reqY > imgHeight - 10 && !force1080) break;
         }
 
         // Response (right)
         g.setClip(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70);
         int resY = y;
-        for (String line : res.split("\n")) {
+        for (String line : resLines) {
             drawLine(g, line, imgWidth / 2 + 20, resY, cs, false);
             resY += 18;
-            if (resY > imgHeight - 10 && !force1080) break;
         }
 
         g.setClip(originalClip);

@@ -6,6 +6,9 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.utilities.json.JsonNode;
 import icarus.core.*;
 
+import javax.swing.JCheckBox;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -105,14 +108,67 @@ public class JwtCheckerModule implements IcarusModule {
             findings.add(createFinding("MISSING_HSTS", "Response does not include HSTS - relevant for token transport protection", Severity.MEDIUM, requestResponse));
         }
 
+        boolean runActiveTests = confirmActiveTests();
+
         for (var candidate : jwtCandidates) {
-            analyzeCandidate(candidate, baseReq, requestResponse, findings);
+            analyzeCandidate(candidate, baseReq, requestResponse, findings, config, runActiveTests);
         }
 
         return findings;
     }
 
-    private void analyzeCandidate(JwtCandidate candidate, HttpRequest baseReq, HttpRequestResponse baseRR, List<Finding> findings) {
+    /**
+     * Asks the user before sending active tampering requests (privilege escalation, alg=none
+     * bypass, SSRF probes, etc.) — the static/passive checks above always run regardless.
+     * Mirrors RateLimitModule's per-project "don't ask again" pattern.
+     */
+    private boolean confirmActiveTests() {
+        burp.api.montoya.persistence.PersistedObject extData = api.persistence().extensionData();
+        String projPrefix = "jwt_" + api.project().name() + "_";
+
+        Boolean remembered = extData.getBoolean(projPrefix + "active_tests_allowed");
+        if (remembered != null) {
+            return remembered;
+        }
+
+        boolean[] proceed = { false };
+        boolean[] remember = { false };
+
+        Runnable showDialog = () -> {
+            JCheckBox chkRemember = new JCheckBox("Remember my choice for this project");
+            Object[] message = {
+                "JWT Checker is about to send ~20 tampered/forged token variants to this\n"
+              + "target (privilege escalation, alg=none bypass, signature removal, SSRF\n"
+              + "probes via jku/x5u, etc.) to actively test for authentication bypass.\n\n"
+              + "Proceed with active tests?",
+                chkRemember
+            };
+            int option = JOptionPane.showConfirmDialog(null, message, "JWT Checker — Active Tests",
+                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            proceed[0] = (option == JOptionPane.YES_OPTION);
+            remember[0] = chkRemember.isSelected();
+        };
+
+        try {
+            if (SwingUtilities.isEventDispatchThread()) {
+                showDialog.run();
+            } else {
+                SwingUtilities.invokeAndWait(showDialog);
+            }
+        } catch (Exception e) {
+            api.logging().logToError("Failed to show JWT active-test confirmation dialog: " + e);
+            return false;
+        }
+
+        if (remember[0]) {
+            extData.setBoolean(projPrefix + "active_tests_allowed", proceed[0]);
+        }
+
+        return proceed[0];
+    }
+
+    private void analyzeCandidate(JwtCandidate candidate, HttpRequest baseReq, HttpRequestResponse baseRR,
+                                   List<Finding> findings, ModuleConfig config, boolean runActiveTests) {
         String token = candidate.token;
         var jwtParts = token.split("\\.", -1);
         if (jwtParts.length < 2) {
@@ -212,7 +268,9 @@ public class JwtCheckerModule implements IcarusModule {
 
                 if (lowered.contains("password") || lowered.contains("secret") || lowered.contains("apikey") ||
                     lowered.contains("api_key") || lowered.contains("token") || lowered.contains("hash")) {
-                    findings.add(createFinding("SENSITIVE_CLAIM", "Possible sensitive data in JWT claim: " + key + "=" + valuePreview, Severity.HIGH, baseRR));
+                    boolean redact = config.getBool("jwt.redact_sensitive_claims", true);
+                    String displayValue = redact ? "[REDACTED]" : valuePreview;
+                    findings.add(createFinding("SENSITIVE_CLAIM", "Possible sensitive data in JWT claim: " + key + "=" + displayValue, Severity.HIGH, baseRR));
                 }
 
                 if (lowered.equals("role") || lowered.equals("roles") || lowered.equals("scope") || lowered.equals("scp") ||
@@ -221,6 +279,10 @@ public class JwtCheckerModule implements IcarusModule {
                     findings.add(createFinding("PRIVILEGED_CLAIM", "Privileged claim found: " + key + " - candidate for privilege escalation", Severity.INFO, baseRR));
                 }
             }
+        }
+
+        if (!runActiveTests) {
+            return;
         }
 
         // Active Tests

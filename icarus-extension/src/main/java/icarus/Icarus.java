@@ -138,6 +138,7 @@ public class Icarus implements BurpExtension {
 
         // ── JWTChecker defaults ──
         config.set("jwt.enabled", true);
+        config.set("jwt.redact_sensitive_claims", true);
 
         // ── SensitiveHeaders defaults ──
         config.set("sh.enabled", true);

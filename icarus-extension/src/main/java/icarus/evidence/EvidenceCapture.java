@@ -271,6 +271,16 @@ public final class EvidenceCapture {
         return sb.toString();
     }
 
+    private String truncate(String text, Graphics2D g, int maxWidth) {
+        if (g.getFontMetrics().stringWidth(text) <= maxWidth) return text;
+        String dot = "...";
+        int dotWidth = g.getFontMetrics().stringWidth(dot);
+        while (text.length() > 0 && g.getFontMetrics().stringWidth(text) + dotWidth > maxWidth) {
+            text = text.substring(0, text.length() - 1);
+        }
+        return text + dot;
+    }
+
     private String wrapEvidenceText(String text, int maxLineLength) {
         StringBuilder sb = new StringBuilder();
         for (String line : text.split("\n")) {
@@ -543,7 +553,8 @@ public final class EvidenceCapture {
             g.drawString(idxStr, 20, y);
 
             g.setColor(cs.text());
-            g.drawString(reqLine, 80, y);
+            int maxReqWidth = (imgWidth / 2) - 100;
+            g.drawString(truncate(reqLine, g, maxReqWidth), 80, y);
 
             g.setColor(cs.statusColor(status));
             g.drawString("HTTP/1.1 " + status, imgWidth / 2, y);
@@ -594,24 +605,23 @@ public final class EvidenceCapture {
 
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        g.drawString("BASE REQUEST", 20, y);
-        g.drawString(noLimit ? "SAMPLE RESPONSE" : "BLOCK RESPONSE", imgWidth / 2 + 20, y);
+        g.drawString("BASE REQUEST (HEADERS)", 20, y);
+        g.drawString(noLimit ? "SAMPLE RESPONSE (HEADERS)" : "BLOCK RESPONSE (HEADERS)", imgWidth / 2 + 20, y);
 
         y += 22;
         g.setFont(MONO_FONT);
 
-        // Calculate dynamic height required for the full request and response
+        // Calculate dynamic height required for the headers
         String fullReq = reqLine + "\n" + rr.request().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
+                .reduce("", String::concat);
 
         String fullRes = "";
         if (rr.response() != null) {
-            String resContentType = rr.response().headerValue("Content-Type");
             String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
             fullRes = statusLine + rr.response().headers().stream()
                     .map(h -> h.name() + ": " + h.value() + "\n")
-                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
+                    .reduce("", String::concat);
         }
 
         fullReq = wrapEvidenceText(fullReq, 120);
@@ -748,7 +758,8 @@ public final class EvidenceCapture {
             g.drawString(idxStr, 20, y);
 
             g.setColor(cs.text());
-            g.drawString(reqLine, 80, y);
+            int maxReqWidth = (imgWidth / 2) - 100;
+            g.drawString(truncate(reqLine, g, maxReqWidth), 80, y);
 
             g.setColor(cs.statusColor(status));
             g.drawString("HTTP/1.1 " + status, imgWidth / 2, y);
@@ -797,24 +808,23 @@ public final class EvidenceCapture {
 
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        g.drawString("BASE REQUEST", 20, y);
-        g.drawString(noLimit ? "SAMPLE RESPONSE" : "BLOCK RESPONSE", imgWidth / 2 + 20, y);
+        g.drawString("BASE REQUEST (HEADERS)", 20, y);
+        g.drawString(noLimit ? "SAMPLE RESPONSE (HEADERS)" : "BLOCK RESPONSE (HEADERS)", imgWidth / 2 + 20, y);
 
         y += 22;
         g.setFont(MONO_FONT);
 
-        // Calculate dynamic height required for the full request and response
+        // Calculate dynamic height required for the headers
         String fullReq = reqLine + "\n" + rr.request().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
+                .reduce("", String::concat);
 
         String fullRes = "";
         if (rr.response() != null) {
-            String resContentType = rr.response().headerValue("Content-Type");
             String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
             fullRes = statusLine + rr.response().headers().stream()
                     .map(h -> h.name() + ": " + h.value() + "\n")
-                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
+                    .reduce("", String::concat);
         }
 
         fullReq = wrapEvidenceText(fullReq, 120);

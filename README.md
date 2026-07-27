@@ -46,7 +46,7 @@ The official ICARUS Burp Suite extension brings the power of the standalone Bamb
 
 **Key Features:**
 - **Unified Interface:** Centralized control panel for all ICARUS modules.
-- **Smart Evidence Capture:** Advanced 2-phase workflow (Smart Text Cleanup & Visual Annotation) for generating clean, actionable reports.
+- **Smart Evidence Capture:** Advanced 2-phase workflow for clean, actionable reports with full payload logging and manual evidence popups.
 - **Automated Scanning:** Run comprehensive checks with a single click.
 
 [View Icarus Extension README →](icarus-extension/README.md)
@@ -97,6 +97,17 @@ It automatically identifies JWTs using regex in `Authorization` headers and `Coo
 - **Time-based Attacks**: Detects missing `exp`/`iat` claims and injects excessive expiration times.
 
 [View JWTChecker README →](bambda-scripts/JWTChecker/README.md)
+
+### Rate Limit Tester (`icarus-extension`)
+
+Located in the `icarus-extension` directory, this module sends repeated requests to detect, characterize, and attempt to bypass rate limiting.
+
+**Key Features:**
+- **Burst detection:** Sends identical requests to determine whether throttling exists.
+- **Configurable thresholds:** Lets you tune request counts and timing from the module configuration.
+- **Evidence capture:** Records the request/response details needed to review rate-limit behavior.
+
+[View Icarus Extension README →](icarus-extension/README.md)
 
 ### Export to Postman (`bambda-scripts/ExportToPostman`)
 

@@ -640,22 +640,22 @@ public final class EvidenceCapture {
 
         Shape clipBackup = g.getClip();
 
+        int clipY = y - 20;
+
         // Request
-        g.setClip(0, y, imgWidth / 2 - 5, imgHeight - y);
+        g.setClip(0, clipY, imgWidth / 2 - 5, imgHeight - clipY);
         int rawReqY = y;
         for (String line : fullReq.split("\n")) {
             drawLine(g, line, 20, rawReqY, cs, true);
             rawReqY += 18;
-            if (rawReqY > imgHeight - 10 && force1080) break; // Only truncate if force1080 is strict
         }
 
         // Response
-        g.setClip(imgWidth / 2 + 5, y, imgWidth / 2 - 5, imgHeight - y);
+        g.setClip(imgWidth / 2 + 5, clipY, imgWidth / 2 - 5, imgHeight - clipY);
         int rawResY = y;
         for (String line : fullRes.split("\n")) {
             drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false);
             rawResY += 18;
-            if (rawResY > imgHeight - 10 && force1080) break;
         }
 
         g.setClip(clipBackup);
@@ -830,19 +830,27 @@ public final class EvidenceCapture {
         fullReq = wrapEvidenceText(fullReq, 120);
         fullRes = wrapEvidenceText(fullRes, 120);
 
+        Shape clipBackup = g.getClip();
+
+        int clipY = y - 20;
+
+        // Request
+        g.setClip(0, clipY, imgWidth / 2 - 5, imgHeight - clipY);
         int rawReqY = y;
         for (String line : fullReq.split("\n")) {
             drawLine(g, line, 20, rawReqY, cs, true);
             rawReqY += 18;
-            if (rawReqY > imgHeight) break;
         }
 
+        // Response
+        g.setClip(imgWidth / 2 + 5, clipY, imgWidth / 2 - 5, imgHeight - clipY);
         int rawResY = y;
         for (String line : fullRes.split("\n")) {
             drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false);
             rawResY += 18;
-            if (rawResY > imgHeight) break;
         }
+
+        g.setClip(clipBackup);
 
         g.dispose();
         return img;

@@ -59,12 +59,32 @@ public class RateLimitModule implements IcarusModule {
                     .meta("requests_sent", String.valueOf(totalRequests))
                     .meta("concurrency", String.valueOf(concurrency))
                     .meta("all_status", String.valueOf(detection.dominantStatus))
+                    .meta("blast_log", detection.serializedLog)
                     .build());
             return findings;
         }
 
         // ── Phase 2: Characterization ──
         String blockType = describeBlockType(detection);
+
+        // ── Phase 3: Bypass Attempts ──
+
+        // Wait for cooldown before bypass attempts
+        try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
+
+        StringBuilder bypassLog = new StringBuilder();
+
+        if (config.getBool("rl.bypass_headers", true)) {
+            tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path);
+        }
+
+        if (config.getBool("rl.bypass_path", true)) {
+            tryPathBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+        }
+
+        if (config.getBool("rl.bypass_query", true)) {
+            tryQueryBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+        }
 
         findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
                 .description("Rate limiting detected on " + path + " — blocked after "
@@ -77,24 +97,9 @@ public class RateLimitModule implements IcarusModule {
                 .meta("block_status", String.valueOf(detection.blockStatus))
                 .meta("block_type", blockType)
                 .meta("requests_sent", String.valueOf(totalRequests))
+                .meta("blast_log", detection.serializedLog)
+                .meta("bypass_log", bypassLog.toString())
                 .build());
-
-        // ── Phase 3: Bypass Attempts ──
-
-        // Wait for cooldown before bypass attempts
-        try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
-
-        if (config.getBool("rl.bypass_headers", true)) {
-            tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, findings, path);
-        }
-
-        if (config.getBool("rl.bypass_path", true)) {
-            tryPathBypass(baseRequest, detection, totalRequests, concurrency, findings, path, cooldownMs);
-        }
-
-        if (config.getBool("rl.bypass_query", true)) {
-            tryQueryBypass(baseRequest, detection, totalRequests, concurrency, findings, path, cooldownMs);
-        }
 
         return findings;
     }
@@ -131,7 +136,15 @@ public class RateLimitModule implements IcarusModule {
     }
 
     private BlastResult analyzeResults(List<SingleResult> results) {
-        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null);
+        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null, "");
+
+        StringBuilder sb = new StringBuilder();
+        for (SingleResult r : results) {
+            sb.append(r.index).append(":")
+              .append(r.status).append(":")
+              .append(r.elapsedMs).append(";");
+        }
+        String log = sb.toString();
 
         // Find the dominant (first) status code
         int firstStatus = results.get(0).status;
@@ -140,11 +153,11 @@ public class RateLimitModule implements IcarusModule {
         for (int i = 1; i < results.size(); i++) {
             SingleResult r = results.get(i);
             if (isBlockResponse(r.status, firstStatus)) {
-                return new BlastResult(i, firstStatus, r.status, r.evidence);
+                return new BlastResult(i, firstStatus, r.status, r.evidence, log);
             }
         }
 
-        return new BlastResult(-1, firstStatus, 0, null);
+        return new BlastResult(-1, firstStatus, 0, null, log);
     }
 
     private boolean isBlockResponse(int currentStatus, int normalStatus) {
@@ -159,7 +172,7 @@ public class RateLimitModule implements IcarusModule {
     // ── Bypass: IP Headers ──
 
     private void tryHeaderBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
-                                  List<Finding> findings, String path) {
+                                  StringBuilder bypassLog, String path) {
         String[] headers = {
                 "X-Forwarded-For", "X-Real-IP", "X-Originating-IP",
                 "X-Client-IP", "True-Client-IP", "CF-Connecting-IP"
@@ -198,26 +211,17 @@ public class RateLimitModule implements IcarusModule {
         BlastResult bypassResult = analyzeResults(results);
         boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
-        findings.add(Finding.builder(name(), bypassed ? "BYPASS_HEADER_SUCCESS" : "BYPASS_HEADER_FAIL")
-                .description("IP header rotation (X-Forwarded-For, X-Real-IP, etc.) "
-                        + (bypassed ? "BYPASSED rate limiting on " : "did NOT bypass rate limiting on ") + path
-                        + (bypassed && bypassResult.blockedAt < 0 ? " — all " + count + " requests succeeded."
-                                : bypassed ? " — threshold increased from " + detection.blockedAt + " to " + bypassResult.blockedAt + "."
-                                : "."))
-                .severity(bypassed ? Severity.HIGH : Severity.INFO)
-                .category(Category.RATE_LIMIT)
-                .path(path)
-                .evidence(bypassResult.blockEvidence != null ? bypassResult.blockEvidence
-                        : (results.isEmpty() || results.get(0).evidence == null ? null : results.get(0).evidence))
-                .meta("technique", "IP Header Rotation")
-                .meta("bypassed", String.valueOf(bypassed))
-                .build());
+        bypassLog.append(bypassed ? "✓ " : "✗ ")
+                 .append("X-Forwarded-For rotation → ")
+                 .append(bypassed ? "BYPASSED (threshold " + (bypassResult.blockedAt < 0 ? "none" : bypassResult.blockedAt) + ")"
+                                  : "BLOCKED at #" + bypassResult.blockedAt)
+                 .append("\n");
     }
 
     // ── Bypass: Path Normalization ──
 
     private void tryPathBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
-                                List<Finding> findings, String path, int cooldownMs) {
+                                StringBuilder bypassLog, String path, int cooldownMs) {
         String[] pathVariants = {
                 path + "/",
                 path.replaceFirst("/", "/./"),
@@ -246,37 +250,19 @@ public class RateLimitModule implements IcarusModule {
             boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
             if (bypassed) {
-                findings.add(Finding.builder(name(), "BYPASS_PATH_SUCCESS")
-                        .description("Path normalization bypass succeeded on " + path
-                                + " using variant: " + variant
-                                + (bypassResult.blockedAt < 0 ? " — all " + count + " requests succeeded."
-                                        : " — threshold increased to " + bypassResult.blockedAt + "."))
-                        .severity(Severity.HIGH)
-                        .category(Category.RATE_LIMIT)
-                        .path(path)
-                        .evidence(bypassResult.blockEvidence)
-                        .meta("technique", "Path Normalization")
-                        .meta("variant", variant)
-                        .meta("bypassed", "true")
-                        .build());
+                bypassLog.append("✓ Path normalization (").append(variant).append(") → ")
+                         .append("BYPASSED (threshold ").append(bypassResult.blockedAt < 0 ? "none" : bypassResult.blockedAt).append(")\n");
                 return; // One successful path bypass is enough
             }
         }
 
-        findings.add(Finding.builder(name(), "BYPASS_PATH_FAIL")
-                .description("Path normalization variants did not bypass rate limiting on " + path + ".")
-                .severity(Severity.INFO)
-                .category(Category.RATE_LIMIT)
-                .path(path)
-                .meta("technique", "Path Normalization")
-                .meta("bypassed", "false")
-                .build());
+        bypassLog.append("✗ Path normalization → BLOCKED\n");
     }
 
     // ── Bypass: Query Cache Busting ──
 
     private void tryQueryBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
-                                 List<Finding> findings, String path, int cooldownMs) {
+                                 StringBuilder bypassLog, String path, int cooldownMs) {
         try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
 
         // Each request gets a unique query parameter
@@ -309,18 +295,11 @@ public class RateLimitModule implements IcarusModule {
         BlastResult bypassResult = analyzeResults(results);
         boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
-        findings.add(Finding.builder(name(), bypassed ? "BYPASS_QUERY_SUCCESS" : "BYPASS_QUERY_FAIL")
-                .description("Cache-buster query parameter (?_icarus=N) "
-                        + (bypassed ? "BYPASSED rate limiting on " : "did NOT bypass rate limiting on ") + path
-                        + (bypassed && bypassResult.blockedAt < 0 ? " — all " + count + " requests succeeded." : "."))
-                .severity(bypassed ? Severity.HIGH : Severity.INFO)
-                .category(Category.RATE_LIMIT)
-                .path(path)
-                .evidence(bypassResult.blockEvidence != null ? bypassResult.blockEvidence
-                        : (results.isEmpty() || results.get(0).evidence == null ? null : results.get(0).evidence))
-                .meta("technique", "Cache-buster Query Param")
-                .meta("bypassed", String.valueOf(bypassed))
-                .build());
+        bypassLog.append(bypassed ? "✓ " : "✗ ")
+                 .append("Cache-buster (?_icarus=N) → ")
+                 .append(bypassed ? "BYPASSED (threshold " + (bypassResult.blockedAt < 0 ? "none" : bypassResult.blockedAt) + ")"
+                                  : "BLOCKED at #" + bypassResult.blockedAt)
+                 .append("\n");
     }
 
     // ── Helpers ──
@@ -343,5 +322,5 @@ public class RateLimitModule implements IcarusModule {
 
     private record SingleResult(int index, int status, int bodyLength, long elapsedMs, HttpRequestResponse evidence) {}
 
-    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence) {}
+    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence, String serializedLog) {}
 }

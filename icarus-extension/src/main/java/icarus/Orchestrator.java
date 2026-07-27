@@ -95,6 +95,15 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         }
     }
 
+    public Finding getFindingByHash(String hash) {
+        FindingRecord record = activeFindings.get(hash);
+        return record != null ? record.getFinding() : null;
+    }
+
+    public void showEvidenceInteractive(Finding finding) {
+        evidenceCapture.captureInteractive(finding);
+    }
+
     private void saveSuppressionConfig() {
         List<String> suppressed = new ArrayList<>();
         for (var entry : activeFindings.entrySet()) {
@@ -110,10 +119,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         api.persistence().extensionData().setString("config", sb.toString());
     }
 
-    public void runScan(HttpRequestResponse target) {
+    public void runScan(HttpRequestResponse target, boolean isManual) {
         executor.submit(() -> {
             try {
-                doScan(target);
+                doScan(target, isManual);
             } catch (Exception e) {
                 api.logging().logToError("ICARUS scan failed: " + e.getMessage());
             }
@@ -137,7 +146,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         var runAll = new JMenuItem("ICARUS → Run All Modules");
         runAll.addActionListener(e -> {
             for (var rr : requestResponses) {
-                runScan(rr);
+                runScan(rr, true);
             }
         });
         items.add(runAll);
@@ -162,7 +171,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 for (var rr : requestResponses) {
                     executor.submit(() -> {
                         try {
-                            runSingleModule(module, rr);
+                            runSingleModule(module, rr, true);
                         } catch (Exception ex) {
                             api.logging().logToError("ICARUS " + module.name() + " failed: " + ex.getMessage());
                         }
@@ -203,7 +212,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         return ResponseReceivedAction.continueWith(response);
     }
 
-    private void doScan(HttpRequestResponse target) {
+    private void doScan(HttpRequestResponse target, boolean isManual) {
         var context = new ScanContext(api, target, config);
         Consumer<String> logger = createLiveLogWindow("ICARUS — Scan Progress");
         context.setLiveLogger(logger);
@@ -249,18 +258,18 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         }
 
-        routeFindings(context.findings());
+        routeFindings(context.findings(), isManual);
 
         context.log("ICARUS scan complete — " + context.findings().size() + " total findings.");
         context.log("════════════════════════════════════════════════");
     }
 
-    private void runSingleModule(IcarusModule module, HttpRequestResponse target) {
+    private void runSingleModule(IcarusModule module, HttpRequestResponse target, boolean isManual) {
         Consumer<String> logger = createLiveLogWindow("ICARUS — " + module.name() + " Progress");
         logger.accept("ICARUS → Running " + module.name());
         api.logging().logToOutput("ICARUS → Running " + module.name());
         var findings = module.run(target, config);
-        routeFindings(findings);
+        routeFindings(findings, isManual);
         logger.accept("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
         api.logging().logToOutput("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
     }
@@ -296,10 +305,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         processDeduplication(findings, true);
     }
 
-    private void routeFindings(List<Finding> findings) {
+    private void routeFindings(List<Finding> findings, boolean isManual) {
         List<Finding> newOrUpdated = processDeduplication(findings, false);
 
-        if (!newOrUpdated.isEmpty() && config.getBool("ui.show_popups", true)) {
+        if (!newOrUpdated.isEmpty() && (isManual || config.getBool("ui.show_popups", true))) {
             List<FindingRecord> recordsToShow = new ArrayList<>();
             for (Finding f : newOrUpdated) {
                 FindingRecord r = activeFindings.get(f.similarityHash());

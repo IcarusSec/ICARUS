@@ -5,10 +5,14 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import icarus.core.*;
 
+import javax.swing.*;
+import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Rate Limit module — detects, characterizes, and attempts to bypass rate limiting.
@@ -35,17 +39,75 @@ public class RateLimitModule implements IcarusModule {
         if (!config.getBool("rl.enabled", true)) return List.of();
         if (requestResponse == null || requestResponse.request() == null) return List.of();
 
-        int totalRequests = config.getInt("rl.request_count", 50);
-        int concurrency   = config.getInt("rl.concurrency", 10);
-        int cooldownMs    = config.getInt("rl.cooldown_wait_ms", 60000);
+        // Check project-level persistence to see if we should skip the dialog
+        burp.api.montoya.persistence.PersistedObject extData = api.persistence().extensionData();
+        String projPrefix = "rl_" + api.project().name() + "_";
+        boolean dontAsk = extData.getBoolean(projPrefix + "dont_ask_again") != null && extData.getBoolean(projPrefix + "dont_ask_again");
+
+        int[] params = new int[] {
+            dontAsk && extData.getInteger(projPrefix + "request_count") != null ? extData.getInteger(projPrefix + "request_count") : config.getInt("rl.request_count", 50),
+            dontAsk && extData.getInteger(projPrefix + "concurrency") != null ? extData.getInteger(projPrefix + "concurrency") : config.getInt("rl.concurrency", 10),
+            dontAsk && extData.getInteger(projPrefix + "cooldown_wait_ms") != null ? extData.getInteger(projPrefix + "cooldown_wait_ms") : config.getInt("rl.cooldown_wait_ms", 60000)
+        };
+        boolean[] proceed = new boolean[] { dontAsk };
+
+        if (!dontAsk) {
+            try {
+                SwingUtilities.invokeAndWait(() -> {
+                    JTextField txtCount = new JTextField(String.valueOf(params[0]));
+                    JTextField txtConcurrency = new JTextField(String.valueOf(params[1]));
+                    JTextField txtCooldown = new JTextField(String.valueOf(params[2]));
+                    JCheckBox chkDontAsk = new JCheckBox("Don't ask again for this project");
+
+                    Object[] message = {
+                        "Number of requests:", txtCount,
+                        "Thread count (concurrency):", txtConcurrency,
+                        "Delay / Cooldown between bypasses (ms):", txtCooldown,
+                        " ", chkDontAsk
+                    };
+
+                    int option = JOptionPane.showConfirmDialog(null, message, "Rate Limit Tester Configuration", JOptionPane.OK_CANCEL_OPTION);
+                    if (option == JOptionPane.OK_OPTION) {
+                        try {
+                            params[0] = Integer.parseInt(txtCount.getText().trim());
+                            params[1] = Integer.parseInt(txtConcurrency.getText().trim());
+                            params[2] = Integer.parseInt(txtCooldown.getText().trim());
+                            proceed[0] = true;
+
+                            if (chkDontAsk.isSelected()) {
+                                extData.setBoolean(projPrefix + "dont_ask_again", true);
+                                extData.setInteger(projPrefix + "request_count", params[0]);
+                                extData.setInteger(projPrefix + "concurrency", params[1]);
+                                extData.setInteger(projPrefix + "cooldown_wait_ms", params[2]);
+                            }
+                        } catch (NumberFormatException e) {
+                            api.logging().logToError("Invalid integer in Rate Limit config.");
+                        }
+                    }
+                });
+            } catch (Exception e) {
+                api.logging().logToError("Failed to show Rate Limit config dialog: " + e.getMessage());
+            }
+        }
+
+        if (!proceed[0]) return List.of();
+
+        int totalRequests = params[0];
+        int concurrency = params[1];
+        int cooldownMs = params[2];
 
         HttpRequest baseRequest = requestResponse.request();
         String path = baseRequest.path();
 
         List<Finding> findings = new ArrayList<>();
 
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String startTime = LocalDateTime.now().format(dtf);
+
         // ── Phase 1: Detection ──
         BlastResult detection = blast(baseRequest, totalRequests, concurrency);
+
+        String endTime = LocalDateTime.now().format(dtf);
 
         if (detection.blockedAt < 0) {
             // No rate limiting detected — that IS a finding
@@ -60,6 +122,8 @@ public class RateLimitModule implements IcarusModule {
                     .meta("concurrency", String.valueOf(concurrency))
                     .meta("all_status", String.valueOf(detection.dominantStatus))
                     .meta("blast_log", detection.serializedLog)
+                    .meta("start_time", startTime)
+                    .meta("end_time", endTime)
                     .build());
             return findings;
         }
@@ -86,6 +150,8 @@ public class RateLimitModule implements IcarusModule {
             tryQueryBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
         }
 
+        endTime = LocalDateTime.now().format(dtf);
+
         findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
                 .description("Rate limiting detected on " + path + " — blocked after "
                         + detection.blockedAt + " requests. " + blockType)
@@ -99,6 +165,8 @@ public class RateLimitModule implements IcarusModule {
                 .meta("requests_sent", String.valueOf(totalRequests))
                 .meta("blast_log", detection.serializedLog)
                 .meta("bypass_log", bypassLog.toString())
+                .meta("start_time", startTime)
+                .meta("end_time", endTime)
                 .build());
 
         return findings;

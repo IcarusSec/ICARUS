@@ -463,9 +463,13 @@ public final class EvidenceCapture {
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
         g.drawString("ICARUS EVIDENCE  ·  " + finding.type() + "  ·  " + finding.path(), 20, 30);
 
+        String startTime = finding.metadata().getOrDefault("start_time", "");
+        String endTime = finding.metadata().getOrDefault("end_time", "");
+        String timeStr = (!startTime.isEmpty() && !endTime.isEmpty()) ? "  |  [" + startTime + " to " + endTime + "]" : "";
+
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-        g.drawString(finding.description(), 20, 55);
+        g.drawString(finding.description() + timeStr, 20, 55);
 
         // Parse blast log
         String logStr = finding.metadata().get("blast_log");
@@ -486,9 +490,11 @@ public final class EvidenceCapture {
         g.drawLine(20, y, imgWidth - 20, y);
         y += 20;
 
-        String method = finding.evidence().request().method();
-        String path = finding.evidence().request().path();
-        String reqLine = method + " " + path + " HTTP/1.1";
+        var rr = finding.evidence();
+        String reqContentType = rr.request().headerValue("Content-Type");
+        String method = rr.request().method();
+        String path = rr.request().path();
+        String reqLine = method + " " + path + " HTTP/" + rr.request().httpVersion();
 
         int total = entries.length;
         if (total == 0) {
@@ -578,6 +584,252 @@ public final class EvidenceCapture {
                 g.drawString(line.substring(1), 35, y);
                 y += 20;
             }
+        }
+
+        // Draw Raw HTTP Request and Response below the table
+        y += 50;
+        g.setColor(cs.divider());
+        g.drawLine(0, y, imgWidth, y);
+        y += 40;
+
+        g.setColor(cs.dim());
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        g.drawString("BASE REQUEST", 20, y);
+        g.drawString(noLimit ? "SAMPLE RESPONSE" : "BLOCK RESPONSE", imgWidth / 2 + 20, y);
+
+        y += 22;
+        g.setFont(MONO_FONT);
+
+        // Calculate dynamic height required for the full request and response
+        String fullReq = reqLine + "\n" + rr.request().headers().stream()
+                .map(h -> h.name() + ": " + h.value() + "\n")
+                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
+
+        String fullRes = "";
+        if (rr.response() != null) {
+            String resContentType = rr.response().headerValue("Content-Type");
+            String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
+            fullRes = statusLine + rr.response().headers().stream()
+                    .map(h -> h.name() + ": " + h.value() + "\n")
+                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
+        }
+
+        fullReq = wrapEvidenceText(fullReq, 120);
+        fullRes = wrapEvidenceText(fullRes, 120);
+
+        int reqLines = fullReq.split("\n").length;
+        int resLines = fullRes.split("\n").length;
+        int maxLines = Math.max(reqLines, resLines);
+
+        int requiredHeight = y + (maxLines * 18) + 40;
+        if (!force1080 && requiredHeight > imgHeight) {
+            // We need a bigger image! Let's redraw everything with the new height.
+            g.dispose();
+            return renderRateLimitTableWithSize(finding, imgWidth, requiredHeight, cs);
+        }
+
+        Shape clipBackup = g.getClip();
+
+        // Request
+        g.setClip(0, y, imgWidth / 2 - 5, imgHeight - y);
+        int rawReqY = y;
+        for (String line : fullReq.split("\n")) {
+            drawLine(g, line, 20, rawReqY, cs, true);
+            rawReqY += 18;
+            if (rawReqY > imgHeight - 10 && force1080) break; // Only truncate if force1080 is strict
+        }
+
+        // Response
+        g.setClip(imgWidth / 2 + 5, y, imgWidth / 2 - 5, imgHeight - y);
+        int rawResY = y;
+        for (String line : fullRes.split("\n")) {
+            drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false);
+            rawResY += 18;
+            if (rawResY > imgHeight - 10 && force1080) break;
+        }
+
+        g.setClip(clipBackup);
+
+        g.dispose();
+        return img;
+    }
+
+    private BufferedImage renderRateLimitTableWithSize(Finding finding, int imgWidth, int imgHeight, EvidenceColorScheme cs) {
+        BufferedImage img = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+
+        g.setColor(cs.background());
+        g.fillRect(0, 0, imgWidth, imgHeight);
+
+        g.setColor(cs.headerBg());
+        g.fillRect(0, 0, imgWidth, 70);
+        g.setColor(cs.divider());
+        g.drawLine(0, 70, imgWidth, 70);
+
+        g.setColor(cs.titleText());
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+        g.drawString("ICARUS EVIDENCE  ·  " + finding.type() + "  ·  " + finding.path(), 20, 30);
+
+        String startTime = finding.metadata().getOrDefault("start_time", "");
+        String endTime = finding.metadata().getOrDefault("end_time", "");
+        String timeStr = (!startTime.isEmpty() && !endTime.isEmpty()) ? "  |  [" + startTime + " to " + endTime + "]" : "";
+
+        g.setColor(cs.dim());
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        g.drawString(finding.description() + timeStr, 20, 55);
+
+        String logStr = finding.metadata().get("blast_log");
+        String[] entries = logStr.split(";");
+
+        int y = 110;
+        g.setFont(MONO_FONT);
+
+        g.setColor(cs.titleText());
+        g.drawString(" #", 20, y);
+        g.drawString("Request", 80, y);
+        g.drawString("Response", imgWidth / 2, y);
+        g.drawString("Latency", imgWidth - 150, y);
+
+        y += 10;
+        g.setColor(cs.divider());
+        g.drawLine(20, y, imgWidth - 20, y);
+        y += 20;
+
+        var rr = finding.evidence();
+        String reqContentType = rr.request().headerValue("Content-Type");
+        String method = rr.request().method();
+        String path = rr.request().path();
+        String reqLine = method + " " + path + " HTTP/" + rr.request().httpVersion();
+
+        int total = entries.length;
+        if (total == 0) {
+            g.dispose();
+            return img;
+        }
+
+        boolean noLimit = "NO_RATE_LIMIT".equals(finding.type());
+        int flipIdx = -1;
+
+        if (!noLimit && finding.metadata().containsKey("threshold")) {
+            try { flipIdx = Integer.parseInt(finding.metadata().get("threshold")); } catch (Exception ignored) {}
+        }
+
+        List<Integer> rowsToShow = new ArrayList<>();
+        if (noLimit || flipIdx < 0) {
+            for (int i = 0; i < Math.min(3, total); i++) rowsToShow.add(i);
+            rowsToShow.add(-1);
+            for (int i = Math.max(3, total - 3); i < total; i++) rowsToShow.add(i);
+        } else {
+            for (int i = 0; i < Math.min(3, flipIdx - 1); i++) rowsToShow.add(i);
+            if (flipIdx > 4) rowsToShow.add(-1);
+            for (int i = Math.max(0, flipIdx - 1); i <= Math.min(total - 1, flipIdx + 2); i++) rowsToShow.add(i);
+        }
+
+        for (int i : rowsToShow) {
+            if (i == -1) {
+                g.setColor(cs.dim());
+                g.drawString("    ···  (omitted similar requests)  ···", 80, y);
+                y += 20;
+                continue;
+            }
+
+            if (i >= entries.length || entries[i].isBlank()) continue;
+
+            String[] parts = entries[i].split(":");
+            if (parts.length < 3) continue;
+
+            String idxStr = String.format("%3d", Integer.parseInt(parts[0]) + 1);
+            int status = Integer.parseInt(parts[1]);
+            String ms = parts[2] + "ms";
+
+            g.setColor(cs.dim());
+            g.drawString(idxStr, 20, y);
+
+            g.setColor(cs.text());
+            g.drawString(reqLine, 80, y);
+
+            g.setColor(cs.statusColor(status));
+            g.drawString("HTTP/1.1 " + status, imgWidth / 2, y);
+
+            g.setColor(cs.dim());
+            g.drawString(ms, imgWidth - 150, y);
+
+            if (i == flipIdx) {
+                g.setColor(cs.status5xx());
+                g.drawString(" ← BLOCKED", imgWidth - 80, y);
+            }
+
+            y += 20;
+        }
+
+        if (finding.metadata().containsKey("bypass_log") && !finding.metadata().get("bypass_log").isBlank()) {
+            y += 40;
+            g.setColor(cs.divider());
+            g.drawLine(20, y, imgWidth - 20, y);
+            y += 30;
+
+            g.setColor(cs.titleText());
+            g.drawString("Bypass Tests:", 20, y);
+            y += 25;
+
+            String bypassLog = finding.metadata().get("bypass_log");
+            for (String line : bypassLog.split("\n")) {
+                if (line.isBlank()) continue;
+                if (line.startsWith("✓")) {
+                    g.setColor(cs.status2xx());
+                } else {
+                    g.setColor(cs.status5xx());
+                }
+                g.drawString(line.substring(0, 1), 20, y);
+
+                g.setColor(cs.text());
+                g.drawString(line.substring(1), 35, y);
+                y += 20;
+            }
+        }
+
+        y += 50;
+        g.setColor(cs.divider());
+        g.drawLine(0, y, imgWidth, y);
+        y += 40;
+
+        g.setColor(cs.dim());
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        g.drawString("BASE REQUEST", 20, y);
+        g.drawString(noLimit ? "SAMPLE RESPONSE" : "BLOCK RESPONSE", imgWidth / 2 + 20, y);
+
+        y += 22;
+        g.setFont(MONO_FONT);
+
+        // Calculate dynamic height required for the full request and response
+        String fullReq = reqLine + "\n" + rr.request().headers().stream()
+                .map(h -> h.name() + ": " + h.value() + "\n")
+                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
+
+        String fullRes = "";
+        if (rr.response() != null) {
+            String resContentType = rr.response().headerValue("Content-Type");
+            String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
+            fullRes = statusLine + rr.response().headers().stream()
+                    .map(h -> h.name() + ": " + h.value() + "\n")
+                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
+        }
+
+        fullReq = wrapEvidenceText(fullReq, 120);
+        fullRes = wrapEvidenceText(fullRes, 120);
+
+        int rawReqY = y;
+        for (String line : fullReq.split("\n")) {
+            drawLine(g, line, 20, rawReqY, cs, true);
+            rawReqY += 18;
+        }
+
+        int rawResY = y;
+        for (String line : fullRes.split("\n")) {
+            drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false);
+            rawResY += 18;
         }
 
         g.dispose();

@@ -1,11 +1,13 @@
 package icarus;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
 import icarus.core.ScanContext;
+import icarus.modules.SensitiveHeaderModule;
 
 import javax.swing.*;
 import java.awt.*;
@@ -64,13 +66,27 @@ public final class ScanRunner {
         });
     }
 
-    /** Runs an arbitrary task on the same background executor used for scans (e.g. passive header scanning). */
+    /** Runs an arbitrary task on the same background executor used for scans. */
     public void runAsync(Runnable task) {
         executor.submit(() -> {
             try {
                 task.run();
             } catch (Exception e) {
                 api.logging().logToError("ICARUS background task failed: " + e);
+            }
+        });
+    }
+
+    /** Runs the passive (background) modules against a response, off the request-handling thread. */
+    public void runPassiveScan(HttpResponseReceived response, Consumer<List<Finding>> onPassiveFindings) {
+        runAsync(() -> {
+            for (var module : modules) {
+                if (module instanceof SensitiveHeaderModule shm) {
+                    var passiveFindings = shm.analyzeResponse(response, config);
+                    if (!passiveFindings.isEmpty()) {
+                        onPassiveFindings.accept(passiveFindings);
+                    }
+                }
             }
         });
     }

@@ -1,0 +1,347 @@
+package icarus.modules;
+
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
+import icarus.core.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Rate Limit module — detects, characterizes, and attempts to bypass rate limiting.
+ *
+ * Phase 1: Blast N identical requests (null payloads) to detect if rate limiting exists.
+ * Phase 2: If detected, characterize the threshold and block type.
+ * Phase 3: Attempt known bypass techniques and re-blast.
+ */
+public class RateLimitModule implements IcarusModule {
+
+    private final MontoyaApi api;
+
+    public RateLimitModule(MontoyaApi api) {
+        this.api = api;
+    }
+
+    @Override
+    public String name() {
+        return "Rate Limit Tester";
+    }
+
+    @Override
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+        if (!config.getBool("rl.enabled", true)) return List.of();
+        if (requestResponse == null || requestResponse.request() == null) return List.of();
+
+        int totalRequests = config.getInt("rl.request_count", 50);
+        int concurrency   = config.getInt("rl.concurrency", 10);
+        int cooldownMs    = config.getInt("rl.cooldown_wait_ms", 60000);
+
+        HttpRequest baseRequest = requestResponse.request();
+        String path = baseRequest.path();
+
+        List<Finding> findings = new ArrayList<>();
+
+        // ── Phase 1: Detection ──
+        BlastResult detection = blast(baseRequest, totalRequests, concurrency);
+
+        if (detection.blockedAt < 0) {
+            // No rate limiting detected — that IS a finding
+            findings.add(Finding.builder(name(), "NO_RATE_LIMIT")
+                    .description("No rate limiting detected after " + totalRequests + " identical requests to " + path
+                            + ". All responses returned status " + detection.dominantStatus + ".")
+                    .severity(Severity.MEDIUM)
+                    .category(Category.RATE_LIMIT)
+                    .path(path)
+                    .evidence(requestResponse)
+                    .meta("requests_sent", String.valueOf(totalRequests))
+                    .meta("concurrency", String.valueOf(concurrency))
+                    .meta("all_status", String.valueOf(detection.dominantStatus))
+                    .build());
+            return findings;
+        }
+
+        // ── Phase 2: Characterization ──
+        String blockType = describeBlockType(detection);
+
+        findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
+                .description("Rate limiting detected on " + path + " — blocked after "
+                        + detection.blockedAt + " requests. " + blockType)
+                .severity(Severity.INFO)
+                .category(Category.RATE_LIMIT)
+                .path(path)
+                .evidence(detection.blockEvidence != null ? detection.blockEvidence : requestResponse)
+                .meta("threshold", String.valueOf(detection.blockedAt))
+                .meta("block_status", String.valueOf(detection.blockStatus))
+                .meta("block_type", blockType)
+                .meta("requests_sent", String.valueOf(totalRequests))
+                .build());
+
+        // ── Phase 3: Bypass Attempts ──
+
+        // Wait for cooldown before bypass attempts
+        try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
+
+        if (config.getBool("rl.bypass_headers", true)) {
+            tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, findings, path);
+        }
+
+        if (config.getBool("rl.bypass_path", true)) {
+            tryPathBypass(baseRequest, detection, totalRequests, concurrency, findings, path, cooldownMs);
+        }
+
+        if (config.getBool("rl.bypass_query", true)) {
+            tryQueryBypass(baseRequest, detection, totalRequests, concurrency, findings, path, cooldownMs);
+        }
+
+        return findings;
+    }
+
+    // ── Blast Engine ──
+
+    private BlastResult blast(HttpRequest request, int count, int concurrency) {
+        ExecutorService pool = Executors.newFixedThreadPool(concurrency);
+        List<Future<SingleResult>> futures = new ArrayList<>();
+
+        for (int i = 0; i < count; i++) {
+            final int idx = i;
+            futures.add(pool.submit(() -> {
+                long start = System.currentTimeMillis();
+                HttpRequestResponse rr = api.http().sendRequest(request);
+                long elapsed = System.currentTimeMillis() - start;
+                int status = rr.response() != null ? rr.response().statusCode() : 0;
+                int len = rr.response() != null ? rr.response().body().length() : 0;
+                return new SingleResult(idx, status, len, elapsed, rr);
+            }));
+        }
+
+        List<SingleResult> results = new ArrayList<>();
+        for (var f : futures) {
+            try { results.add(f.get(30, TimeUnit.SECONDS)); }
+            catch (Exception e) { results.add(new SingleResult(results.size(), 0, 0, -1, null)); }
+        }
+        pool.shutdown();
+
+        // Sort by index to preserve order
+        results.sort((a, b) -> Integer.compare(a.index, b.index));
+
+        return analyzeResults(results);
+    }
+
+    private BlastResult analyzeResults(List<SingleResult> results) {
+        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null);
+
+        // Find the dominant (first) status code
+        int firstStatus = results.get(0).status;
+
+        // Find the first result that differs significantly
+        for (int i = 1; i < results.size(); i++) {
+            SingleResult r = results.get(i);
+            if (isBlockResponse(r.status, firstStatus)) {
+                return new BlastResult(i, firstStatus, r.status, r.evidence);
+            }
+        }
+
+        return new BlastResult(-1, firstStatus, 0, null);
+    }
+
+    private boolean isBlockResponse(int currentStatus, int normalStatus) {
+        if (currentStatus == 429) return true;
+        if (currentStatus == 503 && normalStatus != 503) return true;
+        if (currentStatus == 403 && normalStatus != 403) return true;
+        // Significant status change from 2xx to something else
+        if (normalStatus >= 200 && normalStatus < 300 && currentStatus >= 400) return true;
+        return false;
+    }
+
+    // ── Bypass: IP Headers ──
+
+    private void tryHeaderBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
+                                  List<Finding> findings, String path) {
+        String[] headers = {
+                "X-Forwarded-For", "X-Real-IP", "X-Originating-IP",
+                "X-Client-IP", "True-Client-IP", "CF-Connecting-IP"
+        };
+
+        // Send requests with rotating random IPs in all spoofing headers
+        ExecutorService pool = Executors.newFixedThreadPool(concurrency);
+        List<Future<SingleResult>> futures = new ArrayList<>();
+        AtomicInteger counter = new AtomicInteger(0);
+
+        for (int i = 0; i < count; i++) {
+            futures.add(pool.submit(() -> {
+                int idx = counter.getAndIncrement();
+                String fakeIp = "10." + (idx % 256) + "." + ((idx * 7) % 256) + "." + ((idx * 13 + 1) % 256);
+                HttpRequest mutated = base;
+                for (String h : headers) {
+                    mutated = mutated.withAddedHeader(h, fakeIp);
+                }
+                long start = System.currentTimeMillis();
+                HttpRequestResponse rr = api.http().sendRequest(mutated);
+                long elapsed = System.currentTimeMillis() - start;
+                int status = rr.response() != null ? rr.response().statusCode() : 0;
+                int len = rr.response() != null ? rr.response().body().length() : 0;
+                return new SingleResult(idx, status, len, elapsed, rr);
+            }));
+        }
+
+        List<SingleResult> results = new ArrayList<>();
+        for (var f : futures) {
+            try { results.add(f.get(30, TimeUnit.SECONDS)); }
+            catch (Exception e) { results.add(new SingleResult(results.size(), 0, 0, -1, null)); }
+        }
+        pool.shutdown();
+        results.sort((a, b) -> Integer.compare(a.index, b.index));
+
+        BlastResult bypassResult = analyzeResults(results);
+        boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
+
+        findings.add(Finding.builder(name(), bypassed ? "BYPASS_HEADER_SUCCESS" : "BYPASS_HEADER_FAIL")
+                .description("IP header rotation (X-Forwarded-For, X-Real-IP, etc.) "
+                        + (bypassed ? "BYPASSED rate limiting on " : "did NOT bypass rate limiting on ") + path
+                        + (bypassed && bypassResult.blockedAt < 0 ? " — all " + count + " requests succeeded."
+                                : bypassed ? " — threshold increased from " + detection.blockedAt + " to " + bypassResult.blockedAt + "."
+                                : "."))
+                .severity(bypassed ? Severity.HIGH : Severity.INFO)
+                .category(Category.RATE_LIMIT)
+                .path(path)
+                .evidence(bypassResult.blockEvidence != null ? bypassResult.blockEvidence
+                        : (results.isEmpty() || results.get(0).evidence == null ? null : results.get(0).evidence))
+                .meta("technique", "IP Header Rotation")
+                .meta("bypassed", String.valueOf(bypassed))
+                .build());
+    }
+
+    // ── Bypass: Path Normalization ──
+
+    private void tryPathBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
+                                List<Finding> findings, String path, int cooldownMs) {
+        String[] pathVariants = {
+                path + "/",
+                path.replaceFirst("/", "/./"),
+                path.replaceFirst("/", "//"),
+                path + "/.",
+        };
+
+        // Also add a URL-encoded variant of the last path segment
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < path.length() - 1) {
+            String segment = path.substring(lastSlash + 1);
+            StringBuilder encoded = new StringBuilder();
+            for (char c : segment.toCharArray()) {
+                encoded.append(String.format("%%%02X", (int) c));
+            }
+            pathVariants = appendToArray(pathVariants, path.substring(0, lastSlash + 1) + encoded);
+        }
+
+        for (String variant : pathVariants) {
+            if (variant.equals(path)) continue;
+
+            try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
+
+            HttpRequest mutated = base.withPath(variant);
+            BlastResult bypassResult = blast(mutated, count, concurrency);
+            boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
+
+            if (bypassed) {
+                findings.add(Finding.builder(name(), "BYPASS_PATH_SUCCESS")
+                        .description("Path normalization bypass succeeded on " + path
+                                + " using variant: " + variant
+                                + (bypassResult.blockedAt < 0 ? " — all " + count + " requests succeeded."
+                                        : " — threshold increased to " + bypassResult.blockedAt + "."))
+                        .severity(Severity.HIGH)
+                        .category(Category.RATE_LIMIT)
+                        .path(path)
+                        .evidence(bypassResult.blockEvidence)
+                        .meta("technique", "Path Normalization")
+                        .meta("variant", variant)
+                        .meta("bypassed", "true")
+                        .build());
+                return; // One successful path bypass is enough
+            }
+        }
+
+        findings.add(Finding.builder(name(), "BYPASS_PATH_FAIL")
+                .description("Path normalization variants did not bypass rate limiting on " + path + ".")
+                .severity(Severity.INFO)
+                .category(Category.RATE_LIMIT)
+                .path(path)
+                .meta("technique", "Path Normalization")
+                .meta("bypassed", "false")
+                .build());
+    }
+
+    // ── Bypass: Query Cache Busting ──
+
+    private void tryQueryBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
+                                 List<Finding> findings, String path, int cooldownMs) {
+        try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
+
+        // Each request gets a unique query parameter
+        ExecutorService pool = Executors.newFixedThreadPool(concurrency);
+        List<Future<SingleResult>> futures = new ArrayList<>();
+        AtomicInteger counter = new AtomicInteger(0);
+
+        for (int i = 0; i < count; i++) {
+            futures.add(pool.submit(() -> {
+                int idx = counter.getAndIncrement();
+                String sep = base.path().contains("?") ? "&" : "?";
+                HttpRequest mutated = base.withPath(base.path() + sep + "_icarus=" + idx);
+                long start = System.currentTimeMillis();
+                HttpRequestResponse rr = api.http().sendRequest(mutated);
+                long elapsed = System.currentTimeMillis() - start;
+                int status = rr.response() != null ? rr.response().statusCode() : 0;
+                int len = rr.response() != null ? rr.response().body().length() : 0;
+                return new SingleResult(idx, status, len, elapsed, rr);
+            }));
+        }
+
+        List<SingleResult> results = new ArrayList<>();
+        for (var f : futures) {
+            try { results.add(f.get(30, TimeUnit.SECONDS)); }
+            catch (Exception e) { results.add(new SingleResult(results.size(), 0, 0, -1, null)); }
+        }
+        pool.shutdown();
+        results.sort((a, b) -> Integer.compare(a.index, b.index));
+
+        BlastResult bypassResult = analyzeResults(results);
+        boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
+
+        findings.add(Finding.builder(name(), bypassed ? "BYPASS_QUERY_SUCCESS" : "BYPASS_QUERY_FAIL")
+                .description("Cache-buster query parameter (?_icarus=N) "
+                        + (bypassed ? "BYPASSED rate limiting on " : "did NOT bypass rate limiting on ") + path
+                        + (bypassed && bypassResult.blockedAt < 0 ? " — all " + count + " requests succeeded." : "."))
+                .severity(bypassed ? Severity.HIGH : Severity.INFO)
+                .category(Category.RATE_LIMIT)
+                .path(path)
+                .evidence(bypassResult.blockEvidence != null ? bypassResult.blockEvidence
+                        : (results.isEmpty() || results.get(0).evidence == null ? null : results.get(0).evidence))
+                .meta("technique", "Cache-buster Query Param")
+                .meta("bypassed", String.valueOf(bypassed))
+                .build());
+    }
+
+    // ── Helpers ──
+
+    private String describeBlockType(BlastResult r) {
+        if (r.blockStatus == 429) return "Server responded with HTTP 429 (Too Many Requests).";
+        if (r.blockStatus == 503) return "Server responded with HTTP 503 (Service Unavailable).";
+        if (r.blockStatus == 403) return "Server responded with HTTP 403 (Forbidden).";
+        return "Server responded with HTTP " + r.blockStatus + " (status changed from " + r.dominantStatus + ").";
+    }
+
+    private String[] appendToArray(String[] arr, String item) {
+        String[] result = new String[arr.length + 1];
+        System.arraycopy(arr, 0, result, 0, arr.length);
+        result[arr.length] = item;
+        return result;
+    }
+
+    // ── Data Classes ──
+
+    private record SingleResult(int index, int status, int bodyLength, long elapsedMs, HttpRequestResponse evidence) {}
+
+    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence) {}
+}

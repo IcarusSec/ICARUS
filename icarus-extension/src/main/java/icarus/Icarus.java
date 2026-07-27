@@ -40,7 +40,8 @@ public class Icarus implements BurpExtension {
             new HttpVerbModule(api),
             new JwtCheckerModule(api),
             new SensitiveHeaderModule(api),
-            new PostmanExportModule(api)
+            new PostmanExportModule(api),
+            new RateLimitModule(api)
         );
 
         var evidenceCapture = new EvidenceCapture(api, config);
@@ -149,6 +150,15 @@ public class Icarus implements BurpExtension {
 
         // ── PostmanExport defaults ──
         config.set("export.enabled", true);
+
+        // ── RateLimit defaults ──
+        config.set("rl.enabled", true);
+        config.set("rl.request_count", 50);
+        config.set("rl.concurrency", 10);
+        config.set("rl.cooldown_wait_ms", 5000);
+        config.set("rl.bypass_headers", true);
+        config.set("rl.bypass_path", true);
+        config.set("rl.bypass_query", true);
 
         // ── Evidence defaults ──
         config.set("evidence.enabled", true);

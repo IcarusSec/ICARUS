@@ -14,5 +14,6 @@ public enum Category {
     JWT_WEAKNESS,
     HTTP_METHOD,
     EXPORT,
+    RATE_LIMIT,
     MANUAL
 }

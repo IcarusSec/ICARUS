@@ -71,6 +71,7 @@ public class SettingsPanel {
         addCheckbox(pnlGlobal, "sh.enabled", "Sensitive Headers (Active)");
         addCheckbox(pnlGlobal, "sh.passive", "Sensitive Headers (Passive / Background)");
         addCheckbox(pnlGlobal, "export.enabled", "Postman Export");
+        addCheckbox(pnlGlobal, "rl.enabled", "Rate Limit Tester");
         mainPanel.add(pnlGlobal);
         mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
 
@@ -112,6 +113,17 @@ public class SettingsPanel {
         addCheckbox(pnlHv, "hv.enable_state_changing", "Enable state-changing methods (POST/PUT/DELETE/PATCH)");
         addField(pnlHv, "hv.body_strategy", "Body Strategy (AUTO/KEEP/REMOVE):");
         mainPanel.add(pnlHv);
+        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+
+        // Rate Limit Tester
+        JPanel pnlRl = createSection("Rate Limit Tester");
+        addField(pnlRl, "rl.request_count", "Requests per blast:");
+        addField(pnlRl, "rl.concurrency", "Concurrent threads:");
+        addField(pnlRl, "rl.cooldown_wait_ms", "Cooldown between bypasses (ms):");
+        addCheckbox(pnlRl, "rl.bypass_headers", "Try IP header rotation bypass (X-Forwarded-For, etc.)");
+        addCheckbox(pnlRl, "rl.bypass_path", "Try path normalization bypass (/api/./v1, //api, etc.)");
+        addCheckbox(pnlRl, "rl.bypass_query", "Try cache-buster query param bypass (?_icarus=N)");
+        mainPanel.add(pnlRl);
         mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
 
         // Evidence

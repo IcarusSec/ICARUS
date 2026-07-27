@@ -547,6 +547,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             case "JWT Checker"       -> config.getBool("jwt.enabled", true);
             case "Sensitive Headers" -> config.getBool("sh.enabled", true);
             case "Postman Export"    -> config.getBool("export.enabled", true);
+            case "Rate Limit Tester" -> config.getBool("rl.enabled", true);
             default -> true;
         };
     }

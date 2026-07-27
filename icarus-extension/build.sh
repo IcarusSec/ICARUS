@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-echo "[*] Building ICARUS Burp Extension without build tools..."
+# Extract version from Icarus.java (single source of truth)
+VERSION=$(grep -oP 'VERSION = "\K[^"]+' src/main/java/icarus/Icarus.java)
+echo "[*] Building ICARUS Burp Extension v${VERSION}..."
 
 # 1. Download Montoya API dependency if not present
 mkdir -p libs
@@ -11,7 +13,6 @@ if [ ! -f "libs/montoya-api-2025.6.jar" ]; then
 fi
 
 # 2. Prepare build directory
-echo "[*] Preparing build directories..."
 rm -rf build_manual
 mkdir -p build_manual/classes
 mkdir -p build_manual/libs
@@ -32,8 +33,8 @@ javac -d build_manual/classes \
 # 5. Package into JAR
 echo "[*] Packaging JAR..."
 cd build_manual/classes
-jar cf ../libs/icarus-1.1.1.jar .
+jar cf "../libs/icarus-${VERSION}.jar" .
 cd ../..
 
 echo "[+] Build complete!"
-echo "[+] Output: $PWD/build_manual/libs/icarus-1.1.1.jar"
+echo "[+] Output: $PWD/build_manual/libs/icarus-${VERSION}.jar"

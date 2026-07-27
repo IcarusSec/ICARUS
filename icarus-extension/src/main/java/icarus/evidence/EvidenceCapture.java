@@ -475,10 +475,14 @@ public final class EvidenceCapture {
             return;
         }
 
-        // Header line (Key: Value) — not inside JSON
+        // Header line (Key: Value) — not inside JSON. Real top-level headers are never
+        // indented (only JSON content is), so require no leading whitespace on the actual
+        // line — otherwise a wrapped continuation fragment that happens to contain a colon
+        // (a timestamp, a URL, etc.) would get misclassified as a fresh header.
+        boolean hasLeadingWhitespace = !line.isEmpty() && (line.charAt(0) == ' ' || line.charAt(0) == '\t');
         if (trimmed.contains(":") && !trimmed.startsWith("{") && !trimmed.startsWith("}") &&
             !trimmed.startsWith("[") && !trimmed.startsWith("]") &&
-            !trimmed.startsWith("\"") && !trimmed.startsWith(" ") && !trimmed.startsWith("\t")) {
+            !trimmed.startsWith("\"") && !hasLeadingWhitespace) {
             int colonIdx = line.indexOf(':');
             String key = line.substring(0, colonIdx + 1);
             String val = line.substring(colonIdx + 1);
@@ -508,6 +512,17 @@ public final class EvidenceCapture {
             g.setColor(valueColor);
             g.drawString(" " + rawVal, x + keyWidth - g.getFontMetrics().stringWidth(" "), y);
             lastValueColor[0] = valueColor;
+            return;
+        }
+
+        // A bare structural line (closing brace/bracket, possibly with a trailing comma)
+        // ends whatever object/array it closes — draw it plainly and stop carrying the
+        // previous value's color forward, even though it's indented like a continuation
+        // would be, so a wrapped value's color doesn't leak onto the token that closes it.
+        if (!trimmed.isEmpty() && trimmed.matches("[{}\\[\\],]*")) {
+            g.setColor(cs.text());
+            g.drawString(line, x, y);
+            lastValueColor[0] = null;
             return;
         }
 

@@ -12,6 +12,7 @@ import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 
 import javax.swing.JFileChooser;
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.io.File;
 import java.net.URL;
@@ -195,8 +196,17 @@ public class PostmanExportModule implements IcarusModule {
         Runnable showDialog = () -> {
             JFileChooser fc = new JFileChooser(new File(System.getProperty("user.home")));
             fc.setSelectedFile(new File(suggestedFileName(requestPath)));
-            if (fc.showSaveDialog(api.userInterface().swingUtils().suiteFrame()) == JFileChooser.APPROVE_OPTION) {
+            java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
+            if (fc.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
                 File f = fc.getSelectedFile();
+                if (f.exists()) {
+                    int overwrite = JOptionPane.showConfirmDialog(parent,
+                            f.getName() + " already exists. Overwrite?",
+                            "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    if (overwrite != JOptionPane.YES_OPTION) {
+                        return;
+                    }
+                }
                 try {
                     Files.writeString(f.toPath(), json);
                     savedPath[0] = f.getAbsolutePath();

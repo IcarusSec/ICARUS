@@ -452,7 +452,7 @@ public final class EvidenceCapture {
 
     private BufferedImage renderRateLimitTable(Finding finding, boolean force1080) {
         int imgWidth = force1080 ? 1920 : 1200;
-        int imgHeight = force1080 ? 1080 : 800;
+        int imgHeight = force1080 ? 1080 : 1200; // Gave it a bit more default vertical space to comfortably fit headers/body
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
 
@@ -598,30 +598,30 @@ public final class EvidenceCapture {
         }
 
         // Draw Raw HTTP Request and Response below the table
-        y += 50;
+        y += 60;
         g.setColor(cs.divider());
         g.drawLine(0, y, imgWidth, y);
         y += 40;
 
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        g.drawString("BASE REQUEST (HEADERS)", 20, y);
-        g.drawString(noLimit ? "SAMPLE RESPONSE (HEADERS)" : "BLOCK RESPONSE (HEADERS)", imgWidth / 2 + 20, y);
+        g.drawString("BASE REQUEST", 20, y);
+        g.drawString(noLimit ? "SAMPLE RESPONSE" : "BLOCK RESPONSE", imgWidth / 2 + 20, y);
 
         y += 22;
         g.setFont(MONO_FONT);
 
-        // Calculate dynamic height required for the headers
         String fullReq = reqLine + "\n" + rr.request().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat);
+                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
 
         String fullRes = "";
         if (rr.response() != null) {
+            String resContentType = rr.response().headerValue("Content-Type");
             String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
             fullRes = statusLine + rr.response().headers().stream()
                     .map(h -> h.name() + ": " + h.value() + "\n")
-                    .reduce("", String::concat);
+                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
 
         fullReq = wrapEvidenceText(fullReq, 120);
@@ -801,30 +801,30 @@ public final class EvidenceCapture {
             }
         }
 
-        y += 50;
+        y += 60;
         g.setColor(cs.divider());
         g.drawLine(0, y, imgWidth, y);
         y += 40;
 
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        g.drawString("BASE REQUEST (HEADERS)", 20, y);
-        g.drawString(noLimit ? "SAMPLE RESPONSE (HEADERS)" : "BLOCK RESPONSE (HEADERS)", imgWidth / 2 + 20, y);
+        g.drawString("BASE REQUEST", 20, y);
+        g.drawString(noLimit ? "SAMPLE RESPONSE" : "BLOCK RESPONSE", imgWidth / 2 + 20, y);
 
         y += 22;
         g.setFont(MONO_FONT);
 
-        // Calculate dynamic height required for the headers
         String fullReq = reqLine + "\n" + rr.request().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat);
+                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
 
         String fullRes = "";
         if (rr.response() != null) {
+            String resContentType = rr.response().headerValue("Content-Type");
             String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
             fullRes = statusLine + rr.response().headers().stream()
                     .map(h -> h.name() + ": " + h.value() + "\n")
-                    .reduce("", String::concat);
+                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
 
         fullReq = wrapEvidenceText(fullReq, 120);
@@ -834,12 +834,14 @@ public final class EvidenceCapture {
         for (String line : fullReq.split("\n")) {
             drawLine(g, line, 20, rawReqY, cs, true);
             rawReqY += 18;
+            if (rawReqY > imgHeight) break;
         }
 
         int rawResY = y;
         for (String line : fullRes.split("\n")) {
             drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false);
             rawResY += 18;
+            if (rawResY > imgHeight) break;
         }
 
         g.dispose();

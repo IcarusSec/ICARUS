@@ -100,17 +100,19 @@ public final class EvidenceCapture {
         pnlTop.add(lblDesc);
         pnlTop.add(txtDesc);
 
-        // Text Areas
+        // Text Areas — include the request line (method + path) and status line
         var rr = finding.evidence();
         String reqContentType = rr.request().headerValue("Content-Type");
-        String reqText = rr.request().headers().stream()
+        String reqLine = rr.request().method() + " " + rr.request().path() + " " + rr.request().httpVersion() + "\n";
+        String reqText = reqLine + rr.request().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
                 .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
 
         String resText = "";
         if (rr.response() != null) {
             String resContentType = rr.response().headerValue("Content-Type");
-            resText = rr.response().headers().stream()
+            String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
+            resText = statusLine + rr.response().headers().stream()
                     .map(h -> h.name() + ": " + h.value() + "\n")
                     .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
@@ -289,14 +291,12 @@ public final class EvidenceCapture {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
-        // Professional dark theme colors for the image (Dracula-inspired)
-        Color imgBg = new Color(40, 42, 54);
-        Color imgHeaderBg = new Color(30, 31, 41);
-        Color imgText = new Color(248, 248, 242);
-        Color imgAccent = new Color(255, 121, 198); // Pink accent
-        Color imgSplitter = new Color(98, 114, 164);
-        Color imgMethod = new Color(80, 250, 123); // Green for GET/POST/HTTP
-        Color imgHeaderKey = new Color(139, 233, 253); // Cyan for header keys
+        // Minimal dark theme — neutral grays, no saturated accents outside content
+        Color imgBg       = new Color(24, 24, 24);
+        Color imgHeaderBg = new Color(18, 18, 18);
+        Color imgText     = new Color(212, 212, 212);
+        Color imgDim      = new Color(120, 120, 120);
+        Color imgDivider  = new Color(50, 50, 50);
 
         // Fill background
         g.setColor(imgBg);
@@ -304,82 +304,160 @@ public final class EvidenceCapture {
 
         // Header Banner
         g.setColor(imgHeaderBg);
-        g.fillRect(0, 0, imgWidth, 80);
+        g.fillRect(0, 0, imgWidth, 70);
+        g.setColor(imgDivider);
+        g.drawLine(0, 70, imgWidth, 70);
 
-        g.setColor(imgAccent);
-        g.fillRect(0, 78, imgWidth, 2); // Subtle bottom border for header
-
-        g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 22));
-        g.drawString("ICARUS EVIDENCE • " + title, 20, 35);
-
-        g.setColor(new Color(200, 200, 200));
-        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16));
-        g.drawString("Severity: " + severity + " | " + desc, 20, 65);
-
-        // Split Line
-        g.setColor(imgSplitter);
-        g.drawLine(imgWidth / 2, 80, imgWidth / 2, imgHeight);
-
-        // Column Titles
-        int y = 110;
-        g.setFont(BOLD_FONT);
         g.setColor(Color.WHITE);
-        g.drawString("REQUEST", 20, y);
-        g.drawString("RESPONSE", imgWidth / 2 + 20, y);
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+        g.drawString("ICARUS  ·  " + title, 20, 30);
 
-        y += 30;
+        g.setColor(imgDim);
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        g.drawString(severity + "  ·  " + desc, 20, 55);
+
+        // Column labels + divider
+        int colLabelY = 90;
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+        g.setColor(imgDim);
+        g.drawString("REQUEST", 20, colLabelY);
+        g.drawString("RESPONSE", imgWidth / 2 + 20, colLabelY);
+
+        g.setColor(imgDivider);
+        g.drawLine(imgWidth / 2, 70, imgWidth / 2, imgHeight);
+
+        int y = colLabelY + 22;
         g.setFont(MONO_FONT);
 
-        // Set up clipping so text doesn't overlap between columns
+        // Clip columns
         Shape originalClip = g.getClip();
 
-        // Draw Request (Left side)
-        g.setClip(0, 80, imgWidth / 2 - 10, imgHeight - 80);
+        // Request (left)
+        g.setClip(0, 70, imgWidth / 2 - 5, imgHeight - 70);
         int reqY = y;
         for (String line : req.split("\n")) {
-            drawSyntaxHighlightedLine(g, line, 20, reqY, imgText, imgMethod, imgHeaderKey);
-            reqY += 20;
-            if (reqY > imgHeight - 20 && !force1080) break;
+            drawLine(g, line, 20, reqY, imgText, true);
+            reqY += 18;
+            if (reqY > imgHeight - 10 && !force1080) break;
         }
 
-        // Draw Response (Right side)
-        g.setClip(imgWidth / 2 + 10, 80, imgWidth / 2 - 10, imgHeight - 80);
+        // Response (right)
+        g.setClip(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70);
         int resY = y;
         for (String line : res.split("\n")) {
-            drawSyntaxHighlightedLine(g, line, imgWidth / 2 + 20, resY, imgText, imgMethod, imgHeaderKey);
-            resY += 20;
-            if (resY > imgHeight - 20 && !force1080) break;
+            drawLine(g, line, imgWidth / 2 + 20, resY, imgText, false);
+            resY += 18;
+            if (resY > imgHeight - 10 && !force1080) break;
         }
 
-        // Restore clip
         g.setClip(originalClip);
-
         g.dispose();
         return img;
     }
 
-    private void drawSyntaxHighlightedLine(Graphics2D g, String line, int x, int y, Color defaultCol, Color methodCol, Color keyCol) {
-        if (line.startsWith("GET ") || line.startsWith("POST ") || line.startsWith("PUT ") ||
-            line.startsWith("DELETE ") || line.startsWith("PATCH ") || line.startsWith("OPTIONS ") ||
-            line.startsWith("HTTP/")) {
-            g.setColor(methodCol);
+    /**
+     * Draws a single line with minimal syntax coloring:
+     *  - Request line (GET /path HTTP/1.1): white bold
+     *  - Status line (HTTP/1.1 200 OK): status code colored by range
+     *  - Header key: dim gray, value: normal text
+     *  - JSON keys: dim, strings: soft green, numbers/booleans: soft blue
+     *  - Everything else: default text color
+     */
+    private void drawLine(Graphics2D g, String line, int x, int y, Color textCol, boolean isRequest) {
+        Color dimGray  = new Color(120, 120, 120);
+        Color jsonKey  = new Color(150, 150, 150);
+        Color jsonStr  = new Color(106, 171, 115); // Muted green
+        Color jsonNum  = new Color(104, 151, 187); // Muted blue
+
+        String trimmed = line.trim();
+
+        // Request line: GET /path HTTP/1.1
+        if (isRequest && (trimmed.startsWith("GET ") || trimmed.startsWith("POST ") || trimmed.startsWith("PUT ") ||
+            trimmed.startsWith("DELETE ") || trimmed.startsWith("PATCH ") || trimmed.startsWith("HEAD ") ||
+            trimmed.startsWith("OPTIONS ") || trimmed.startsWith("TRACE ") || trimmed.startsWith("CONNECT "))) {
+            g.setFont(BOLD_FONT);
+            g.setColor(Color.WHITE);
             g.drawString(line, x, y);
-        } else if (line.contains(":") && !line.startsWith("{") && !line.startsWith("}") && !line.startsWith(" ") && !line.startsWith("\t") && !line.startsWith("\"")) {
-            // Header line
+            g.setFont(MONO_FONT);
+            return;
+        }
+
+        // Status line: HTTP/1.1 200 OK
+        if (!isRequest && trimmed.startsWith("HTTP/")) {
+            g.setFont(BOLD_FONT);
+            // Extract status code for coloring
+            int statusCode = extractStatusCode(trimmed);
+            g.setColor(statusCodeColor(statusCode));
+            g.drawString(line, x, y);
+            g.setFont(MONO_FONT);
+            return;
+        }
+
+        // Header line (Key: Value) — not inside JSON
+        if (trimmed.contains(":") && !trimmed.startsWith("{") && !trimmed.startsWith("}") &&
+            !trimmed.startsWith("[") && !trimmed.startsWith("]") &&
+            !trimmed.startsWith("\"") && !trimmed.startsWith(" ") && !trimmed.startsWith("\t")) {
             int colonIdx = line.indexOf(':');
             String key = line.substring(0, colonIdx + 1);
             String val = line.substring(colonIdx + 1);
-
-            g.setColor(keyCol);
+            g.setColor(dimGray);
             g.drawString(key, x, y);
-
             int keyWidth = g.getFontMetrics().stringWidth(key);
-            g.setColor(defaultCol);
+            g.setColor(textCol);
             g.drawString(val, x + keyWidth, y);
-        } else {
-            g.setColor(defaultCol);
-            g.drawString(line, x, y);
+            return;
         }
+
+        // JSON-ish lines
+        if (trimmed.startsWith("\"") && trimmed.contains(":")) {
+            // "key": value
+            int colonIdx = trimmed.indexOf(':');
+            String rawKey = trimmed.substring(0, colonIdx + 1);
+            String rawVal = trimmed.substring(colonIdx + 1).trim();
+
+            // Preserve leading whitespace from original line
+            int indent = line.indexOf(trimmed.charAt(0));
+            String prefix = indent > 0 ? line.substring(0, indent) : "";
+
+            g.setColor(jsonKey);
+            g.drawString(prefix + rawKey, x, y);
+            int keyWidth = g.getFontMetrics().stringWidth(prefix + rawKey + " ");
+
+            g.setColor(colorForJsonValue(rawVal, jsonStr, jsonNum, textCol));
+            g.drawString(" " + rawVal, x + keyWidth - g.getFontMetrics().stringWidth(" "), y);
+            return;
+        }
+
+        // Default
+        g.setColor(textCol);
+        g.drawString(line, x, y);
+    }
+
+    private int extractStatusCode(String statusLine) {
+        // "HTTP/1.1 200 OK" -> 200
+        String[] parts = statusLine.trim().split("\\s+");
+        if (parts.length >= 2) {
+            try { return Integer.parseInt(parts[1]); } catch (NumberFormatException ignored) {}
+        }
+        return 0;
+    }
+
+    private Color statusCodeColor(int code) {
+        if (code >= 200 && code < 300) return new Color(80, 180, 80);   // Green — success
+        if (code >= 300 && code < 400) return new Color(80, 140, 200);  // Blue — redirect
+        if (code >= 400 && code < 500) return new Color(220, 140, 60);  // Orange — client error
+        if (code >= 500)               return new Color(210, 70, 70);   // Red — server error
+        return new Color(212, 212, 212); // Unknown — default text
+    }
+
+    private Color colorForJsonValue(String val, Color strCol, Color numCol, Color defaultCol) {
+        if (val.isEmpty()) return defaultCol;
+        // Remove trailing comma
+        String clean = val.endsWith(",") ? val.substring(0, val.length() - 1).trim() : val.trim();
+        if (clean.startsWith("\""))  return strCol;
+        if ("true".equals(clean) || "false".equals(clean) || "null".equals(clean)) return numCol;
+        try { Double.parseDouble(clean); return numCol; } catch (NumberFormatException ignored) {}
+        return defaultCol;
     }
 
     // ===================================================================================
@@ -388,148 +466,176 @@ public final class EvidenceCapture {
 
     private void showPhase2(JDialog parentEditor, Finding finding, BufferedImage snap, String finalTitle) {
         parentEditor.getContentPane().removeAll();
-        parentEditor.setTitle("ICARUS Evidence Editor - Phase 2: Visual Annotation");
+        parentEditor.setTitle("ICARUS Evidence — Annotation");
+        parentEditor.setMinimumSize(new Dimension(640, 480));
+
+        // Make the dialog behave like a proper window with minimize/maximize
+        JFrame frame = new JFrame("ICARUS Evidence — Annotation");
+        frame.setSize(1200, 800);
+        frame.setLocationRelativeTo(null);
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
         JPanel root = new JPanel(new BorderLayout());
 
-        JLabel imgLabel = new JLabel(new ImageIcon(snap));
-        JLayeredPane stack = new JLayeredPane();
-        imgLabel.setBounds(0, 0, snap.getWidth(), snap.getHeight());
-        stack.add(imgLabel, Integer.valueOf(0));
-
-        JPanel canvas = new JPanel(null);
-        canvas.setBackground(Color.DARK_GRAY);
-        canvas.setPreferredSize(new Dimension(snap.getWidth() + 24, snap.getHeight() + 24));
-        stack.setBounds(12, 12, snap.getWidth(), snap.getHeight());
-        canvas.add(stack);
-
+        // Canvas panel that paints the image and annotations at an offset (for panning)
         List<Shape> shapes = new ArrayList<>();
         List<Color> cols = new ArrayList<>();
         List<String> kinds = new ArrayList<>();
-        
-        Color[] curCol = { Color.RED };
-        String[] mode = { "BOX" }; // BOX, ARROW, HIGHLIGHT, REDACT
-        Point[] start = { null };
-        Shape[] preview = { null };
 
-        JComponent drawLayer = new JComponent() {
-            { setOpaque(false); }
+        Color[] curCol = { Color.RED };
+        String[] mode = { "PAN" }; // PAN, BOX, ARROW, HIGHLIGHT, REDACT
+        Point[] dragStart = { null };
+        Shape[] preview = { null };
+        int[] panOffset = { 0, 0 }; // x, y offset for panning
+
+        JPanel canvas = new JPanel() {
             @Override
-            protected void paintComponent(Graphics g) {
-                Graphics2D g2 = (Graphics2D) g.create();
+            protected void paintComponent(Graphics gr) {
+                super.paintComponent(gr);
+                Graphics2D g2 = (Graphics2D) gr.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                
+
+                // Draw image at pan offset
+                g2.drawImage(snap, panOffset[0], panOffset[1], null);
+
+                // Draw committed shapes
+                g2.translate(panOffset[0], panOffset[1]);
+                g2.setStroke(new BasicStroke(3f));
                 for (int i = 0; i < shapes.size(); i++) {
-                    drawShape(g2, shapes.get(i), kinds.get(i), cols.get(i));
+                    drawAnnotation(g2, shapes.get(i), kinds.get(i), cols.get(i));
                 }
+                // Draw live preview
                 if (preview[0] != null) {
-                    drawShape(g2, preview[0], mode[0], curCol[0]);
+                    drawAnnotation(g2, preview[0], mode[0], curCol[0]);
                 }
                 g2.dispose();
             }
 
-            private void drawShape(Graphics2D g2, Shape s, String kind, Color c) {
-                g2.setStroke(new BasicStroke(3f));
+            private void drawAnnotation(Graphics2D g2, Shape s, String kind, Color c) {
                 if ("HIGHLIGHT".equals(kind)) {
                     g2.setColor(new Color(255, 255, 0, 80));
                     g2.fill(s);
                 } else if ("REDACT".equals(kind)) {
                     g2.setColor(Color.BLACK);
                     g2.fill(s);
-                } else if ("ARROW".equals(kind)) {
-                    g2.setColor(c);
-                    g2.draw(s);
-                    // Draw arrowhead manually in the drag logic below
                 } else {
                     g2.setColor(c);
                     g2.draw(s);
                 }
             }
         };
-        drawLayer.setBounds(0, 0, snap.getWidth(), snap.getHeight());
-        stack.add(drawLayer, Integer.valueOf(100));
+        canvas.setBackground(new Color(30, 30, 30));
+        canvas.setPreferredSize(new Dimension(snap.getWidth() + 200, snap.getHeight() + 200));
 
-        MouseAdapter dm = new MouseAdapter() {
+        MouseAdapter mouseHandler = new MouseAdapter() {
+            private Point panAnchor;
+
             @Override
             public void mousePressed(MouseEvent e) {
-                start[0] = e.getPoint();
+                if ("PAN".equals(mode[0])) {
+                    panAnchor = e.getPoint();
+                    canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                } else {
+                    // Convert screen point to image-space point
+                    dragStart[0] = new Point(e.getX() - panOffset[0], e.getY() - panOffset[1]);
+                }
             }
+
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (start[0] == null) return;
-                Point p = e.getPoint();
-                
-                if ("ARROW".equals(mode[0])) {
-                    preview[0] = createArrow(start[0], p);
-                } else {
-                    int x = Math.min(start[0].x, p.x);
-                    int y = Math.min(start[0].y, p.y);
-                    int w = Math.abs(p.x - start[0].x);
-                    int h = Math.abs(p.y - start[0].y);
-                    preview[0] = new Rectangle2D.Double(x, y, w, h);
+                if ("PAN".equals(mode[0]) && panAnchor != null) {
+                    panOffset[0] += e.getX() - panAnchor.x;
+                    panOffset[1] += e.getY() - panAnchor.y;
+                    panAnchor = e.getPoint();
+                    canvas.repaint();
+                } else if (dragStart[0] != null) {
+                    Point p = new Point(e.getX() - panOffset[0], e.getY() - panOffset[1]);
+                    if ("ARROW".equals(mode[0])) {
+                        preview[0] = createArrow(dragStart[0], p);
+                    } else {
+                        int x = Math.min(dragStart[0].x, p.x);
+                        int y = Math.min(dragStart[0].y, p.y);
+                        int w = Math.abs(p.x - dragStart[0].x);
+                        int h = Math.abs(p.y - dragStart[0].y);
+                        preview[0] = new Rectangle2D.Double(x, y, w, h);
+                    }
+                    canvas.repaint();
                 }
-                drawLayer.repaint();
             }
+
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (preview[0] != null) {
+                if ("PAN".equals(mode[0])) {
+                    panAnchor = null;
+                    canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                } else if (preview[0] != null) {
                     shapes.add(preview[0]);
                     cols.add(curCol[0]);
                     kinds.add(mode[0]);
+                    preview[0] = null;
+                    dragStart[0] = null;
+                    canvas.repaint();
                 }
-                start[0] = null;
-                preview[0] = null;
-                drawLayer.repaint();
             }
         };
-        drawLayer.addMouseListener(dm);
-        drawLayer.addMouseMotionListener(dm);
+        canvas.addMouseListener(mouseHandler);
+        canvas.addMouseMotionListener(mouseHandler);
 
-        root.add(new JScrollPane(canvas), BorderLayout.CENTER);
+        JScrollPane scroll = new JScrollPane(canvas);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        scroll.getHorizontalScrollBar().setUnitIncrement(16);
+        root.add(scroll, BorderLayout.CENTER);
 
         // Toolbar
-        JPanel bar = new JPanel(new GridLayout(0, 1, 0, 8));
+        JPanel bar = new JPanel(new GridLayout(0, 1, 0, 6));
         bar.setBorder(new EmptyBorder(8, 8, 8, 8));
-        root.add(bar, BorderLayout.EAST);
 
-        JButton colourBtn = createModernButton("Colour", curCol[0]);
-        JToggleButton boxBtn = new JToggleButton("Box", true);
+        JToggleButton panBtn = new JToggleButton("Pan", true);
+        JToggleButton boxBtn = new JToggleButton("Box");
         JToggleButton arrowBtn = new JToggleButton("Arrow");
         JToggleButton hiBtn = new JToggleButton("Highlight");
         JToggleButton redactBtn = new JToggleButton("Redact");
-        JButton undoBtn = createModernButton("Undo", new Color(70, 70, 70));
-        JButton saveBtn = createModernButton("Save Evidence", ACCENT_COLOR);
 
         ButtonGroup grp = new ButtonGroup();
-        grp.add(boxBtn); grp.add(arrowBtn); grp.add(hiBtn); grp.add(redactBtn);
+        grp.add(panBtn); grp.add(boxBtn); grp.add(arrowBtn); grp.add(hiBtn); grp.add(redactBtn);
 
-        Arrays.asList(boxBtn, arrowBtn, hiBtn, redactBtn)
-                .forEach(b -> b.setFont(b.getFont().deriveFont(Font.BOLD, 14f)));
+        for (var b : List.of(panBtn, boxBtn, arrowBtn, hiBtn, redactBtn)) {
+            b.setFont(b.getFont().deriveFont(Font.BOLD, 13f));
+        }
 
         ActionListener modeSel = a -> {
-            if (a.getSource() == boxBtn) mode[0] = "BOX";
-            else if (a.getSource() == arrowBtn) mode[0] = "ARROW";
-            else if (a.getSource() == hiBtn) mode[0] = "HIGHLIGHT";
-            else if (a.getSource() == redactBtn) mode[0] = "REDACT";
-            drawLayer.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            if (a.getSource() == panBtn) {
+                mode[0] = "PAN";
+                canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+            } else {
+                if (a.getSource() == boxBtn) mode[0] = "BOX";
+                else if (a.getSource() == arrowBtn) mode[0] = "ARROW";
+                else if (a.getSource() == hiBtn) mode[0] = "HIGHLIGHT";
+                else if (a.getSource() == redactBtn) mode[0] = "REDACT";
+                canvas.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+            }
         };
-        boxBtn.addActionListener(modeSel); arrowBtn.addActionListener(modeSel);
-        hiBtn.addActionListener(modeSel); redactBtn.addActionListener(modeSel);
+        panBtn.addActionListener(modeSel); boxBtn.addActionListener(modeSel);
+        arrowBtn.addActionListener(modeSel); hiBtn.addActionListener(modeSel);
+        redactBtn.addActionListener(modeSel);
 
+        JButton colourBtn = createModernButton("Colour", curCol[0]);
         colourBtn.addActionListener(a -> {
-            Color chosen = JColorChooser.showDialog(parentEditor, "Choose colour", curCol[0]);
+            Color chosen = JColorChooser.showDialog(frame, "Choose colour", curCol[0]);
             if (chosen != null) { curCol[0] = chosen; colourBtn.setBackground(curCol[0]); }
         });
 
+        JButton undoBtn = createModernButton("Undo", new Color(70, 70, 70));
         undoBtn.addActionListener(a -> {
             if (!shapes.isEmpty()) {
                 shapes.remove(shapes.size() - 1);
                 cols.remove(cols.size() - 1);
                 kinds.remove(kinds.size() - 1);
-                drawLayer.repaint();
+                canvas.repaint();
             }
         });
 
+        JButton saveBtn = createModernButton("Save Evidence", ACCENT_COLOR);
         saveBtn.addActionListener(a -> {
             try {
                 BufferedImage out = new BufferedImage(snap.getWidth(), snap.getHeight(), BufferedImage.TYPE_INT_ARGB);
@@ -555,18 +661,20 @@ public final class EvidenceCapture {
 
                 JFileChooser fc = new JFileChooser(new File(System.getProperty("user.home")));
                 fc.setSelectedFile(new File("evidence-" + finalTitle.replaceAll("[^a-zA-Z0-9.-]", "_") + ".png"));
-                if (fc.showSaveDialog(parentEditor) == JFileChooser.APPROVE_OPTION) {
+                if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
                     File f = fc.getSelectedFile();
                     ImageIO.write(out, "png", f);
                     captured.add(new CapturedEvidence(finding, f.toPath(), out));
-                    JOptionPane.showMessageDialog(parentEditor, "Saved: " + f.getAbsolutePath());
-                    parentEditor.dispose();
+                    JOptionPane.showMessageDialog(frame, "Saved: " + f.getAbsolutePath());
+                    frame.dispose();
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
         });
 
+        bar.add(panBtn);
+        bar.add(new JSeparator());
         bar.add(colourBtn);
         bar.add(boxBtn);
         bar.add(arrowBtn);
@@ -575,10 +683,14 @@ public final class EvidenceCapture {
         bar.add(undoBtn);
         bar.add(new JSeparator());
         bar.add(saveBtn);
+        root.add(bar, BorderLayout.EAST);
 
-        parentEditor.setContentPane(root);
-        parentEditor.revalidate();
-        parentEditor.repaint();
+        // Default cursor for pan mode
+        canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+
+        parentEditor.dispose(); // Close the Phase 1 dialog
+        frame.setContentPane(root);
+        frame.setVisible(true);
     }
 
     private Shape createArrow(Point from, Point to) {

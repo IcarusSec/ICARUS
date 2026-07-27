@@ -140,7 +140,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(runAll);
 
-        var createEvidence = new JMenuItem("ICARUS → CREATE EVIDENCE");
+        var createEvidence = new JMenuItem("ICARUS → Create Evidence");
         createEvidence.addActionListener(e -> {
             for (var rr : requestResponses) {
                 Finding manualFinding = Finding.builder("Manual", "MANUAL_EVIDENCE")

@@ -11,7 +11,11 @@ import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 
+import javax.swing.JFileChooser;
+import javax.swing.SwingUtilities;
+import java.io.File;
 import java.net.URL;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -165,8 +169,12 @@ public class PostmanExportModule implements IcarusModule {
         json.append("  ]\n");
         json.append("}\n");
 
+        String savedPath = promptSaveToFile(json.toString(), path);
+
         Finding finding = Finding.builder("Postman Export", "EXPORT")
-                .description("Postman Collection exported")
+                .description(savedPath != null
+                        ? "Postman Collection exported and saved to " + savedPath
+                        : "Postman Collection exported (not saved to disk)")
                 .severity(Severity.INFO)
                 .category(Category.EXPORT)
                 .evidence(requestResponse)
@@ -174,5 +182,48 @@ public class PostmanExportModule implements IcarusModule {
                 .build();
 
         return List.of(finding);
+    }
+
+    /**
+     * Prompts the user to confirm/choose where to save the exported collection.
+     *
+     * @return the absolute path saved to, or null if the user canceled or the save failed.
+     */
+    private String promptSaveToFile(String json, String requestPath) {
+        String[] savedPath = { null };
+
+        Runnable showDialog = () -> {
+            JFileChooser fc = new JFileChooser(new File(System.getProperty("user.home")));
+            fc.setSelectedFile(new File(suggestedFileName(requestPath)));
+            if (fc.showSaveDialog(api.userInterface().swingUtils().suiteFrame()) == JFileChooser.APPROVE_OPTION) {
+                File f = fc.getSelectedFile();
+                try {
+                    Files.writeString(f.toPath(), json);
+                    savedPath[0] = f.getAbsolutePath();
+                    api.logging().logToOutput("Postman collection saved to: " + f.getAbsolutePath());
+                } catch (Exception e) {
+                    api.logging().logToError("Failed to save Postman collection: " + e);
+                }
+            }
+        };
+
+        try {
+            if (SwingUtilities.isEventDispatchThread()) {
+                showDialog.run();
+            } else {
+                SwingUtilities.invokeAndWait(showDialog);
+            }
+        } catch (Exception e) {
+            api.logging().logToError("Failed to show Postman export save dialog: " + e);
+        }
+
+        return savedPath[0];
+    }
+
+    private String suggestedFileName(String requestPath) {
+        String base = (requestPath == null || requestPath.isBlank() || requestPath.equals("/")) ? "root" : requestPath;
+        String sanitized = base.replaceAll("[^a-zA-Z0-9._-]", "_");
+        if (sanitized.length() > 40) sanitized = sanitized.substring(0, 40);
+        return "postman-export-" + sanitized + ".json";
     }
 }

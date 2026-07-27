@@ -274,13 +274,20 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
 
         btnReport.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+            fc.setSelectedFile(new java.io.File("report.html"));
+            if (fc.showSaveDialog(dialog) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
+
             try {
                 List<Finding> reportFindings = new ArrayList<>();
                 for (FindingRecord r : records) {
                     reportFindings.add(r.getFinding());
                 }
-                reportGenerator.generate(reportFindings, config, evidenceCapture);
-                JOptionPane.showMessageDialog(dialog, "HTML Report generated from saved evidence.");
+                java.nio.file.Path outputFile = fc.getSelectedFile().toPath();
+                reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+                JOptionPane.showMessageDialog(dialog, "HTML Report generated: " + outputFile.toAbsolutePath());
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, "Report generation failed: " + ex.getMessage());
             }

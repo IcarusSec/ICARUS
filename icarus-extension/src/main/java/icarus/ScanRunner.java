@@ -126,7 +126,7 @@ public final class ScanRunner {
         }
 
         for (var module : modules) {
-            if (!isModuleEnabled(module)) continue;
+            if (!isModuleEnabled(module) || !module.includeInBulkScan()) continue;
 
             context.log("──── Running: " + module.name() + " ────");
 

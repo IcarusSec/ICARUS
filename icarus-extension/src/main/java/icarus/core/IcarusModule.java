@@ -24,4 +24,14 @@ public interface IcarusModule {
      * @return list of findings (empty if nothing detected)
      */
     List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config);
+
+    /**
+     * Whether this module should run as part of "Run All Modules". Utility modules that
+     * aren't security tests (e.g. exporting a request, rather than looking for a
+     * vulnerability) should return false here — they stay available via their own
+     * individual menu item, but don't fire implicitly on a bulk scan.
+     */
+    default boolean includeInBulkScan() {
+        return true;
+    }
 }

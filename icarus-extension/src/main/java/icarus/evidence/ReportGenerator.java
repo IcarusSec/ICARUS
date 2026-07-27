@@ -9,6 +9,7 @@ import icarus.evidence.EvidenceCapture.CapturedEvidence;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -26,7 +27,13 @@ public final class ReportGenerator {
         this.api = api;
     }
 
-    public void generate(List<Finding> findings, ModuleConfig config, EvidenceCapture capture) throws IOException {
+    /**
+     * @param outputHtmlFile where to write the report, chosen/confirmed by the caller
+     *                       (e.g. via a save dialog). Every referenced evidence image is
+     *                       copied alongside it so the relative &lt;img&gt; links resolve
+     *                       regardless of where the images were originally saved.
+     */
+    public void generate(List<Finding> findings, ModuleConfig config, EvidenceCapture capture, Path outputHtmlFile) throws IOException {
         if (!config.getBool("evidence.html_report", true) || findings.isEmpty()) {
             return;
         }
@@ -36,9 +43,15 @@ public final class ReportGenerator {
 
         if (captured.isEmpty()) return;
 
-        // 2. Generate HTML file in the same directory as the images
-        Path reportDir = captured.get(0).imagePath().getParent();
-        Path htmlFile = reportDir.resolve("report.html");
+        Path reportDir = outputHtmlFile.toAbsolutePath().getParent();
+        Files.createDirectories(reportDir);
+
+        for (var c : captured) {
+            Path dest = reportDir.resolve(c.imagePath().getFileName());
+            if (!c.imagePath().toAbsolutePath().equals(dest)) {
+                Files.copy(c.imagePath(), dest, StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
 
         StringBuilder html = new StringBuilder();
         appendHeader(html, reportDir.getFileName().toString());
@@ -46,8 +59,8 @@ public final class ReportGenerator {
         appendFindings(html, captured);
         appendFooter(html);
 
-        Files.writeString(htmlFile, html.toString());
-        api.logging().logToOutput("HTML Report generated at: " + htmlFile.toAbsolutePath());
+        Files.writeString(outputHtmlFile, html.toString());
+        api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
     }
 
     private void appendHeader(StringBuilder html, String reportName) {

@@ -170,12 +170,7 @@ public class Icarus implements BurpExtension {
 
     private void loadPersistedConfig(ModuleConfig config, String serialized) {
         try {
-            for (String line : serialized.split("\n")) {
-                int eq = line.indexOf('=');
-                if (eq > 0) {
-                    config.set(line.substring(0, eq), line.substring(eq + 1));
-                }
-            }
+            config.loadSerialized(serialized);
         } catch (Exception ignored) {
             // Corrupted config — stick with defaults
         }

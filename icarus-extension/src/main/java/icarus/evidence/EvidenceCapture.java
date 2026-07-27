@@ -128,8 +128,13 @@ public final class EvidenceCapture {
                     .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
 
-        reqText = wrapEvidenceText(reqText, 120);
-        resText = wrapEvidenceText(resText, 120);
+        // Wrap conservatively for the narrower 1200px layout: "Force 1920x1080" is chosen
+        // later (at "Proceed to Annotation"), and nothing downstream re-wraps this text
+        // once the user has edited it in the JTextArea below. 1200's budget is strictly
+        // smaller than 1920's, so this is safe either way.
+        int wrapWidth = maxCharsForColumnWidth(1200);
+        reqText = wrapEvidenceText(reqText, wrapWidth);
+        resText = wrapEvidenceText(resText, wrapWidth);
 
         JTextArea reqArea = createStyledTextArea(reqText);
         JTextArea resArea = createStyledTextArea(resText);
@@ -282,9 +287,37 @@ public final class EvidenceCapture {
     }
 
     /**
+     * Computes how many monospace characters actually fit in a request/response column's
+     * real pixel width, so wrapping matches what will actually be drawn instead of a
+     * hardcoded guess. Both MONO_FONT and BOLD_FONT are monospace, so per-char advance
+     * width is uniform within each — checking both covers request/status lines (bold) and
+     * everything else (plain).
+     */
+    private int maxCharsForColumnWidth(int imgWidth) {
+        int columnBudget = imgWidth / 2 - 25; // matches the setClip/x-offset math in both renderers
+        BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = probe.createGraphics();
+        try {
+            FontMetrics monoFm = g.getFontMetrics(MONO_FONT);
+            FontMetrics boldFm = g.getFontMetrics(BOLD_FONT);
+            int worstCharWidth = 1;
+            for (int c = 32; c < 127; c++) {
+                worstCharWidth = Math.max(worstCharWidth, monoFm.charWidth(c));
+                worstCharWidth = Math.max(worstCharWidth, boldFm.charWidth(c));
+            }
+            return Math.max(1, columnBudget / worstCharWidth);
+        } finally {
+            g.dispose();
+        }
+    }
+
+    /**
      * Wraps text to maxLineLength, breaking on the last whitespace before the limit when
      * one exists (so prose doesn't split mid-word) and falling back to a hard character
      * break when a single token (URL, base64 blob, etc.) has no whitespace to break on.
+     * Continuation lines keep the original line's leading indentation, so a wrapped JSON
+     * or header value stays visually aligned within its structure instead of collapsing
+     * to the left margin.
      */
     private String wrapEvidenceText(String text, int maxLineLength) {
         StringBuilder sb = new StringBuilder();
@@ -294,16 +327,26 @@ public final class EvidenceCapture {
                 continue;
             }
 
-            int start = 0;
+            int indentLen = 0;
+            while (indentLen < line.length() && (line.charAt(indentLen) == ' ' || line.charAt(indentLen) == '\t')) {
+                indentLen++;
+            }
+            if (indentLen >= line.length()) {
+                indentLen = 0; // whole line is whitespace; nothing to preserve
+            }
+            String indent = line.substring(0, indentLen);
+            int contentBudget = Math.max(10, maxLineLength - indentLen);
+
+            int start = indentLen;
             while (start < line.length()) {
-                int end = Math.min(start + maxLineLength, line.length());
+                int end = Math.min(start + contentBudget, line.length());
                 if (end < line.length()) {
                     int lastSpace = line.lastIndexOf(' ', end);
                     if (lastSpace > start) {
                         end = lastSpace;
                     }
                 }
-                sb.append(line, start, end).append("\n");
+                sb.append(indent).append(line, start, end).append("\n");
                 start = end;
                 while (start < line.length() && line.charAt(start) == ' ') start++;
             }
@@ -375,16 +418,18 @@ public final class EvidenceCapture {
         // Request (left)
         g.setClip(0, 70, imgWidth / 2 - 5, imgHeight - 70);
         int reqY = y;
+        Color[] reqLastColor = new Color[1];
         for (String line : reqLines) {
-            drawLine(g, line, 20, reqY, cs, true);
+            drawLine(g, line, 20, reqY, cs, true, reqLastColor);
             reqY += 18;
         }
 
         // Response (right)
         g.setClip(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70);
         int resY = y;
+        Color[] resLastColor = new Color[1];
         for (String line : resLines) {
-            drawLine(g, line, imgWidth / 2 + 20, resY, cs, false);
+            drawLine(g, line, imgWidth / 2 + 20, resY, cs, false, resLastColor);
             resY += 18;
         }
 
@@ -393,7 +438,18 @@ public final class EvidenceCapture {
         return img;
     }
 
-    private void drawLine(Graphics2D g, String line, int x, int y, EvidenceColorScheme cs, boolean isRequest) {
+    /**
+     * @param lastValueColor single-element carrier holding the color of the most recently
+     *                       drawn key/value's value, so a wrapped continuation line (no
+     *                       leading quote/colon of its own to classify by) can be drawn in
+     *                       the same color as the value it's continuing instead of falling
+     *                       back to the generic default. Reset to null on any line that
+     *                       isn't itself indented, since that means it's fresh top-level
+     *                       content, not a continuation. Re-derived from the current text's
+     *                       own indentation every draw, so it stays correct even after the
+     *                       user edits the text in showPhase1's JTextArea.
+     */
+    private void drawLine(Graphics2D g, String line, int x, int y, EvidenceColorScheme cs, boolean isRequest, Color[] lastValueColor) {
         String trimmed = line.trim();
 
         // Request line: GET /path HTTP/1.1
@@ -404,6 +460,7 @@ public final class EvidenceCapture {
             g.setColor(cs.titleText());
             g.drawString(line, x, y);
             g.setFont(MONO_FONT);
+            lastValueColor[0] = null;
             return;
         }
 
@@ -414,6 +471,7 @@ public final class EvidenceCapture {
             g.setColor(cs.statusColor(statusCode));
             g.drawString(line, x, y);
             g.setFont(MONO_FONT);
+            lastValueColor[0] = null;
             return;
         }
 
@@ -429,6 +487,7 @@ public final class EvidenceCapture {
             int keyWidth = g.getFontMetrics().stringWidth(key);
             g.setColor(cs.text());
             g.drawString(val, x + keyWidth, y);
+            lastValueColor[0] = cs.text();
             return;
         }
 
@@ -445,13 +504,23 @@ public final class EvidenceCapture {
             g.drawString(prefix + rawKey, x, y);
             int keyWidth = g.getFontMetrics().stringWidth(prefix + rawKey + " ");
 
-            g.setColor(colorForJsonValue(rawVal, cs.jsonString(), cs.jsonNumber(), cs.text()));
+            Color valueColor = colorForJsonValue(rawVal, cs.jsonString(), cs.jsonNumber(), cs.text());
+            g.setColor(valueColor);
             g.drawString(" " + rawVal, x + keyWidth - g.getFontMetrics().stringWidth(" "), y);
+            lastValueColor[0] = valueColor;
             return;
         }
 
-        // Default
-        g.setColor(cs.text());
+        // Default — but if this line is indented (looks like a wrapped continuation of the
+        // previous value) and we're carrying a color forward, keep using it instead of the
+        // flat default so wrapped values stay visually consistent.
+        boolean indented = !line.isEmpty() && (line.charAt(0) == ' ' || line.charAt(0) == '\t');
+        if (indented && lastValueColor[0] != null) {
+            g.setColor(lastValueColor[0]);
+        } else {
+            g.setColor(cs.text());
+            lastValueColor[0] = null;
+        }
         g.drawString(line, x, y);
     }
 
@@ -644,8 +713,11 @@ public final class EvidenceCapture {
                     .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
 
-        fullReq = wrapEvidenceText(fullReq, 120);
-        fullRes = wrapEvidenceText(fullRes, 120);
+        // imgWidth is already fixed at this call site, so wrap tightly against the real
+        // column budget instead of the conservative narrower-layout guess used above.
+        int wrapWidth = maxCharsForColumnWidth(imgWidth);
+        fullReq = wrapEvidenceText(fullReq, wrapWidth);
+        fullRes = wrapEvidenceText(fullRes, wrapWidth);
 
         int reqLines = fullReq.split("\n").length;
         int resLines = fullRes.split("\n").length;
@@ -664,16 +736,18 @@ public final class EvidenceCapture {
         // Request
         g.setClip(0, clipY, imgWidth / 2 - 5, imgHeight - clipY);
         int rawReqY = y;
+        Color[] rawReqLastColor = new Color[1];
         for (String line : fullReq.split("\n")) {
-            drawLine(g, line, 20, rawReqY, cs, true);
+            drawLine(g, line, 20, rawReqY, cs, true, rawReqLastColor);
             rawReqY += 18;
         }
 
         // Response
         g.setClip(imgWidth / 2 + 5, clipY, imgWidth / 2 - 5, imgHeight - clipY);
         int rawResY = y;
+        Color[] rawResLastColor = new Color[1];
         for (String line : fullRes.split("\n")) {
-            drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false);
+            drawLine(g, line, imgWidth / 2 + 20, rawResY, cs, false, rawResLastColor);
             rawResY += 18;
         }
 

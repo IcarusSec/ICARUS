@@ -251,7 +251,7 @@ public class JwtCheckerModule implements IcarusModule {
                     findings.add(createFinding("VERBOSE_ERROR_" + label, "Active test triggered verbose error for " + label, Severity.MEDIUM, result));
                 }
             } catch (Exception e) {
-                api.logging().logToError("JWT Checker: active test '" + label + "' failed: " + e.getMessage());
+                api.logging().logToError("JWT Checker: active test '" + label + "' failed: " + e);
             }
         };
 

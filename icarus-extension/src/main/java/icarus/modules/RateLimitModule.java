@@ -10,7 +10,6 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -175,14 +174,24 @@ public class RateLimitModule implements IcarusModule {
     // ── Blast Engine ──
 
     private BlastResult blast(HttpRequest request, int count, int concurrency) {
+        return blastWithMutator(count, concurrency, idx -> request);
+    }
+
+    /**
+     * Sends {@code count} requests concurrently, each built by {@code mutator} from its index,
+     * and analyzes the responses for a rate-limit block. Shared by {@link #blast} and the
+     * bypass-attempt methods below, which previously each reimplemented this loop.
+     */
+    private BlastResult blastWithMutator(int count, int concurrency, java.util.function.IntFunction<HttpRequest> mutator) {
         ExecutorService pool = Executors.newFixedThreadPool(concurrency);
         List<Future<SingleResult>> futures = new ArrayList<>();
 
         for (int i = 0; i < count; i++) {
             final int idx = i;
             futures.add(pool.submit(() -> {
+                HttpRequest mutated = mutator.apply(idx);
                 long start = System.currentTimeMillis();
-                HttpRequestResponse rr = api.http().sendRequest(request);
+                HttpRequestResponse rr = api.http().sendRequest(mutated);
                 long elapsed = System.currentTimeMillis() - start;
                 int status = rr.response() != null ? rr.response().statusCode() : 0;
                 int len = rr.response() != null ? rr.response().body().length() : 0;
@@ -247,36 +256,14 @@ public class RateLimitModule implements IcarusModule {
         };
 
         // Send requests with rotating random IPs in all spoofing headers
-        ExecutorService pool = Executors.newFixedThreadPool(concurrency);
-        List<Future<SingleResult>> futures = new ArrayList<>();
-        AtomicInteger counter = new AtomicInteger(0);
-
-        for (int i = 0; i < count; i++) {
-            futures.add(pool.submit(() -> {
-                int idx = counter.getAndIncrement();
-                String fakeIp = "10." + (idx % 256) + "." + ((idx * 7) % 256) + "." + ((idx * 13 + 1) % 256);
-                HttpRequest mutated = base;
-                for (String h : headers) {
-                    mutated = mutated.withAddedHeader(h, fakeIp);
-                }
-                long start = System.currentTimeMillis();
-                HttpRequestResponse rr = api.http().sendRequest(mutated);
-                long elapsed = System.currentTimeMillis() - start;
-                int status = rr.response() != null ? rr.response().statusCode() : 0;
-                int len = rr.response() != null ? rr.response().body().length() : 0;
-                return new SingleResult(idx, status, len, elapsed, rr);
-            }));
-        }
-
-        List<SingleResult> results = new ArrayList<>();
-        for (var f : futures) {
-            try { results.add(f.get(30, TimeUnit.SECONDS)); }
-            catch (Exception e) { results.add(new SingleResult(results.size(), 0, 0, -1, null)); }
-        }
-        pool.shutdown();
-        results.sort((a, b) -> Integer.compare(a.index, b.index));
-
-        BlastResult bypassResult = analyzeResults(results);
+        BlastResult bypassResult = blastWithMutator(count, concurrency, idx -> {
+            String fakeIp = "10." + (idx % 256) + "." + ((idx * 7) % 256) + "." + ((idx * 13 + 1) % 256);
+            HttpRequest mutated = base;
+            for (String h : headers) {
+                mutated = mutated.withAddedHeader(h, fakeIp);
+            }
+            return mutated;
+        });
         boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
         bypassLog.append(bypassed ? "✓ " : "✗ ")
@@ -334,33 +321,10 @@ public class RateLimitModule implements IcarusModule {
         try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
 
         // Each request gets a unique query parameter
-        ExecutorService pool = Executors.newFixedThreadPool(concurrency);
-        List<Future<SingleResult>> futures = new ArrayList<>();
-        AtomicInteger counter = new AtomicInteger(0);
-
-        for (int i = 0; i < count; i++) {
-            futures.add(pool.submit(() -> {
-                int idx = counter.getAndIncrement();
-                String sep = base.path().contains("?") ? "&" : "?";
-                HttpRequest mutated = base.withPath(base.path() + sep + "_icarus=" + idx);
-                long start = System.currentTimeMillis();
-                HttpRequestResponse rr = api.http().sendRequest(mutated);
-                long elapsed = System.currentTimeMillis() - start;
-                int status = rr.response() != null ? rr.response().statusCode() : 0;
-                int len = rr.response() != null ? rr.response().body().length() : 0;
-                return new SingleResult(idx, status, len, elapsed, rr);
-            }));
-        }
-
-        List<SingleResult> results = new ArrayList<>();
-        for (var f : futures) {
-            try { results.add(f.get(30, TimeUnit.SECONDS)); }
-            catch (Exception e) { results.add(new SingleResult(results.size(), 0, 0, -1, null)); }
-        }
-        pool.shutdown();
-        results.sort((a, b) -> Integer.compare(a.index, b.index));
-
-        BlastResult bypassResult = analyzeResults(results);
+        BlastResult bypassResult = blastWithMutator(count, concurrency, idx -> {
+            String sep = base.path().contains("?") ? "&" : "?";
+            return base.withPath(base.path() + sep + "_icarus=" + idx);
+        });
         boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
         bypassLog.append(bypassed ? "✓ " : "✗ ")

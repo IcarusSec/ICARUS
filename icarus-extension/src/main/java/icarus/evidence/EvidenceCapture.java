@@ -3,6 +3,7 @@ package icarus.evidence;
 import burp.api.montoya.MontoyaApi;
 import icarus.core.Finding;
 import icarus.core.JsonParser;
+import icarus.core.ModuleConfig;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -31,10 +32,12 @@ public final class EvidenceCapture {
     private static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 14);
 
     private final MontoyaApi api;
+    private final ModuleConfig config;
     private final List<CapturedEvidence> captured = new ArrayList<>();
 
-    public EvidenceCapture(MontoyaApi api) {
+    public EvidenceCapture(MontoyaApi api, ModuleConfig config) {
         this.api = api;
+        this.config = config;
     }
 
     public List<CapturedEvidence> getCaptured() {
@@ -286,44 +289,39 @@ public final class EvidenceCapture {
         int imgWidth = force1080 ? 1920 : 1200;
         int imgHeight = force1080 ? 1080 : 800;
 
+        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
+
         BufferedImage img = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
-        // Minimal dark theme — neutral grays, no saturated accents outside content
-        Color imgBg       = new Color(24, 24, 24);
-        Color imgHeaderBg = new Color(18, 18, 18);
-        Color imgText     = new Color(212, 212, 212);
-        Color imgDim      = new Color(120, 120, 120);
-        Color imgDivider  = new Color(50, 50, 50);
-
         // Fill background
-        g.setColor(imgBg);
+        g.setColor(cs.background());
         g.fillRect(0, 0, imgWidth, imgHeight);
 
         // Header Banner
-        g.setColor(imgHeaderBg);
+        g.setColor(cs.headerBg());
         g.fillRect(0, 0, imgWidth, 70);
-        g.setColor(imgDivider);
+        g.setColor(cs.divider());
         g.drawLine(0, 70, imgWidth, 70);
 
-        g.setColor(Color.WHITE);
+        g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
         g.drawString("ICARUS  ·  " + title, 20, 30);
 
-        g.setColor(imgDim);
+        g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
         g.drawString(severity + "  ·  " + desc, 20, 55);
 
         // Column labels + divider
         int colLabelY = 90;
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
-        g.setColor(imgDim);
+        g.setColor(cs.dim());
         g.drawString("REQUEST", 20, colLabelY);
         g.drawString("RESPONSE", imgWidth / 2 + 20, colLabelY);
 
-        g.setColor(imgDivider);
+        g.setColor(cs.divider());
         g.drawLine(imgWidth / 2, 70, imgWidth / 2, imgHeight);
 
         int y = colLabelY + 22;
@@ -336,7 +334,7 @@ public final class EvidenceCapture {
         g.setClip(0, 70, imgWidth / 2 - 5, imgHeight - 70);
         int reqY = y;
         for (String line : req.split("\n")) {
-            drawLine(g, line, 20, reqY, imgText, true);
+            drawLine(g, line, 20, reqY, cs, true);
             reqY += 18;
             if (reqY > imgHeight - 10 && !force1080) break;
         }
@@ -345,7 +343,7 @@ public final class EvidenceCapture {
         g.setClip(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70);
         int resY = y;
         for (String line : res.split("\n")) {
-            drawLine(g, line, imgWidth / 2 + 20, resY, imgText, false);
+            drawLine(g, line, imgWidth / 2 + 20, resY, cs, false);
             resY += 18;
             if (resY > imgHeight - 10 && !force1080) break;
         }
@@ -355,20 +353,7 @@ public final class EvidenceCapture {
         return img;
     }
 
-    /**
-     * Draws a single line with minimal syntax coloring:
-     *  - Request line (GET /path HTTP/1.1): white bold
-     *  - Status line (HTTP/1.1 200 OK): status code colored by range
-     *  - Header key: dim gray, value: normal text
-     *  - JSON keys: dim, strings: soft green, numbers/booleans: soft blue
-     *  - Everything else: default text color
-     */
-    private void drawLine(Graphics2D g, String line, int x, int y, Color textCol, boolean isRequest) {
-        Color dimGray  = new Color(120, 120, 120);
-        Color jsonKey  = new Color(150, 150, 150);
-        Color jsonStr  = new Color(106, 171, 115); // Muted green
-        Color jsonNum  = new Color(104, 151, 187); // Muted blue
-
+    private void drawLine(Graphics2D g, String line, int x, int y, EvidenceColorScheme cs, boolean isRequest) {
         String trimmed = line.trim();
 
         // Request line: GET /path HTTP/1.1
@@ -376,7 +361,7 @@ public final class EvidenceCapture {
             trimmed.startsWith("DELETE ") || trimmed.startsWith("PATCH ") || trimmed.startsWith("HEAD ") ||
             trimmed.startsWith("OPTIONS ") || trimmed.startsWith("TRACE ") || trimmed.startsWith("CONNECT "))) {
             g.setFont(BOLD_FONT);
-            g.setColor(Color.WHITE);
+            g.setColor(cs.titleText());
             g.drawString(line, x, y);
             g.setFont(MONO_FONT);
             return;
@@ -385,9 +370,8 @@ public final class EvidenceCapture {
         // Status line: HTTP/1.1 200 OK
         if (!isRequest && trimmed.startsWith("HTTP/")) {
             g.setFont(BOLD_FONT);
-            // Extract status code for coloring
             int statusCode = extractStatusCode(trimmed);
-            g.setColor(statusCodeColor(statusCode));
+            g.setColor(cs.statusColor(statusCode));
             g.drawString(line, x, y);
             g.setFont(MONO_FONT);
             return;
@@ -400,41 +384,38 @@ public final class EvidenceCapture {
             int colonIdx = line.indexOf(':');
             String key = line.substring(0, colonIdx + 1);
             String val = line.substring(colonIdx + 1);
-            g.setColor(dimGray);
+            g.setColor(cs.headerKey());
             g.drawString(key, x, y);
             int keyWidth = g.getFontMetrics().stringWidth(key);
-            g.setColor(textCol);
+            g.setColor(cs.text());
             g.drawString(val, x + keyWidth, y);
             return;
         }
 
         // JSON-ish lines
         if (trimmed.startsWith("\"") && trimmed.contains(":")) {
-            // "key": value
             int colonIdx = trimmed.indexOf(':');
             String rawKey = trimmed.substring(0, colonIdx + 1);
             String rawVal = trimmed.substring(colonIdx + 1).trim();
 
-            // Preserve leading whitespace from original line
             int indent = line.indexOf(trimmed.charAt(0));
             String prefix = indent > 0 ? line.substring(0, indent) : "";
 
-            g.setColor(jsonKey);
+            g.setColor(cs.jsonKey());
             g.drawString(prefix + rawKey, x, y);
             int keyWidth = g.getFontMetrics().stringWidth(prefix + rawKey + " ");
 
-            g.setColor(colorForJsonValue(rawVal, jsonStr, jsonNum, textCol));
+            g.setColor(colorForJsonValue(rawVal, cs.jsonString(), cs.jsonNumber(), cs.text()));
             g.drawString(" " + rawVal, x + keyWidth - g.getFontMetrics().stringWidth(" "), y);
             return;
         }
 
         // Default
-        g.setColor(textCol);
+        g.setColor(cs.text());
         g.drawString(line, x, y);
     }
 
     private int extractStatusCode(String statusLine) {
-        // "HTTP/1.1 200 OK" -> 200
         String[] parts = statusLine.trim().split("\\s+");
         if (parts.length >= 2) {
             try { return Integer.parseInt(parts[1]); } catch (NumberFormatException ignored) {}
@@ -442,17 +423,8 @@ public final class EvidenceCapture {
         return 0;
     }
 
-    private Color statusCodeColor(int code) {
-        if (code >= 200 && code < 300) return new Color(80, 180, 80);   // Green — success
-        if (code >= 300 && code < 400) return new Color(80, 140, 200);  // Blue — redirect
-        if (code >= 400 && code < 500) return new Color(220, 140, 60);  // Orange — client error
-        if (code >= 500)               return new Color(210, 70, 70);   // Red — server error
-        return new Color(212, 212, 212); // Unknown — default text
-    }
-
     private Color colorForJsonValue(String val, Color strCol, Color numCol, Color defaultCol) {
         if (val.isEmpty()) return defaultCol;
-        // Remove trailing comma
         String clean = val.endsWith(",") ? val.substring(0, val.length() - 1).trim() : val.trim();
         if (clean.startsWith("\""))  return strCol;
         if ("true".equals(clean) || "false".equals(clean) || "null".equals(clean)) return numCol;

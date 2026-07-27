@@ -2,6 +2,7 @@ package icarus.ui;
 
 import burp.api.montoya.MontoyaApi;
 import icarus.core.ModuleConfig;
+import icarus.evidence.EvidenceColorScheme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -111,6 +112,12 @@ public class SettingsPanel {
         addCheckbox(pnlHv, "hv.enable_state_changing", "Enable state-changing methods (POST/PUT/DELETE/PATCH)");
         addField(pnlHv, "hv.body_strategy", "Body Strategy (AUTO/KEEP/REMOVE):");
         mainPanel.add(pnlHv);
+        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+
+        // Evidence
+        JPanel pnlEvidence = createSection("Evidence Capture");
+        addComboBox(pnlEvidence, "evidence.colorscheme", "Screenshot Color Scheme:", EvidenceColorScheme.names());
+        mainPanel.add(pnlEvidence);
 
         // Initially hide expandable lists
         for (JComponent c : expandableLists) {
@@ -161,6 +168,26 @@ public class SettingsPanel {
         inner.add(p);
 
         saveHooks.add(() -> config.set(key, tf.getText()));
+    }
+
+    private void addComboBox(JPanel parent, String key, String label, String[] options) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        themeHelper.applyTheme(p);
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel lbl = new JLabel(label);
+        themeHelper.applyTheme(lbl);
+        p.add(lbl);
+
+        JComboBox<String> combo = new JComboBox<>(options);
+        combo.setSelectedItem(config.getString(key, options[0]));
+        themeHelper.applyTheme(combo);
+        p.add(combo);
+
+        JPanel inner = (JPanel) parent.getComponent(0);
+        inner.add(p);
+
+        saveHooks.add(() -> config.set(key, (String) combo.getSelectedItem()));
     }
 
     private void addTextArea(JPanel parent, String key, String label, boolean expandable) {

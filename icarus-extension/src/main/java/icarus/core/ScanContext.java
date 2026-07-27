@@ -7,12 +7,10 @@ import burp.api.montoya.logging.Logging;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Shared context for a single scan run.
- *
- * Tracks findings, provides API access, and coordinates
- * the modules→evidence→report pipeline.
  */
 public final class ScanContext {
 
@@ -21,6 +19,7 @@ public final class ScanContext {
     private final HttpRequestResponse target;
     private final ModuleConfig config;
     private final List<Finding> findings;
+    private Consumer<String> liveLogger;
 
     public ScanContext(MontoyaApi api, HttpRequestResponse target, ModuleConfig config) {
         this.api = api;
@@ -34,6 +33,10 @@ public final class ScanContext {
     public Logging logging()              { return logging; }
     public HttpRequestResponse target()   { return target; }
     public ModuleConfig config()          { return config; }
+
+    public void setLiveLogger(Consumer<String> logger) {
+        this.liveLogger = logger;
+    }
 
     public void addFinding(Finding finding) {
         findings.add(finding);
@@ -49,9 +52,11 @@ public final class ScanContext {
 
     public void log(String message) {
         logging.logToOutput(message);
+        if (liveLogger != null) liveLogger.accept(message);
     }
 
     public void error(String message) {
         logging.logToError(message);
+        if (liveLogger != null) liveLogger.accept("[ERROR] " + message);
     }
 }

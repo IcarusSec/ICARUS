@@ -12,12 +12,14 @@ import icarus.evidence.ReportGenerator;
 import icarus.modules.SensitiveHeaderModule;
 
 import javax.swing.*;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler {
 
@@ -203,6 +205,8 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     private void doScan(HttpRequestResponse target) {
         var context = new ScanContext(api, target, config);
+        Consumer<String> logger = createLiveLogWindow("ICARUS — Scan Progress");
+        context.setLiveLogger(logger);
 
         context.log("════════════════════════════════════════════════");
         context.log("ICARUS scan started — " + target.request().method() + " " + target.request().path());
@@ -252,10 +256,40 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     private void runSingleModule(IcarusModule module, HttpRequestResponse target) {
+        Consumer<String> logger = createLiveLogWindow("ICARUS — " + module.name() + " Progress");
+        logger.accept("ICARUS → Running " + module.name());
         api.logging().logToOutput("ICARUS → Running " + module.name());
         var findings = module.run(target, config);
         routeFindings(findings);
+        logger.accept("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
         api.logging().logToOutput("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
+    }
+
+    private Consumer<String> createLiveLogWindow(String title) {
+        JFrame frame = new JFrame(title);
+        frame.setSize(800, 400);
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        frame.setLocationRelativeTo(null); // Center on screen
+
+        JTextArea textArea = new JTextArea();
+        textArea.setEditable(false);
+        textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        textArea.setBackground(new Color(34, 34, 34));
+        textArea.setForeground(new Color(200, 200, 200));
+
+        JScrollPane scrollPane = new JScrollPane(textArea);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        frame.add(scrollPane, BorderLayout.CENTER);
+
+        // Use invokeLater to ensure GUI runs on Event Dispatch Thread
+        SwingUtilities.invokeLater(() -> frame.setVisible(true));
+
+        return (msg) -> {
+            SwingUtilities.invokeLater(() -> {
+                textArea.append(msg + "\n");
+                textArea.setCaretPosition(textArea.getDocument().getLength());
+            });
+        };
     }
 
     private void routeFindingsPassive(List<Finding> findings) {

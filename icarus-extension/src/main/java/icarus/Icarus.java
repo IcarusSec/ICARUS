@@ -43,7 +43,7 @@ public class Icarus implements BurpExtension {
             new PostmanExportModule(api)
         );
 
-        var evidenceCapture = new EvidenceCapture(api);
+        var evidenceCapture = new EvidenceCapture(api, config);
         var reportGenerator = new ReportGenerator(api);
 
         var orchestrator = new Orchestrator(api, modules, config, evidenceCapture, reportGenerator);
@@ -155,6 +155,7 @@ public class Icarus implements BurpExtension {
         config.set("evidence.auto_capture", true);
         config.set("evidence.output_dir", System.getProperty("user.home") + "/icarus-reports");
         config.set("evidence.html_report", true);
+        config.set("evidence.colorscheme", "Minimal Dark");
     }
 
     private void loadPersistedConfig(ModuleConfig config, String serialized) {

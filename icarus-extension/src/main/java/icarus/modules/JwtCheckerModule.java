@@ -143,8 +143,8 @@ public class JwtCheckerModule implements IcarusModule {
               + "Proceed with active tests?",
                 chkRemember
             };
-            int option = JOptionPane.showConfirmDialog(null, message, "JWT Checker — Active Tests",
-                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            int option = JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(), message,
+                    "JWT Checker — Active Tests", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             proceed[0] = (option == JOptionPane.YES_OPTION);
             remember[0] = chkRemember.isSelected();
         };

@@ -220,14 +220,20 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
             String server = target.response().headerValue("Server");
             if (server != null && server.toLowerCase().contains("akamai")) {
-                int choice = JOptionPane.showOptionDialog(null,
-                        "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",
-                        "WAF Detected",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.WARNING_MESSAGE,
-                        null,
-                        new String[]{"Run Default", "Run Safe Mode (Safelist)"},
-                        "Run Safe Mode (Safelist)");
+                int[] choiceHolder = { -1 };
+                try {
+                    SwingUtilities.invokeAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(null,
+                            "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",
+                            "WAF Detected",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.WARNING_MESSAGE,
+                            null,
+                            new String[]{"Run Default", "Run Safe Mode (Safelist)"},
+                            "Run Safe Mode (Safelist)"));
+                } catch (Exception e) {
+                    api.logging().logToError("Failed to show WAF detection dialog: " + e.getMessage());
+                }
+                int choice = choiceHolder[0];
 
                 if (choice == 1) {
                     context.log("User chose SAFE MODE (WAF bypass)");
@@ -272,25 +278,35 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     private Consumer<String> createLiveLogWindow(String title) {
-        JFrame frame = new JFrame(title);
-        frame.setSize(800, 400);
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-        frame.setLocationRelativeTo(null); // Center on screen
+        JTextArea[] textAreaHolder = new JTextArea[1];
 
-        JTextArea textArea = new JTextArea();
-        textArea.setEditable(false);
-        textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        textArea.setBackground(new Color(34, 34, 34));
-        textArea.setForeground(new Color(200, 200, 200));
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame frame = new JFrame(title);
+                frame.setSize(800, 400);
+                frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                frame.setLocationRelativeTo(null); // Center on screen
 
-        JScrollPane scrollPane = new JScrollPane(textArea);
-        scrollPane.setBorder(BorderFactory.createEmptyBorder());
-        frame.add(scrollPane, BorderLayout.CENTER);
+                JTextArea textArea = new JTextArea();
+                textArea.setEditable(false);
+                textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+                textArea.setBackground(new Color(34, 34, 34));
+                textArea.setForeground(new Color(200, 200, 200));
 
-        // Use invokeLater to ensure GUI runs on Event Dispatch Thread
-        SwingUtilities.invokeLater(() -> frame.setVisible(true));
+                JScrollPane scrollPane = new JScrollPane(textArea);
+                scrollPane.setBorder(BorderFactory.createEmptyBorder());
+                frame.add(scrollPane, BorderLayout.CENTER);
 
+                frame.setVisible(true);
+                textAreaHolder[0] = textArea;
+            });
+        } catch (Exception e) {
+            api.logging().logToError("Failed to create ICARUS log window: " + e.getMessage());
+        }
+
+        JTextArea textArea = textAreaHolder[0];
         return (msg) -> {
+            if (textArea == null) return;
             SwingUtilities.invokeLater(() -> {
                 textArea.append(msg + "\n");
                 textArea.setCaretPosition(textArea.getDocument().getLength());

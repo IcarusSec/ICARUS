@@ -289,24 +289,35 @@ public final class EvidenceCapture {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
 
+        // Professional dark theme colors for the image (Dracula-inspired)
+        Color imgBg = new Color(40, 42, 54);
+        Color imgHeaderBg = new Color(30, 31, 41);
+        Color imgText = new Color(248, 248, 242);
+        Color imgAccent = new Color(255, 121, 198); // Pink accent
+        Color imgSplitter = new Color(98, 114, 164);
+        Color imgMethod = new Color(80, 250, 123); // Green for GET/POST/HTTP
+        Color imgHeaderKey = new Color(139, 233, 253); // Cyan for header keys
+
         // Fill background
-        g.setColor(BG_COLOR);
+        g.setColor(imgBg);
         g.fillRect(0, 0, imgWidth, imgHeight);
 
         // Header Banner
-        g.setColor(HEADER_BG);
+        g.setColor(imgHeaderBg);
         g.fillRect(0, 0, imgWidth, 80);
-        
-        g.setColor(ACCENT_COLOR);
+
+        g.setColor(imgAccent);
+        g.fillRect(0, 78, imgWidth, 2); // Subtle bottom border for header
+
         g.setFont(new Font(Font.MONOSPACED, Font.BOLD, 22));
         g.drawString("ICARUS EVIDENCE • " + title, 20, 35);
-        
-        g.setColor(Color.LIGHT_GRAY);
+
+        g.setColor(new Color(200, 200, 200));
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 16));
         g.drawString("Severity: " + severity + " | " + desc, 20, 65);
-        
+
         // Split Line
-        g.setColor(SEPARATOR_COLOR);
+        g.setColor(imgSplitter);
         g.drawLine(imgWidth / 2, 80, imgWidth / 2, imgHeight);
 
         // Column Titles
@@ -315,28 +326,60 @@ public final class EvidenceCapture {
         g.setColor(Color.WHITE);
         g.drawString("REQUEST", 20, y);
         g.drawString("RESPONSE", imgWidth / 2 + 20, y);
-        
+
         y += 30;
         g.setFont(MONO_FONT);
-        g.setColor(TEXT_COLOR);
 
-        // Draw Text
+        // Set up clipping so text doesn't overlap between columns
+        Shape originalClip = g.getClip();
+
+        // Draw Request (Left side)
+        g.setClip(0, 80, imgWidth / 2 - 10, imgHeight - 80);
         int reqY = y;
         for (String line : req.split("\n")) {
-            g.drawString(line, 20, reqY);
+            drawSyntaxHighlightedLine(g, line, 20, reqY, imgText, imgMethod, imgHeaderKey);
             reqY += 20;
             if (reqY > imgHeight - 20 && !force1080) break;
         }
 
+        // Draw Response (Right side)
+        g.setClip(imgWidth / 2 + 10, 80, imgWidth / 2 - 10, imgHeight - 80);
         int resY = y;
         for (String line : res.split("\n")) {
-            g.drawString(line, imgWidth / 2 + 20, resY);
+            drawSyntaxHighlightedLine(g, line, imgWidth / 2 + 20, resY, imgText, imgMethod, imgHeaderKey);
             resY += 20;
             if (resY > imgHeight - 20 && !force1080) break;
         }
 
+        // Restore clip
+        g.setClip(originalClip);
+
         g.dispose();
         return img;
+    }
+
+    private void drawSyntaxHighlightedLine(Graphics2D g, String line, int x, int y, Color defaultCol, Color methodCol, Color keyCol) {
+        if (line.startsWith("GET ") || line.startsWith("POST ") || line.startsWith("PUT ") ||
+            line.startsWith("DELETE ") || line.startsWith("PATCH ") || line.startsWith("OPTIONS ") ||
+            line.startsWith("HTTP/")) {
+            g.setColor(methodCol);
+            g.drawString(line, x, y);
+        } else if (line.contains(":") && !line.startsWith("{") && !line.startsWith("}") && !line.startsWith(" ") && !line.startsWith("\t") && !line.startsWith("\"")) {
+            // Header line
+            int colonIdx = line.indexOf(':');
+            String key = line.substring(0, colonIdx + 1);
+            String val = line.substring(colonIdx + 1);
+
+            g.setColor(keyCol);
+            g.drawString(key, x, y);
+
+            int keyWidth = g.getFontMetrics().stringWidth(key);
+            g.setColor(defaultCol);
+            g.drawString(val, x + keyWidth, y);
+        } else {
+            g.setColor(defaultCol);
+            g.drawString(line, x, y);
+        }
     }
 
     // ===================================================================================

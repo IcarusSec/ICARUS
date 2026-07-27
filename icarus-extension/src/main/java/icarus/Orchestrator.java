@@ -202,6 +202,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                     }
                 }
             } catch (Exception e) {
+                api.logging().logToError("ICARUS passive scan failed: " + e.getMessage());
             }
         });
 

@@ -128,11 +128,13 @@ public final class EvidenceCapture {
                     .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
         }
 
-        // Wrap conservatively for the narrower 1200px layout: "Force 1920x1080" is chosen
-        // later (at "Proceed to Annotation"), and nothing downstream re-wraps this text
-        // once the user has edited it in the JTextArea below. 1200's budget is strictly
-        // smaller than 1920's, so this is safe either way.
-        int wrapWidth = maxCharsForColumnWidth(1200);
+        // Wrap for the default layout (chk1080 below defaults to checked, i.e. 1920x1080).
+        // Wrapping narrower than what's actually rendered wastes space — a line wrapped
+        // for the 1200px column only fills ~61% of the 1920px column's real width, needing
+        // far more lines (and therefore a much taller image) than necessary. If the user
+        // unchecks the box, the chk1080 listener below re-wraps down to the narrower width,
+        // which is always a safe direction (splitting an already-short-enough line further).
+        int wrapWidth = maxCharsForColumnWidth(1920);
         reqText = wrapEvidenceText(reqText, wrapWidth);
         resText = wrapEvidenceText(resText, wrapWidth);
 
@@ -156,6 +158,18 @@ public final class EvidenceCapture {
         JButton btnCleanNoise = createModernButton("Clean Standard Noise", new Color(70, 70, 70));
         JCheckBox chk1080 = new JCheckBox("Force 1920x1080", true);
         chk1080.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        // The text areas are wrapped for 1920 above (the checkbox's default). If the user
+        // switches to the narrower 1200 layout, re-wrap down to that width — safe, since
+        // splitting already-short-enough lines further never loses content. Going back to
+        // 1920 needs no action: lines already wrapped for 1200 remain valid (just using less
+        // of the wider column than optimal), which is a cosmetic tradeoff, not a bug.
+        chk1080.addItemListener(e -> {
+            if (e.getStateChange() == ItemEvent.DESELECTED) {
+                int narrowWidth = maxCharsForColumnWidth(1200);
+                reqArea.setText(wrapEvidenceText(reqArea.getText(), narrowWidth));
+                resArea.setText(wrapEvidenceText(resArea.getText(), narrowWidth));
+            }
+        });
 
         JButton btnProceed = createModernButton("Proceed to Annotation ➔", ACCENT_COLOR);
         btnProceed.setForeground(Color.WHITE);

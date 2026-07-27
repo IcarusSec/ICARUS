@@ -9,7 +9,6 @@ import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
-import icarus.modules.SensitiveHeaderModule;
 
 import javax.swing.*;
 import java.awt.*;
@@ -41,7 +40,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.reportGenerator = reportGenerator;
-        this.findings = new FindingRegistry(api, config);
+        this.findings = new FindingRegistry(api, config, SwingUtilities::invokeLater);
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
     }
 
@@ -141,18 +140,13 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             return ResponseReceivedAction.continueWith(response);
         }
 
-        scanRunner.runAsync(() -> {
-            for (var module : modules) {
-                if (module instanceof SensitiveHeaderModule shm) {
-                    var passiveFindings = shm.analyzeResponse(response, config);
-                    if (!passiveFindings.isEmpty()) {
-                        findings.processDeduplication(passiveFindings, true);
-                    }
-                }
-            }
-        });
+        scanRunner.runPassiveScan(response, this::routeFindingsPassive);
 
         return ResponseReceivedAction.continueWith(response);
+    }
+
+    private void routeFindingsPassive(List<Finding> passiveFindings) {
+        findings.processDeduplication(passiveFindings, true);
     }
 
     private void routeFindings(List<Finding> newFindings, boolean isManual) {

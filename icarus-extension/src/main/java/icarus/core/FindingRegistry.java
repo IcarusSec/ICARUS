@@ -6,24 +6,29 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * Owns finding state: deduplication, suppression, the audit log, and notifying
  * listeners of changes. Extracted from Orchestrator so scan execution and Burp
- * integration don't need to know how findings are tracked internally.
+ * integration don't need to know how findings are tracked internally. Has no
+ * UI-toolkit dependency of its own — the caller supplies how to dispatch
+ * listener notifications onto the right thread (e.g. SwingUtilities::invokeLater).
  */
 public final class FindingRegistry {
 
     private final MontoyaApi api;
     private final ModuleConfig config;
+    private final Consumer<Runnable> uiDispatcher;
 
     private final Map<String, FindingRecord> activeFindings = new ConcurrentHashMap<>();
     private final List<String> auditLog = new ArrayList<>();
     private final List<ScanListener> listeners = new ArrayList<>();
 
-    public FindingRegistry(MontoyaApi api, ModuleConfig config) {
+    public FindingRegistry(MontoyaApi api, ModuleConfig config, Consumer<Runnable> uiDispatcher) {
         this.api = api;
         this.config = config;
+        this.uiDispatcher = uiDispatcher;
 
         for (String hash : config.getStringList("suppressed_hashes")) {
             Finding dummy = Finding.builder("System", "DUMMY").build();
@@ -179,7 +184,7 @@ public final class FindingRegistry {
     }
 
     private void notifyListenersOfUpdate() {
-        javax.swing.SwingUtilities.invokeLater(() -> {
+        uiDispatcher.accept(() -> {
             for (var listener : listeners) {
                 listener.onScanComplete(new ArrayList<>(activeFindings.values()));
             }

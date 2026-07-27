@@ -115,6 +115,12 @@ public class SettingsPanel {
         mainPanel.add(pnlHv);
         mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
 
+        // JWT Checker
+        JPanel pnlJwt = createSection("JWT / Bearer Token Checker");
+        addCheckbox(pnlJwt, "jwt.redact_sensitive_claims", "Redact sensitive claim values in findings/logs/reports (show key only)");
+        mainPanel.add(pnlJwt);
+        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+
         // Rate Limit Tester
         JPanel pnlRl = createSection("Rate Limit Tester");
         addField(pnlRl, "rl.request_count", "Requests per blast:");

@@ -12,15 +12,15 @@ import icarus.evidence.ReportGenerator;
 import icarus.modules.SensitiveHeaderModule;
 
 import javax.swing.*;
-import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Consumer;
 
+/**
+ * Burp integration facade: wires context-menu items and the passive HTTP handler to
+ * scan execution ({@link ScanRunner}) and finding bookkeeping ({@link FindingRegistry}),
+ * and owns how findings get presented (the results dialog).
+ */
 public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler {
 
     private final MontoyaApi api;
@@ -28,12 +28,8 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ModuleConfig config;
     private final EvidenceCapture evidenceCapture;
     private final ReportGenerator reportGenerator;
-    private final ExecutorService executor;
-
-    private final Map<String, FindingRecord> activeFindings = new java.util.concurrent.ConcurrentHashMap<>();
-    private final List<String> auditLog = new java.util.ArrayList<>();
-
-    private final List<ScanListener> listeners = new ArrayList<>();
+    private final ScanRunner scanRunner;
+    private final FindingRegistry findings;
 
     public Orchestrator(MontoyaApi api,
                         List<IcarusModule> modules,
@@ -45,88 +41,48 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.reportGenerator = reportGenerator;
-        this.executor = Executors.newSingleThreadExecutor(r -> {
-            var t = new Thread(r, "ICARUS-scan");
-            t.setDaemon(true);
-            return t;
-        });
-
-        for (String hash : config.getStringList("suppressed_hashes")) {
-            Finding dummy = Finding.builder("System", "DUMMY").build();
-            FindingRecord fr = new FindingRecord(dummy);
-            fr.setSuppressed(true);
-            activeFindings.put(hash, fr);
-        }
-        logAudit("System initialized. Loaded " + config.getStringList("suppressed_hashes").size() + " suppression rules.");
+        this.findings = new FindingRegistry(api, config);
+        this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
     }
 
-    public void logAudit(String action) {
-        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String entry = "[" + timestamp + "] " + action;
-        synchronized(auditLog) {
-            auditLog.add(entry);
-        }
-        api.logging().logToOutput(entry);
+    public void addListener(FindingRegistry.ScanListener listener) {
+        findings.addListener(listener);
     }
 
     public List<String> getAuditLog() {
-        synchronized(auditLog) {
-            return new ArrayList<>(auditLog);
-        }
+        return findings.getAuditLog();
     }
 
     public void suppressFinding(String hash, String reason) {
-        var record = activeFindings.get(hash);
-        if (record != null) {
-            record.setSuppressed(true);
-            logAudit("User suppressed finding: " + hash + " (Reason: " + reason + ")");
-            saveSuppressionConfig();
-            notifyListenersOfUpdate();
-        }
+        findings.suppressFinding(hash, reason);
     }
 
     public void unsuppressFinding(String hash) {
-        var record = activeFindings.get(hash);
-        if (record != null) {
-            record.setSuppressed(false);
-            logAudit("User removed suppression for: " + hash);
-            saveSuppressionConfig();
-            notifyListenersOfUpdate();
-        }
+        findings.unsuppressFinding(hash);
     }
 
     public Finding getFindingByHash(String hash) {
-        FindingRecord record = activeFindings.get(hash);
-        return record != null ? record.getFinding() : null;
+        return findings.getFindingByHash(hash);
     }
 
     public void showEvidenceInteractive(Finding finding) {
         evidenceCapture.captureInteractive(finding);
     }
 
-    private void saveSuppressionConfig() {
-        List<String> suppressed = new ArrayList<>();
-        for (var entry : activeFindings.entrySet()) {
-            if (entry.getValue().isSuppressed()) {
-                suppressed.add(entry.getKey());
-            }
-        }
-        config.set("suppressed_hashes", String.join("\n", suppressed));
-        api.persistence().extensionData().setString("config", config.serialize());
-    }
-
     public void runScan(HttpRequestResponse target, boolean isManual) {
-        executor.submit(() -> {
-            try {
-                doScan(target, isManual);
-            } catch (Exception e) {
-                api.logging().logToError("ICARUS scan failed: " + e.getMessage());
-            }
-        });
+        scanRunner.runScan(target, isManual);
     }
 
-    public void addListener(ScanListener listener) {
-        listeners.add(listener);
+    public List<FindingRecord> getAllFindingRecords() {
+        return findings.getAllFindingRecords();
+    }
+
+    public List<FindingRecord> getPassiveFindings() {
+        return findings.getPassiveFindings();
+    }
+
+    public void clearPassiveFindings() {
+        findings.clearPassiveFindings();
     }
 
     @Override
@@ -142,7 +98,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         var runAll = new JMenuItem("ICARUS → Run All Modules");
         runAll.addActionListener(e -> {
             for (var rr : requestResponses) {
-                runScan(rr, true);
+                scanRunner.runScan(rr, true);
             }
         });
         items.add(runAll);
@@ -165,13 +121,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             var item = new JMenuItem("ICARUS → " + module.name());
             item.addActionListener(e -> {
                 for (var rr : requestResponses) {
-                    executor.submit(() -> {
-                        try {
-                            runSingleModule(module, rr, true);
-                        } catch (Exception ex) {
-                            api.logging().logToError("ICARUS " + module.name() + " failed: " + ex.getMessage());
-                        }
-                    });
+                    scanRunner.runModule(module, rr, true);
                 }
             });
             items.add(item);
@@ -191,210 +141,31 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             return ResponseReceivedAction.continueWith(response);
         }
 
-        executor.submit(() -> {
-            try {
-                for (var module : modules) {
-                    if (module instanceof SensitiveHeaderModule shm) {
-                        var findings = shm.analyzeResponse(response, config);
-                        if (!findings.isEmpty()) {
-                            routeFindingsPassive(findings);
-                        }
+        scanRunner.runAsync(() -> {
+            for (var module : modules) {
+                if (module instanceof SensitiveHeaderModule shm) {
+                    var passiveFindings = shm.analyzeResponse(response, config);
+                    if (!passiveFindings.isEmpty()) {
+                        findings.processDeduplication(passiveFindings, true);
                     }
                 }
-            } catch (Exception e) {
-                api.logging().logToError("ICARUS passive scan failed: " + e);
             }
         });
 
         return ResponseReceivedAction.continueWith(response);
     }
 
-    private void doScan(HttpRequestResponse target, boolean isManual) {
-        var context = new ScanContext(api, target, config);
-        Consumer<String> logger = createLiveLogWindow("ICARUS — Scan Progress");
-        context.setLiveLogger(logger);
-
-        context.log("════════════════════════════════════════════════");
-        context.log("ICARUS scan started — " + target.request().method() + " " + target.request().path());
-
-        if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
-            String server = target.response().headerValue("Server");
-            if (server != null && server.toLowerCase().contains("akamai")) {
-                int[] choiceHolder = { -1 };
-                runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(null,
-                        "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",
-                        "WAF Detected",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.WARNING_MESSAGE,
-                        null,
-                        new String[]{"Run Default", "Run Safe Mode (Safelist)"},
-                        "Run Safe Mode (Safelist)"));
-                int choice = choiceHolder[0];
-
-                if (choice == 1) {
-                    context.log("User chose SAFE MODE (WAF bypass)");
-                    String safePayloads = config.getString("waf.safelist_payloads", "' OR 1=1--");
-                    config.set("pv.payload_sqli", safePayloads);
-                    config.set("pv.payload_xss", safePayloads);
-                    config.set("pv.payload_path_traversal", safePayloads);
-                    config.set("pv.payload_nosqli", safePayloads);
-                    config.set("pv.payload_format_string", safePayloads);
-                }
-            }
-        }
-
-        for (var module : modules) {
-            if (!isModuleEnabled(module)) continue;
-
-            context.log("──── Running: " + module.name() + " ────");
-
-            try {
-                var findings = module.run(target, config);
-                context.addFindings(findings);
-                context.log(module.name() + " → " + findings.size() + " findings");
-            } catch (Exception e) {
-                context.error(module.name() + " failed: " + e.getMessage());
-            }
-        }
-
-        routeFindings(context.findings(), isManual);
-
-        context.log("ICARUS scan complete — " + context.findings().size() + " total findings.");
-        context.log("════════════════════════════════════════════════");
-    }
-
-    private void runSingleModule(IcarusModule module, HttpRequestResponse target, boolean isManual) {
-        Consumer<String> logger = createLiveLogWindow("ICARUS — " + module.name() + " Progress");
-        logger.accept("ICARUS → Running " + module.name());
-        api.logging().logToOutput("ICARUS → Running " + module.name());
-        var findings = module.run(target, config);
-        routeFindings(findings, isManual);
-        logger.accept("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
-        api.logging().logToOutput("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
-    }
-
-    private Consumer<String> createLiveLogWindow(String title) {
-        JTextArea[] textAreaHolder = new JTextArea[1];
-
-        runOnEdtAndWait(() -> {
-            JFrame frame = new JFrame(title);
-            frame.setSize(800, 400);
-            frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-            frame.setLocationRelativeTo(null); // Center on screen
-
-            JTextArea textArea = new JTextArea();
-            textArea.setEditable(false);
-            textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-            textArea.setBackground(new Color(34, 34, 34));
-            textArea.setForeground(new Color(200, 200, 200));
-
-            JScrollPane scrollPane = new JScrollPane(textArea);
-            scrollPane.setBorder(BorderFactory.createEmptyBorder());
-            frame.add(scrollPane, BorderLayout.CENTER);
-
-            frame.setVisible(true);
-            textAreaHolder[0] = textArea;
-        });
-
-        JTextArea textArea = textAreaHolder[0];
-        return (msg) -> {
-            if (textArea == null || !textArea.isDisplayable()) return;
-            SwingUtilities.invokeLater(() -> {
-                if (!textArea.isDisplayable()) return;
-                textArea.append(msg + "\n");
-                textArea.setCaretPosition(textArea.getDocument().getLength());
-            });
-        };
-    }
-
-    /**
-     * Runs {@code r} on the EDT and blocks until it completes. Safe to call whether the
-     * caller is already on the EDT (runs inline — invokeAndWait would throw an Error there)
-     * or on a background thread (dispatches via invokeAndWait).
-     */
-    private void runOnEdtAndWait(Runnable r) {
-        if (SwingUtilities.isEventDispatchThread()) {
-            r.run();
-            return;
-        }
-        try {
-            SwingUtilities.invokeAndWait(r);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (Exception e) {
-            api.logging().logToError("EDT task failed: " + e.getMessage());
-        }
-    }
-
-    private void routeFindingsPassive(List<Finding> findings) {
-        processDeduplication(findings, true);
-    }
-
-    private void routeFindings(List<Finding> findings, boolean isManual) {
-        List<Finding> newOrUpdated = processDeduplication(findings, false);
+    private void routeFindings(List<Finding> newFindings, boolean isManual) {
+        List<Finding> newOrUpdated = findings.processDeduplication(newFindings, false);
 
         if (!newOrUpdated.isEmpty() && (isManual || config.getBool("ui.show_popups", true))) {
             List<FindingRecord> recordsToShow = new ArrayList<>();
             for (Finding f : newOrUpdated) {
-                FindingRecord r = activeFindings.get(f.similarityHash());
+                FindingRecord r = findings.getRecordByHash(f.similarityHash());
                 if (r != null) recordsToShow.add(r);
             }
             SwingUtilities.invokeLater(() -> showFindingsDialog(recordsToShow));
         }
-    }
-
-    private List<Finding> processDeduplication(List<Finding> findings, boolean passive) {
-        List<Finding> actionable = new ArrayList<>();
-
-        for (var finding : findings) {
-            String hash = finding.similarityHash();
-            var record = activeFindings.get(hash);
-
-            if (record != null) {
-                if (record.isSuppressed()) {
-                    continue;
-                }
-                record.incrementCount();
-                logAudit("Duplicate finding incremented to " + record.getCount() + "x: " + hash);
-                notifyListenersOfUpdate();
-            } else {
-                var newRecord = new FindingRecord(finding);
-                activeFindings.put(hash, newRecord);
-
-                logAudit("New finding identified: " + hash);
-                actionable.add(finding);
-
-                if (!passive && config.getBool("pv.create_audit_issues", true) && finding.evidence() != null) {
-                    try {
-                        createAuditIssue(finding);
-                    } catch (Exception e) {
-                        api.logging().logToError("Failed to create audit issue: " + e.getMessage());
-                    }
-                }
-                notifyListenersOfUpdate();
-            }
-        }
-        return actionable;
-    }
-
-    public List<FindingRecord> getAllFindingRecords() {
-        return new ArrayList<>(activeFindings.values());
-    }
-
-    public List<FindingRecord> getPassiveFindings() {
-        List<FindingRecord> results = new ArrayList<>();
-        for (FindingRecord r : activeFindings.values()) {
-            if (!r.isSuppressed() && r.getFinding().evidence() == null) {
-                results.add(r);
-            }
-        }
-        return results;
-    }
-
-    public void clearPassiveFindings() {
-        activeFindings.entrySet().removeIf(e -> e.getValue().getFinding().evidence() == null);
-        notifyListenersOfUpdate();
-        logAudit("User cleared passive findings.");
     }
 
     public void showFindingsDialog(List<FindingRecord> records) {
@@ -547,54 +318,5 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         String name = prefix + "-" + label + "-" + path + "-" + String.format("%02d", index);
         return name.length() <= 28 ? name : name.substring(0, 28);
-    }
-
-    private void createAuditIssue(Finding finding) {
-        var issue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
-            "ICARUS: " + finding.type(),
-            finding.description() + "<br>Module: " + finding.module() + "<br>Path: " + finding.path(),
-            "Review the finding and validate the vulnerability.",
-            finding.evidence().request().url(),
-            mapSeverity(finding.severity()),
-            burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM,
-            null,
-            null,
-            mapSeverity(finding.severity()),
-            finding.evidence()
-        );
-        api.siteMap().add(issue);
-    }
-
-    private burp.api.montoya.scanner.audit.issues.AuditIssueSeverity mapSeverity(Severity severity) {
-        return switch (severity) {
-            case CRITICAL, HIGH -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH;
-            case MEDIUM         -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.MEDIUM;
-            case LOW            -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.LOW;
-            case INFO           -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.INFORMATION;
-        };
-    }
-
-    private boolean isModuleEnabled(IcarusModule module) {
-        return switch (module.name()) {
-            case "ParamValidator"    -> config.getBool("pv.enabled", true);
-            case "HTTP Verb Tester"  -> config.getBool("hv.enabled", true);
-            case "JWT Checker"       -> config.getBool("jwt.enabled", true);
-            case "Sensitive Headers" -> config.getBool("sh.enabled", true);
-            case "Postman Export"    -> config.getBool("export.enabled", true);
-            case "Rate Limit Tester" -> config.getBool("rl.enabled", true);
-            default -> true;
-        };
-    }
-
-    private void notifyListenersOfUpdate() {
-        SwingUtilities.invokeLater(() -> {
-            for (var listener : listeners) {
-                listener.onScanComplete(new ArrayList<>(activeFindings.values()));
-            }
-        });
-    }
-
-    public interface ScanListener {
-        void onScanComplete(List<FindingRecord> records);
     }
 }

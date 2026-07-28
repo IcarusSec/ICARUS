@@ -168,6 +168,7 @@ public class Icarus implements BurpExtension {
         config.set("evidence.html_report", true);
         config.set("evidence.colorscheme", "Minimal Dark");
         config.set("evidence.include_project_name", true);
+        config.set("evidence.manual_severity", "INFO");
     }
 
     private void loadPersistedConfig(ModuleConfig config, String serialized) {

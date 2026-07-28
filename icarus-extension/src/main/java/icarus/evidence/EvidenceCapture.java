@@ -666,9 +666,12 @@ public final class EvidenceCapture {
         String endTime = finding.metadata().getOrDefault("end_time", "");
         String timeStr = (!startTime.isEmpty() && !endTime.isEmpty()) ? "  |  [" + startTime + " to " + endTime + "]" : "";
 
+        String rps = finding.metadata().get("rps");
+        String rpsStr = (rps != null && !rps.isBlank()) ? "  |  " + rps : "";
+
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-        g.drawString(finding.description() + timeStr, 20, 55);
+        g.drawString(finding.description() + timeStr + rpsStr, 20, 55);
 
         String logStr = finding.metadata().get("blast_log");
         String[] entries = logStr.split(";");

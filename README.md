@@ -4,146 +4,86 @@
 <h1 align="center">ICARUS</h1>
 
 <p align="center">
-<img src="https://img.shields.io/badge/BurpSuite-Custom%20Actions-orange" alt="Burp Suite">
+<img src="https://img.shields.io/badge/BurpSuite-Extension-orange" alt="Burp Suite">
 <img src="https://img.shields.io/badge/Security-Testing-blue" alt="Security">
 <img src="https://img.shields.io/badge/Language-Java-red" alt="Java">
 </p>
 
 <div align="center">
-  <a href="#included-custom-actions">Actions</a>
+  <a href="#features">Features</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="#usage">Usage</a>
+  <a href="#modules">Modules</a>
+  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
+  <a href="#installation--usage">Installation & Usage</a>
   <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
   <a href="#disclaimer">Disclaimer</a>
-  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="#license">License</a>
   <br />
 </div>
 
-### [Read the docs →](#included-custom-actions)
-
 ## What is ICARUS?
 
-**ICARUS** is a collection of security testing tools for Burp Suite, designed to automate and streamline specific API security testing tasks directly from the Burp Repeater. It includes custom Bambda scripts (Custom Actions) and a full-fledged Burp Extension.
+**ICARUS** is a comprehensive security testing extension for Burp Suite, designed to automate and streamline API security testing tasks directly from your Burp workflow. It provides a unified interface, automated scanning capabilities, and advanced evidence capture for rapid, effective vulnerability assessment and reporting.
 
-### Bambda Scripts (Custom Actions)
-These scripts leverage the **Custom Actions** feature in Burp Suite, allowing analysts to execute automated checks and mutations on selected requests without the need for complex, heavy extensions.
+## Features
 
-```bash
-# Just copy & paste the Java files into Burp Repeater's Custom Actions!
-```
+- **Unified Interface:** A centralized control panel (`ICARUS` tab) for configuring all modules, tracking tasks, and managing findings.
+- **Smart Evidence Capture:** Advanced workflow for generating clean, actionable reports. Includes full payload logging, a built-in image editor (with annotation tools like box, arrow, highlight, and redact), and HTML report generation.
+- **Automated Scanning:** Run comprehensive checks against selected requests with a single click from the Burp context menu.
 
-Instead of managing bulky extension code, you only need these focused, self-contained Java snippets to run advanced checks directly on your target endpoints. They are significantly faster to set up and usable in existing testing workflows with little to no friction.
+## Modules
 
-### Icarus Extension
-A fully integrated Burp Suite extension providing a unified interface, automated scanning, and advanced evidence capture for the same security testing methodologies.
+ICARUS integrates multiple powerful security testing tools into a single extension:
 
-## Included Tools
+### 1. JSON Input Validation (`ParamValidator`)
+Focuses on testing JSON request parameter validation. It answers a simple question: **Did the API accept input that should have been rejected?**
+- Structural validation tests (null values, removed fields, empty objects/arrays).
+- Type confusion tests (e.g., string → number, boolean → string).
+- Boundary value tests (e.g., empty string, very long strings, zero, negative numbers).
+- Injection payload tests (SQLi, XSS, NoSQL, Path Traversal, etc.).
 
-### Icarus Extension (`icarus-extension`)
+### 2. HTTP Verb Tester (`HttpVerbModule`)
+Performs basic HTTP verb validation for API security testing. Generates variations using alternate HTTP methods (`GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to identify misconfigurations or accepted alternative methods.
+- Automatic handling of body content based on the method.
+- Support for `OPTIONS` / `Allow` header validation.
+- TRACE reflection detection.
 
-The official ICARUS Burp Suite extension brings the power of the standalone Bambda scripts into a unified, integrated experience.
+### 3. JWT / Bearer Token Checker (`JwtCheckerModule`)
+A comprehensive tool for detecting and testing JSON Web Tokens (JWTs) and Bearer tokens for common security vulnerabilities.
+- Detects multiple JWTs across standard headers and cookies.
+- Algorithm Analysis (e.g., weak configurations like `alg=none`, embedded claims like `jwk`, `jku`, `kid`).
+- Payload Tampering (e.g., tampering with `admin`, `role`, `scope`).
+- Signature Removal testing.
+- Time-based Attacks (missing `exp`/`iat` claims).
 
-**Key Features:**
-- **Unified Interface:** Centralized control panel for all ICARUS modules.
-- **Smart Evidence Capture:** Advanced 2-phase workflow for clean, actionable reports with full payload logging and manual evidence popups.
-- **Automated Scanning:** Run comprehensive checks with a single click.
+### 4. Rate Limit Tester (`RateLimitModule`)
+Sends repeated requests to detect, characterize, and attempt to bypass rate limiting.
+- Burst detection to determine whether throttling exists.
+- Configurable thresholds for request counts and timing.
+- Captures requests per second (RPS) and timestamps in evidence generation.
 
-[View Icarus Extension README →](icarus-extension/README.md)
+### 5. Sensitive Header Scanner (`SensitiveHeaderModule`)
+Automatically inspects responses for sensitive headers or caching misconfigurations that could lead to data leakage.
 
-### JSON Input Validation (`bambda-scripts/ParamValidator`)
+### 6. Export to Postman (`PostmanExportModule`)
+Exports the current request directly to a Postman Collection JSON format.
+- Accurate extraction of HTTP method, headers, and URL structure.
+- Secure body payload preservation with proper JSON escaping.
 
-Located in the `bambda-scripts/ParamValidator` directory, this action focuses on testing JSON request parameter validation.
+## Installation & Usage
 
-Instead of targeting specific vulnerabilities, it answers a simpler question: **Did the API accept input that should have been rejected?**
-
-If a payload intentionally crafted to violate the expected contract is accepted (e.g., returns an `HTTP 2xx` response), it flags the request for manual investigation. 
-
-**Key Features:**
-- **Structural validation tests** (null values, removed fields, empty objects/arrays).
-- **Type confusion tests** (e.g., string → number, boolean → string).
-- **Boundary value tests** (e.g., empty string, very long strings, zero, negative numbers).
-- **Injection payload tests** (SQLi, XSS, NoSQL, Path Traversal, etc.).
-- **Fully self-contained JSON parser** with recursive traversal.
-
-[View ParamValidator README →](bambda-scripts/ParamValidator/README.md)
-
-### HTTP Verb Tester (`bambda-scripts/HTTPVerbFuzz`)
-
-Located in the `bambda-scripts/HTTPVerbFuzz` directory, this action performs basic HTTP verb validation for API security testing.
-
-It takes the current request and generates variations using alternate HTTP methods (such as `GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to identify if alternative methods are accepted by the server.
-
-**Key Features:**
-- **Configurable method list** to test against the endpoint.
-- **Automatic handling of body content** based on the tested method (e.g., removing the body for `GET` or `HEAD`).
-- **Support for `OPTIONS` / `Allow` header validation**.
-- **TRACE reflection detection**.
-- **Detailed configuration options** available directly within the `httpverbfuzz.java` script.
-
-[View HTTPVerbFuzz README →](bambda-scripts/HTTPVerbFuzz/README.md)
-
-### JWT / Bearer Token Checker (`bambda-scripts/JWTChecker`)
-
-Located in the `bambda-scripts/JWTChecker` directory, this action is a comprehensive script for detecting and testing JSON Web Tokens (JWTs) and Bearer tokens for common security vulnerabilities directly from the Burp Repeater.
-
-It automatically identifies JWTs using regex in `Authorization` headers and `Cookie` headers, and automatically tests them for various tampering and misconfiguration flaws.
-
-**Key Features:**
-- **Automated Discovery**: Detects multiple JWTs across standard headers.
-- **Algorithm Analysis**: Detects weak configurations like `alg=none` and checks for potentially vulnerable embedded claims (`jwk`, `jku`, `kid`).
-- **Payload Tampering**: Attempts automated privilege escalation by tampering with common claims (`admin`, `role`, `scope`) without resigning.
-- **Signature Removal**: Tests for improper signature validation by removing the signature.
-- **Time-based Attacks**: Detects missing `exp`/`iat` claims and injects excessive expiration times.
-
-[View JWTChecker README →](bambda-scripts/JWTChecker/README.md)
-
-### Rate Limit Tester (`icarus-extension`)
-
-Located in the `icarus-extension` directory, this module sends repeated requests to detect, characterize, and attempt to bypass rate limiting.
-
-**Key Features:**
-- **Burst detection:** Sends identical requests to determine whether throttling exists.
-- **Configurable thresholds:** Lets you tune request counts and timing from the module configuration.
-- **Evidence capture:** Records the request/response details needed to review rate-limit behavior.
-
-[View Icarus Extension README →](icarus-extension/README.md)
-
-### Export to Postman (`bambda-scripts/ExportToPostman`)
-
-Located in the `bambda-scripts/ExportToPostman` directory, this action exports the current request in the Repeater to a Postman Collection JSON format.
-
-Sometimes you want to quickly port your crafted request from Burp Repeater directly into Postman for team sharing, API documentation, or testing workflows. This Custom Action creates a complete, valid Postman Collection JSON for the active request directly in the Custom Actions log.
-
-**Key Features:**
-- **Postman Collection v2.1.0:** Generates fully compatible Postman Collection JSON objects.
-- **Accurate Method & URL:** Extracts the exact HTTP method and parses the URL into Postman's `host`, `path`, and `query` block structures.
-- **Header Preservation:** Preserves all HTTP headers accurately.
-- **Body Preservation:** Preserves raw body payload securely with proper JSON escaping.
-
-[View ExportToPostman README →](bambda-scripts/ExportToPostman/README.md)
-
-## Usage
-
-### Extension Usage
-1. Build the extension or download the latest JAR from releases.
-2. In Burp Suite, go to **Extensions** -> **Add**.
-3. Select the `icarus-extension.jar` file.
-
-### Bambda Script Usage
-
-To use these custom actions in Burp Suite:
-
-1. Open Burp Suite and navigate to **Repeater**.
-2. Go to the **Custom actions** settings (or right-click a request and find the Custom actions menu).
-3. Create a **New** action and select **Blank**.
-4. Copy the contents of the desired `.java` script (e.g., `httpverbfuzz.java` or `paramvalidator.java`) and paste it into the script editor.
-5. Review and adjust the user configuration section at the top of the script if necessary.
-6. Run the action against your target requests.
+1. **Build the extension:** Run `./build.sh` inside the `icarus-extension/` directory. This will download the Montoya API, compile the Java files, and generate a JAR file in `icarus-extension/build_manual/libs/`.
+2. **Load into Burp Suite:**
+   - Go to the **Extensions** tab.
+   - Click **Add**.
+   - Select **Java** as the extension type.
+   - Choose the generated `icarus-<version>.jar` file.
+3. **Usage:**
+   - Navigate to the **ICARUS** tab in Burp Suite to configure module settings and view findings.
+   - Right-click any request in the Repeater or Proxy history, go to **Extensions** -> **ICARUS**, and select a specific module or **Run All Modules**.
 
 ## Disclaimer
 
-These scripts are intended for:
+These tools are intended for:
 - Security research
 - Defensive security testing
 - Authorized penetration testing
@@ -153,4 +93,4 @@ These scripts are intended for:
 
 ## License
 
-Refer to the License section for information about licensing. These actions are open-sourced under the MIT license.
+ICARUS is open-sourced under the MIT license. See the [LICENSE](LICENSE) file for more information.

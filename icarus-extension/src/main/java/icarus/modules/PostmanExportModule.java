@@ -170,7 +170,7 @@ public class PostmanExportModule implements IcarusModule {
         json.append("  ]\n");
         json.append("}\n");
 
-        String savedPath = promptSaveToFile(json.toString(), path);
+        String savedPath = promptSaveToFile(json.toString(), path, config);
 
         Finding finding = Finding.builder("Postman Export", "EXPORT")
                 .description(savedPath != null
@@ -190,11 +190,12 @@ public class PostmanExportModule implements IcarusModule {
      *
      * @return the absolute path saved to, or null if the user canceled or the save failed.
      */
-    private String promptSaveToFile(String json, String requestPath) {
+    private String promptSaveToFile(String json, String requestPath, ModuleConfig config) {
         String[] savedPath = { null };
 
         Runnable showDialog = () -> {
-            JFileChooser fc = new JFileChooser(new File(System.getProperty("user.home")));
+            String lastDir = config.getString("evidence.output_dir", System.getProperty("user.home"));
+            JFileChooser fc = new JFileChooser(new File(lastDir));
             fc.setSelectedFile(new File(suggestedFileName(requestPath)));
             java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
             if (fc.showSaveDialog(parent) == JFileChooser.APPROVE_OPTION) {
@@ -211,6 +212,10 @@ public class PostmanExportModule implements IcarusModule {
                     Files.writeString(f.toPath(), json);
                     savedPath[0] = f.getAbsolutePath();
                     api.logging().logToOutput("Postman collection saved to: " + f.getAbsolutePath());
+                    if (f.getParentFile() != null) {
+                        config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
+                        api.persistence().extensionData().setString("config", config.serialize());
+                    }
                 } catch (Exception e) {
                     api.logging().logToError("Failed to save Postman collection: " + e);
                 }

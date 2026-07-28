@@ -135,6 +135,7 @@ public class SettingsPanel {
         // Evidence
         JPanel pnlEvidence = createSection("Evidence Capture");
         addComboBox(pnlEvidence, "evidence.colorscheme", "Screenshot Color Scheme:", EvidenceColorScheme.names());
+        addCheckbox(pnlEvidence, "evidence.include_project_name", "Include Project Name in Evidence/Report");
         mainPanel.add(pnlEvidence);
 
         // Initially hide expandable lists

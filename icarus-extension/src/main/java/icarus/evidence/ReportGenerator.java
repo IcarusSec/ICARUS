@@ -58,8 +58,14 @@ public final class ReportGenerator {
             }
         }
 
+        String projectName = null;
+        if (config.getBool("evidence.include_project_name", true)) {
+            String name = api.project().name();
+            if (name != null && !name.isBlank()) projectName = name;
+        }
+
         StringBuilder html = new StringBuilder();
-        appendHeader(html, reportDir.getFileName().toString());
+        appendHeader(html, reportDir.getFileName().toString(), projectName);
         appendSummary(html, captured);
         appendFindings(html, captured);
         appendFooter(html);
@@ -68,7 +74,7 @@ public final class ReportGenerator {
         api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
     }
 
-    private void appendHeader(StringBuilder html, String reportName) {
+    private void appendHeader(StringBuilder html, String reportName, String projectName) {
         html.append("""
             <!DOCTYPE html>
             <html lang="en">
@@ -169,11 +175,12 @@ public final class ReportGenerator {
             <body>
                 <div class="header">
                     <h1>ICARUS Security Report</h1>
-                    <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s</p>
+                    <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s%s</p>
                 </div>
             """.formatted(
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
-                reportName
+                reportName,
+                projectName != null ? " | Project: " + escapeHtml(projectName) : ""
             ));
     }
 

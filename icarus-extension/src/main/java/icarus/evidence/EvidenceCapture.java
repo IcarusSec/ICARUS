@@ -391,11 +391,10 @@ public final class EvidenceCapture {
         int colLabelY = 90;
         int y = colLabelY + 22;
 
-        // Grow the image to fit all content instead of silently clipping whatever doesn't
-        // fit the default size — a fixed height previously cut off long request/response
-        // bodies with no indication anything was missing.
-        int maxLineCount = Math.max(reqLines.length, resLines.length);
-        int imgHeight = Math.max(defaultHeight, y + maxLineCount * 18 + 20);
+        // Capped at defaultHeight rather than growing to fit — an unbounded height produced
+        // multi-thousand-pixel-tall images for long JSON bodies. Whatever doesn't fit gets a
+        // truncation marker instead (see drawColumnLines) rather than silently vanishing.
+        int imgHeight = defaultHeight;
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
 
@@ -416,7 +415,7 @@ public final class EvidenceCapture {
 
         g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-        g.drawString("ICARUS  ·  " + title, 20, 30);
+        g.drawString("ICARUS  ·  " + title + projectNameSuffix(), 20, 30);
 
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
@@ -438,25 +437,43 @@ public final class EvidenceCapture {
 
         // Request (left)
         g.setClip(0, 70, imgWidth / 2 - 5, imgHeight - 70);
-        int reqY = y;
-        Color[] reqLastColor = new Color[1];
-        for (String line : reqLines) {
-            drawLine(g, line, 20, reqY, cs, true, reqLastColor);
-            reqY += 18;
-        }
+        drawColumnLines(g, reqLines, 20, y, imgHeight, cs, true);
 
         // Response (right)
         g.setClip(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70);
-        int resY = y;
-        Color[] resLastColor = new Color[1];
-        for (String line : resLines) {
-            drawLine(g, line, imgWidth / 2 + 20, resY, cs, false, resLastColor);
-            resY += 18;
-        }
+        drawColumnLines(g, resLines, imgWidth / 2 + 20, y, imgHeight, cs, false);
 
         g.setClip(originalClip);
         g.dispose();
         return img;
+    }
+
+    /**
+     * Draws as many pre-wrapped lines as fit in [startY, imgHeight), then a dim truncation
+     * marker for whatever's left — instead of the caller growing the image to fit everything
+     * (which is what let a long JSON body balloon into a multi-thousand-pixel-tall PNG). Line
+     * wrapping/indentation and drawLine's JSON/header syntax coloring are untouched; this only
+     * bounds how many of the already-wrapped lines get drawn.
+     */
+    private void drawColumnLines(Graphics2D g, String[] lines, int x, int startY, int imgHeight, EvidenceColorScheme cs, boolean isRequest) {
+        int lineHeight = 18;
+        int maxLines = Math.max(0, (imgHeight - 10 - startY) / lineHeight);
+        boolean truncated = lines.length > maxLines;
+        int linesToDraw = truncated ? Math.max(0, maxLines - 1) : lines.length;
+
+        int curY = startY;
+        Color[] lastColor = new Color[1];
+        for (int i = 0; i < linesToDraw; i++) {
+            drawLine(g, lines[i], x, curY, cs, isRequest, lastColor);
+            curY += lineHeight;
+        }
+
+        if (truncated) {
+            g.setColor(cs.dim());
+            g.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 12));
+            g.drawString("··· (" + (lines.length - linesToDraw) + " more lines truncated) ···", x, curY);
+            g.setFont(MONO_FONT);
+        }
     }
 
     /**
@@ -560,6 +577,13 @@ public final class EvidenceCapture {
         g.drawString(line, x, y);
     }
 
+    private String projectNameSuffix() {
+        if (!config.getBool("evidence.include_project_name", true)) return "";
+        String projectName = api.project().name();
+        if (projectName == null || projectName.isBlank()) return "";
+        return "  ·  " + projectName;
+    }
+
     private int extractStatusCode(String statusLine) {
         String[] parts = statusLine.trim().split("\\s+");
         if (parts.length >= 2) {
@@ -583,10 +607,44 @@ public final class EvidenceCapture {
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
 
-        return drawRateLimitTable(finding, imgWidth, imgHeight, cs, !force1080);
+        // Built once here (not inside drawRateLimitTable) because formatBody() can pop a
+        // confirmation dialog for binary bodies — drawRateLimitTable retries itself with a
+        // taller canvas when content doesn't fit, and recomputing there would re-prompt the
+        // user for the same body on every retry.
+        String[] fullReqRes = buildFullReqRes(finding, imgWidth);
+
+        return drawRateLimitTable(finding, imgWidth, imgHeight, cs, !force1080, fullReqRes[0], fullReqRes[1]);
     }
 
-    private BufferedImage drawRateLimitTable(Finding finding, int imgWidth, int imgHeight, EvidenceColorScheme cs, boolean allowGrow) {
+    private String[] buildFullReqRes(Finding finding, int imgWidth) {
+        var rr = finding.evidence();
+        String reqContentType = rr.request().headerValue("Content-Type");
+        String reqLine = rr.request().method() + " " + rr.request().path() + " HTTP/" + rr.request().httpVersion();
+
+        String fullReq = reqLine + "\n" + rr.request().headers().stream()
+                .map(h -> h.name() + ": " + h.value() + "\n")
+                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
+
+        String fullRes = "";
+        if (rr.response() != null) {
+            String resContentType = rr.response().headerValue("Content-Type");
+            String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
+            fullRes = statusLine + rr.response().headers().stream()
+                    .map(h -> h.name() + ": " + h.value() + "\n")
+                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
+        }
+
+        // imgWidth is already fixed at this call site, so wrap tightly against the real
+        // column budget instead of the conservative narrower-layout guess used above.
+        int wrapWidth = maxCharsForColumnWidth(imgWidth);
+        fullReq = wrapEvidenceText(fullReq, wrapWidth);
+        fullRes = wrapEvidenceText(fullRes, wrapWidth);
+
+        return new String[]{fullReq, fullRes};
+    }
+
+    private BufferedImage drawRateLimitTable(Finding finding, int imgWidth, int imgHeight, EvidenceColorScheme cs,
+                                              boolean allowGrow, String fullReq, String fullRes) {
         BufferedImage img = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -602,7 +660,7 @@ public final class EvidenceCapture {
 
         g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-        g.drawString("ICARUS EVIDENCE  ·  " + finding.type() + "  ·  " + finding.path(), 20, 30);
+        g.drawString("ICARUS EVIDENCE  ·  " + finding.type() + "  ·  " + finding.path() + projectNameSuffix(), 20, 30);
 
         String startTime = finding.metadata().getOrDefault("start_time", "");
         String endTime = finding.metadata().getOrDefault("end_time", "");
@@ -736,25 +794,6 @@ public final class EvidenceCapture {
         y += 22;
         g.setFont(MONO_FONT);
 
-        String fullReq = reqLine + "\n" + rr.request().headers().stream()
-                .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + formatBody(rr.request().body().getBytes(), reqContentType);
-
-        String fullRes = "";
-        if (rr.response() != null) {
-            String resContentType = rr.response().headerValue("Content-Type");
-            String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
-            fullRes = statusLine + rr.response().headers().stream()
-                    .map(h -> h.name() + ": " + h.value() + "\n")
-                    .reduce("", String::concat) + formatBody(rr.response().body().getBytes(), resContentType);
-        }
-
-        // imgWidth is already fixed at this call site, so wrap tightly against the real
-        // column budget instead of the conservative narrower-layout guess used above.
-        int wrapWidth = maxCharsForColumnWidth(imgWidth);
-        fullReq = wrapEvidenceText(fullReq, wrapWidth);
-        fullRes = wrapEvidenceText(fullRes, wrapWidth);
-
         int reqLines = fullReq.split("\n").length;
         int resLines = fullRes.split("\n").length;
         int maxLines = Math.max(reqLines, resLines);
@@ -762,7 +801,7 @@ public final class EvidenceCapture {
         int requiredHeight = y + (maxLines * 18) + 40;
         if (allowGrow && requiredHeight > imgHeight) {
             g.dispose();
-            return drawRateLimitTable(finding, imgWidth, requiredHeight, cs, false);
+            return drawRateLimitTable(finding, imgWidth, requiredHeight, cs, false, fullReq, fullRes);
         }
 
         Shape clipBackup = g.getClip();
@@ -851,6 +890,10 @@ public final class EvidenceCapture {
                 } else if ("REDACT".equals(kind)) {
                     g2.setColor(Color.BLACK);
                     g2.fill(s);
+                } else if ("ARROW".equals(kind)) {
+                    g2.setColor(c);
+                    g2.fill(s);
+                    g2.draw(s);
                 } else {
                     g2.setColor(c);
                     g2.draw(s);
@@ -985,6 +1028,10 @@ public final class EvidenceCapture {
                     } else if ("REDACT".equals(kind)) {
                         g2.setColor(Color.BLACK);
                         g2.fill(s);
+                    } else if ("ARROW".equals(kind)) {
+                        g2.setColor(cols.get(i));
+                        g2.fill(s);
+                        g2.draw(s);
                     } else {
                         g2.setColor(cols.get(i));
                         g2.draw(s);
@@ -992,12 +1039,17 @@ public final class EvidenceCapture {
                 }
                 g2.dispose();
 
-                JFileChooser fc = new JFileChooser(new File(System.getProperty("user.home")));
+                String lastDir = config.getString("evidence.output_dir", System.getProperty("user.home"));
+                JFileChooser fc = new JFileChooser(new File(lastDir));
                 fc.setSelectedFile(new File("evidence-" + finalTitle.replaceAll("[^a-zA-Z0-9.-]", "_") + ".png"));
                 if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
                     File f = fc.getSelectedFile();
                     ImageIO.write(out, "png", f);
                     captured.add(new CapturedEvidence(finding, f.toPath(), out));
+                    if (f.getParentFile() != null) {
+                        config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
+                        api.persistence().extensionData().setString("config", config.serialize());
+                    }
                     JOptionPane.showMessageDialog(frame, "Saved: " + f.getAbsolutePath());
                     frame.dispose();
                 }
@@ -1018,6 +1070,28 @@ public final class EvidenceCapture {
         bar.add(saveBtn);
         root.add(bar, BorderLayout.EAST);
 
+        // Flameshot-style shortcuts. Routed through doClick() on the existing toolbar
+        // buttons so the ButtonGroup selection state and mode[0]/cursor side effects in
+        // their ActionListener stay the single source of truth — no duplicated logic here.
+        InputMap shortcutMap = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+        ActionMap shortcutActions = root.getActionMap();
+
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, 0), "icarus.modeBox");
+        shortcutActions.put("icarus.modeBox", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { boxBtn.doClick(); }
+        });
+
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, 0), "icarus.modeArrow");
+        shortcutActions.put("icarus.modeArrow", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { arrowBtn.doClick(); }
+        });
+
+        int ctrl = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, ctrl), "icarus.undo");
+        shortcutActions.put("icarus.undo", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { undoBtn.doClick(); }
+        });
+
         // Default cursor for pan mode
         canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
 
@@ -1026,19 +1100,31 @@ public final class EvidenceCapture {
         frame.setVisible(true);
     }
 
+    /**
+     * Builds a shaft + closed triangular head. The shaft stops at the head's base
+     * (not the tip) so it doesn't poke through the filled head once drawAnnotation
+     * fills this shape.
+     */
     private Shape createArrow(Point from, Point to) {
+        double angle = Math.atan2(to.y - from.y, to.x - from.x);
+        double length = Math.hypot(to.x - from.x, to.y - from.y);
+        double headLength = Math.min(15, length * 0.6);
+        double headWidth = headLength * 0.65;
+
+        double baseX = to.x - headLength * Math.cos(angle);
+        double baseY = to.y - headLength * Math.sin(angle);
+        double perpX = -Math.sin(angle);
+        double perpY = Math.cos(angle);
+
         Path2D path = new Path2D.Double();
         path.moveTo(from.x, from.y);
-        path.lineTo(to.x, to.y);
-        
-        // Arrowhead
-        double angle = Math.atan2(to.y - from.y, to.x - from.x);
-        int arrowSize = 15;
-        path.lineTo(to.x - arrowSize * Math.cos(angle - Math.PI / 6),
-                    to.y - arrowSize * Math.sin(angle - Math.PI / 6));
+        path.lineTo(baseX, baseY);
+
         path.moveTo(to.x, to.y);
-        path.lineTo(to.x - arrowSize * Math.cos(angle + Math.PI / 6),
-                    to.y - arrowSize * Math.sin(angle + Math.PI / 6));
+        path.lineTo(baseX + headWidth * perpX, baseY + headWidth * perpY);
+        path.lineTo(baseX - headWidth * perpX, baseY - headWidth * perpY);
+        path.closePath();
+
         return path;
     }
 
@@ -1067,6 +1153,12 @@ public final class EvidenceCapture {
         }
 
         if (isBinary) {
+            int choice = JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(),
+                    "This payload appears to be binary. Format it as a HEX dump for evidence?",
+                    "Binary Payload Detected", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (choice != JOptionPane.YES_OPTION) {
+                return "\n[Binary Payload Omitted]";
+            }
             return "\n--- BINARY PAYLOAD (HEX DUMP) ---\n" + toHexDump(body);
         } else {
             String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);

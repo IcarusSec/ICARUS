@@ -38,3 +38,4 @@ libs/
 
 # Anthropic Claude
 .claude/
+CLAUDE.md

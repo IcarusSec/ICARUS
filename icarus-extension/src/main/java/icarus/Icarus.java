@@ -20,7 +20,7 @@ import java.util.List;
 public class Icarus implements BurpExtension {
 
     public static final String NAME = "ICARUS";
-    public static final String VERSION = "1.1.6";
+    public static final String VERSION = "1.1.5b";
 
     @Override
     public void initialize(MontoyaApi api) {
@@ -167,6 +167,7 @@ public class Icarus implements BurpExtension {
         config.set("evidence.output_dir", System.getProperty("user.home") + "/icarus-reports");
         config.set("evidence.html_report", true);
         config.set("evidence.colorscheme", "Minimal Dark");
+        config.set("evidence.include_project_name", true);
     }
 
     private void loadPersistedConfig(ModuleConfig config, String serialized) {

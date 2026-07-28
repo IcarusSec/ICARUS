@@ -970,8 +970,8 @@ public final class EvidenceCapture {
         bar.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         JToggleButton panBtn = new JToggleButton("Pan", true);
-        JToggleButton boxBtn = new JToggleButton("Box");
-        JToggleButton arrowBtn = new JToggleButton("Arrow");
+        JToggleButton boxBtn = new JToggleButton("Box (s)");
+        JToggleButton arrowBtn = new JToggleButton("Arrow (a)");
         JToggleButton hiBtn = new JToggleButton("Highlight");
         JToggleButton redactBtn = new JToggleButton("Redact");
 

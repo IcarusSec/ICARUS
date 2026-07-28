@@ -2,6 +2,7 @@ package icarus.ui;
 
 import burp.api.montoya.MontoyaApi;
 import icarus.core.ModuleConfig;
+import icarus.core.Severity;
 import icarus.evidence.EvidenceColorScheme;
 
 import javax.swing.*;
@@ -136,6 +137,8 @@ public class SettingsPanel {
         JPanel pnlEvidence = createSection("Evidence Capture");
         addComboBox(pnlEvidence, "evidence.colorscheme", "Screenshot Color Scheme:", EvidenceColorScheme.names());
         addCheckbox(pnlEvidence, "evidence.include_project_name", "Include Project Name in Evidence/Report");
+        addComboBox(pnlEvidence, "evidence.manual_severity", "Manual \"Create Evidence\" Severity:",
+                java.util.Arrays.stream(Severity.values()).map(Enum::name).toArray(String[]::new));
         mainPanel.add(pnlEvidence);
 
         // Initially hide expandable lists

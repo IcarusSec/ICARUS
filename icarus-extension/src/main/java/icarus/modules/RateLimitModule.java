@@ -102,10 +102,12 @@ public class RateLimitModule implements IcarusModule {
 
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         String startTime = LocalDateTime.now().format(dtf);
+        long detectionStartMs = System.currentTimeMillis();
 
         // ── Phase 1: Detection ──
         BlastResult detection = blast(baseRequest, totalRequests, concurrency);
 
+        long detectionElapsedMs = Math.max(1, System.currentTimeMillis() - detectionStartMs);
         String endTime = LocalDateTime.now().format(dtf);
 
         if (detection.blockedAt < 0) {
@@ -151,6 +153,12 @@ public class RateLimitModule implements IcarusModule {
 
         endTime = LocalDateTime.now().format(dtf);
 
+        // Computed from the Phase-1 detection blast alone — the multi-phase elapsed time
+        // (start_time to end_time) is diluted by Phase 2/3 bypass cooldowns/requests and
+        // wouldn't reflect the actual rate that tripped the block.
+        double rps = totalRequests * 1000.0 / detectionElapsedMs;
+        String rpsStr = String.format("%.1f req/s", rps);
+
         findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
                 .description("Rate limiting detected on " + path + " — blocked after "
                         + detection.blockedAt + " requests. " + blockType)
@@ -162,6 +170,7 @@ public class RateLimitModule implements IcarusModule {
                 .meta("block_status", String.valueOf(detection.blockStatus))
                 .meta("block_type", blockType)
                 .meta("requests_sent", String.valueOf(totalRequests))
+                .meta("rps", rpsStr)
                 .meta("blast_log", detection.serializedLog)
                 .meta("bypass_log", bypassLog.toString())
                 .meta("start_time", startTime)

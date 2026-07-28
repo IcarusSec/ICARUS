@@ -104,10 +104,11 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         var createEvidence = new JMenuItem("ICARUS → Create Evidence");
         createEvidence.addActionListener(e -> {
+            Severity manualSeverity = parseSeverity(config.getString("evidence.manual_severity", "INFO"));
             for (var rr : requestResponses) {
                 Finding manualFinding = Finding.builder("Manual", "MANUAL_EVIDENCE")
                         .description("Manual evidence capture triggered by user.")
-                        .severity(Severity.INFO)
+                        .severity(manualSeverity)
                         .category(Category.MANUAL)
                         .evidence(rr)
                         .build();
@@ -316,6 +317,14 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
         dialog.setVisible(true);
+    }
+
+    private Severity parseSeverity(String value) {
+        try {
+            return Severity.valueOf(value);
+        } catch (Exception e) {
+            return Severity.INFO;
+        }
     }
 
     private String buildTabName(Finding finding, int index) {

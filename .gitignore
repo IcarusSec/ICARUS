@@ -39,3 +39,4 @@ libs/
 # Anthropic Claude
 .claude/
 CLAUDE.md
+PLAN.md

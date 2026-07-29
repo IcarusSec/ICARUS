@@ -131,7 +131,7 @@ public final class ScanRunner {
             context.log("──── Running: " + module.name() + " ────");
 
             try {
-                var findings = module.run(target, config);
+                var findings = module.run(target, config, context::log);
                 context.addFindings(findings);
                 context.log(module.name() + " → " + findings.size() + " findings");
             } catch (Exception e) {
@@ -146,13 +146,15 @@ public final class ScanRunner {
     }
 
     private void runSingleModule(IcarusModule module, HttpRequestResponse target, boolean isManual) {
-        Consumer<String> logger = createLiveLogWindow("ICARUS — " + module.name() + " Progress");
+        Consumer<String> popupLogger = createLiveLogWindow("ICARUS — " + module.name() + " Progress");
+        Consumer<String> logger = msg -> {
+            popupLogger.accept(msg);
+            api.logging().logToOutput(msg);
+        };
         logger.accept("ICARUS → Running " + module.name());
-        api.logging().logToOutput("ICARUS → Running " + module.name());
-        var findings = module.run(target, config);
+        var findings = module.run(target, config, logger);
         onFindings.accept(findings, isManual);
         logger.accept("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
-        api.logging().logToOutput("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
     }
 
     private Consumer<String> createLiveLogWindow(String title) {

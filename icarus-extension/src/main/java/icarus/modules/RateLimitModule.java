@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -35,7 +36,7 @@ public class RateLimitModule implements IcarusModule {
     }
 
     @Override
-    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("rl.enabled", true)) return List.of();
         if (requestResponse == null || requestResponse.request() == null) return List.of();
 

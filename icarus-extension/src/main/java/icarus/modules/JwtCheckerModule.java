@@ -16,6 +16,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -56,7 +57,7 @@ public class JwtCheckerModule implements IcarusModule {
     }
 
     @Override
-    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("jwt.enabled", true)) {
             return List.of();
         }

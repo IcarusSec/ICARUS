@@ -13,6 +13,7 @@ import icarus.core.Severity;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 public class SensitiveHeaderModule implements IcarusModule {
@@ -32,7 +33,7 @@ public class SensitiveHeaderModule implements IcarusModule {
     }
 
     @Override
-    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("sh.enabled", true)) {
             return List.of();
         }

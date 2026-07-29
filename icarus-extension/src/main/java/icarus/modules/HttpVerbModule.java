@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 public class HttpVerbModule implements IcarusModule {
@@ -30,7 +31,7 @@ public class HttpVerbModule implements IcarusModule {
     }
 
     @Override
-    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("hv.enabled", true)) {
             return List.of();
         }

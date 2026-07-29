@@ -10,6 +10,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -48,7 +49,10 @@ public class RateLimitModule implements IcarusModule {
             dontAsk && extData.getInteger(projPrefix + "concurrency") != null ? extData.getInteger(projPrefix + "concurrency") : config.getInt("rl.concurrency", 10),
             dontAsk && extData.getInteger(projPrefix + "cooldown_wait_ms") != null ? extData.getInteger(projPrefix + "cooldown_wait_ms") : config.getInt("rl.cooldown_wait_ms", 60000)
         };
-        boolean[] proceed = new boolean[] { dontAsk };
+        boolean[] proceed = new boolean[] {
+            dontAsk,
+            dontAsk && Boolean.TRUE.equals(extData.getBoolean(projPrefix + "detect_only"))
+        };
 
         if (!dontAsk) {
             try {
@@ -56,12 +60,14 @@ public class RateLimitModule implements IcarusModule {
                     JTextField txtCount = new JTextField(String.valueOf(params[0]));
                     JTextField txtConcurrency = new JTextField(String.valueOf(params[1]));
                     JTextField txtCooldown = new JTextField(String.valueOf(params[2]));
+                    JCheckBox chkDetectOnly = new JCheckBox("Detection only (prove enforcement, no bypasses)", proceed[1]);
                     JCheckBox chkDontAsk = new JCheckBox("Don't ask again for this project");
 
                     Object[] message = {
                         "Number of requests:", txtCount,
                         "Thread count (concurrency):", txtConcurrency,
                         "Delay / Cooldown between bypasses (ms):", txtCooldown,
+                        " ", chkDetectOnly,
                         " ", chkDontAsk
                     };
 
@@ -72,12 +78,14 @@ public class RateLimitModule implements IcarusModule {
                             params[1] = Integer.parseInt(txtConcurrency.getText().trim());
                             params[2] = Integer.parseInt(txtCooldown.getText().trim());
                             proceed[0] = true;
+                            proceed[1] = chkDetectOnly.isSelected();
 
                             if (chkDontAsk.isSelected()) {
                                 extData.setBoolean(projPrefix + "dont_ask_again", true);
                                 extData.setInteger(projPrefix + "request_count", params[0]);
                                 extData.setInteger(projPrefix + "concurrency", params[1]);
                                 extData.setInteger(projPrefix + "cooldown_wait_ms", params[2]);
+                                extData.setBoolean(projPrefix + "detect_only", proceed[1]);
                             }
                         } catch (NumberFormatException e) {
                             api.logging().logToError("Invalid integer in Rate Limit config.");
@@ -94,6 +102,7 @@ public class RateLimitModule implements IcarusModule {
         int totalRequests = params[0];
         int concurrency = params[1];
         int cooldownMs = params[2];
+        boolean detectOnly = proceed[1];
 
         HttpRequest baseRequest = requestResponse.request();
         String path = baseRequest.path();
@@ -131,51 +140,73 @@ public class RateLimitModule implements IcarusModule {
 
         // ── Phase 2: Characterization ──
         String blockType = describeBlockType(detection);
-
-        // ── Phase 3: Bypass Attempts ──
-
-        // Wait for cooldown before bypass attempts
-        try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
-
         StringBuilder bypassLog = new StringBuilder();
 
-        if (config.getBool("rl.bypass_headers", true)) {
-            tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path);
-        }
+        // ── Phase 3: Bypass Attempts (skipped in detect-only mode) ──
+        if (!detectOnly) {
+            // Wait for cooldown before bypass attempts
+            try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
 
-        if (config.getBool("rl.bypass_path", true)) {
-            tryPathBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
-        }
+            if (config.getBool("rl.bypass_headers", true)) {
+                tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path);
+            }
 
-        if (config.getBool("rl.bypass_query", true)) {
-            tryQueryBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+            if (config.getBool("rl.bypass_path", true)) {
+                tryPathBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+            }
+
+            if (config.getBool("rl.bypass_query", true)) {
+                tryQueryBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+            }
         }
 
         endTime = LocalDateTime.now().format(dtf);
 
         // Computed from the Phase-1 detection blast alone — the multi-phase elapsed time
         // (start_time to end_time) is diluted by Phase 2/3 bypass cooldowns/requests and
-        // wouldn't reflect the actual rate that tripped the block.
-        double rps = totalRequests * 1000.0 / detectionElapsedMs;
+        // wouldn't reflect the actual rate that tripped the block. requestsSent (not
+        // totalRequests) accounts for early-stopping skipping the tail once the block
+        // is confirmed, so RPS reflects what was actually fired, not what was requested.
+        double rps = detection.requestsSent * 1000.0 / detectionElapsedMs;
         String rpsStr = String.format("%.1f req/s", rps);
 
-        findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
-                .description("Rate limiting detected on " + path + " — blocked after "
-                        + detection.blockedAt + " requests. " + blockType)
-                .severity(Severity.INFO)
-                .category(Category.RATE_LIMIT)
-                .path(path)
-                .evidence(detection.blockEvidence != null ? detection.blockEvidence : requestResponse)
-                .meta("threshold", String.valueOf(detection.blockedAt))
-                .meta("block_status", String.valueOf(detection.blockStatus))
-                .meta("block_type", blockType)
-                .meta("requests_sent", String.valueOf(totalRequests))
-                .meta("rps", rpsStr)
-                .meta("blast_log", detection.serializedLog)
-                .meta("bypass_log", bypassLog.toString())
-                .meta("start_time", startTime)
-                .meta("end_time", endTime)
-                .build());
+        if (detectOnly) {
+            findings.add(Finding.builder(name(), "RATE_LIMIT_ENFORCED")
+                    .description("Rate limiting confirmed on " + path + " — blocked after "
+                            + detection.blockedAt + " requests. " + blockType
+                            + " (bypass attempts skipped: detection-only mode)")
+                    .severity(Severity.INFO)
+                    .category(Category.RATE_LIMIT)
+                    .path(path)
+                    .evidence(detection.blockEvidence != null ? detection.blockEvidence : requestResponse)
+                    .meta("threshold", String.valueOf(detection.blockedAt))
+                    .meta("block_status", String.valueOf(detection.blockStatus))
+                    .meta("block_type", blockType)
+                    .meta("requests_sent", String.valueOf(detection.requestsSent))
+                    .meta("rps", rpsStr)
+                    .meta("blast_log", detection.serializedLog)
+                    .meta("start_time", startTime)
+                    .meta("end_time", endTime)
+                    .build());
+        } else {
+            findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
+                    .description("Rate limiting detected on " + path + " — blocked after "
+                            + detection.blockedAt + " requests. " + blockType)
+                    .severity(Severity.INFO)
+                    .category(Category.RATE_LIMIT)
+                    .path(path)
+                    .evidence(detection.blockEvidence != null ? detection.blockEvidence : requestResponse)
+                    .meta("threshold", String.valueOf(detection.blockedAt))
+                    .meta("block_status", String.valueOf(detection.blockStatus))
+                    .meta("block_type", blockType)
+                    .meta("requests_sent", String.valueOf(detection.requestsSent))
+                    .meta("rps", rpsStr)
+                    .meta("blast_log", detection.serializedLog)
+                    .meta("bypass_log", bypassLog.toString())
+                    .meta("start_time", startTime)
+                    .meta("end_time", endTime)
+                    .build());
+        }
 
         return findings;
     }
@@ -191,38 +222,57 @@ public class RateLimitModule implements IcarusModule {
      * and analyzes the responses for a rate-limit block. Shared by {@link #blast} and the
      * bypass-attempt methods below, which previously each reimplemented this loop.
      */
+    private static final int SKIPPED_STATUS = -1;
+
     private BlastResult blastWithMutator(int count, int concurrency, java.util.function.IntFunction<HttpRequest> mutator) {
         ExecutorService pool = Executors.newFixedThreadPool(concurrency);
         List<Future<SingleResult>> futures = new ArrayList<>();
+        AtomicInteger blockCount = new AtomicInteger(0);
+        AtomicInteger sentCount = new AtomicInteger(0);
 
         for (int i = 0; i < count; i++) {
             final int idx = i;
             futures.add(pool.submit(() -> {
+                // Once the block is confirmed (3+ block responses observed), stop actually
+                // sending — the threshold is already known and further requests just add load.
+                if (blockCount.get() >= 3) {
+                    return new SingleResult(idx, SKIPPED_STATUS, 0, 0, null);
+                }
+                // Counted before sendRequest() so a mid-request exception still counts as sent.
+                sentCount.incrementAndGet();
+
                 HttpRequest mutated = mutator.apply(idx);
                 long start = System.currentTimeMillis();
                 HttpRequestResponse rr = api.http().sendRequest(mutated);
                 long elapsed = System.currentTimeMillis() - start;
                 int status = rr.response() != null ? rr.response().statusCode() : 0;
                 int len = rr.response() != null ? rr.response().body().length() : 0;
+                if (status == 429 || status == 403 || status == 503) {
+                    blockCount.incrementAndGet();
+                }
                 return new SingleResult(idx, status, len, elapsed, rr);
             }));
         }
 
         List<SingleResult> results = new ArrayList<>();
         for (var f : futures) {
-            try { results.add(f.get(30, TimeUnit.SECONDS)); }
-            catch (Exception e) { results.add(new SingleResult(results.size(), 0, 0, -1, null)); }
+            try {
+                SingleResult r = f.get(30, TimeUnit.SECONDS);
+                if (r.status != SKIPPED_STATUS) results.add(r);
+            } catch (Exception e) {
+                results.add(new SingleResult(results.size(), 0, 0, -1, null));
+            }
         }
         pool.shutdown();
 
         // Sort by index to preserve order
         results.sort((a, b) -> Integer.compare(a.index, b.index));
 
-        return analyzeResults(results);
+        return analyzeResults(results, sentCount.get());
     }
 
-    private BlastResult analyzeResults(List<SingleResult> results) {
-        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null, "");
+    private BlastResult analyzeResults(List<SingleResult> results, int requestsSent) {
+        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null, "", requestsSent);
 
         StringBuilder sb = new StringBuilder();
         for (SingleResult r : results) {
@@ -235,15 +285,17 @@ public class RateLimitModule implements IcarusModule {
         // Find the dominant (first) status code
         int firstStatus = results.get(0).status;
 
-        // Find the first result that differs significantly
+        // Find the first result that differs significantly. Use the SingleResult's own
+        // index (not its array position) — early-stopping filters skipped entries out of
+        // `results` before this scan, so position and original request index diverge.
         for (int i = 1; i < results.size(); i++) {
             SingleResult r = results.get(i);
             if (isBlockResponse(r.status, firstStatus)) {
-                return new BlastResult(i, firstStatus, r.status, r.evidence, log);
+                return new BlastResult(r.index, firstStatus, r.status, r.evidence, log, requestsSent);
             }
         }
 
-        return new BlastResult(-1, firstStatus, 0, null, log);
+        return new BlastResult(-1, firstStatus, 0, null, log, requestsSent);
     }
 
     private boolean isBlockResponse(int currentStatus, int normalStatus) {
@@ -363,5 +415,5 @@ public class RateLimitModule implements IcarusModule {
 
     private record SingleResult(int index, int status, int bodyLength, long elapsedMs, HttpRequestResponse evidence) {}
 
-    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence, String serializedLog) {}
+    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence, String serializedLog, int requestsSent) {}
 }

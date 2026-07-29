@@ -5,6 +5,7 @@ import icarus.core.Category;
 import icarus.core.Finding;
 import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
+import icarus.core.Severity;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -106,10 +107,19 @@ public final class EvidenceCapture {
         JTextField txtDesc = new JTextField(finding.description() != null ? finding.description() : "", 40);
         txtDesc.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
 
+        JLabel lblSev = new JLabel("Severity:");
+        lblSev.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        lblSev.setForeground(Color.WHITE);
+        JComboBox<Severity> cbSev = new JComboBox<>(Severity.values());
+        cbSev.setSelectedItem(finding.severity());
+        cbSev.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
         pnlTop.add(lblTitle);
         pnlTop.add(txtName);
         pnlTop.add(lblDesc);
         pnlTop.add(txtDesc);
+        pnlTop.add(lblSev);
+        pnlTop.add(cbSev);
 
         // Text Areas — include the request line (method + path) and status line
         var rr = finding.evidence();
@@ -189,8 +199,19 @@ public final class EvidenceCapture {
         btnProceed.addActionListener(e -> {
             String finalTitle = txtName.getText();
             String finalDesc = txtDesc.getText();
-            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(), finalTitle, finalDesc, finding.severity().name(), chk1080.isSelected());
-            showPhase2(editor, finding, renderedText, finalTitle);
+            Severity finalSev = (Severity) cbSev.getSelectedItem();
+
+            Finding.Builder builder = Finding.builder(finding.module(), finalTitle)
+                    .description(finalDesc)
+                    .severity(finalSev)
+                    .category(finding.category())
+                    .path(finding.path())
+                    .evidence(finding.evidence());
+            finding.metadata().forEach(builder::meta);
+            Finding updatedFinding = builder.build();
+
+            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(), finalTitle, finalDesc, finalSev.name(), chk1080.isSelected());
+            showPhase2(editor, updatedFinding, renderedText, finalTitle);
         });
 
         pnlBottom.add(btnCleanNoise);

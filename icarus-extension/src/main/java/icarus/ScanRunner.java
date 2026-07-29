@@ -6,11 +6,11 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
-import icarus.core.ScanContext;
 import icarus.modules.SensitiveHeaderModule;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -92,12 +92,19 @@ public final class ScanRunner {
     }
 
     private void doScan(HttpRequestResponse target, boolean isManual) {
-        var context = new ScanContext(api, target, config);
-        Consumer<String> logger = createLiveLogWindow("ICARUS — Scan Progress");
-        context.setLiveLogger(logger);
+        Consumer<String> popupLogger = createLiveLogWindow("ICARUS — Scan Progress");
+        Consumer<String> log = msg -> {
+            api.logging().logToOutput(msg);
+            popupLogger.accept(msg);
+        };
+        Consumer<String> error = msg -> {
+            api.logging().logToError(msg);
+            popupLogger.accept("[ERROR] " + msg);
+        };
+        List<Finding> findings = new ArrayList<>();
 
-        context.log("════════════════════════════════════════════════");
-        context.log("ICARUS scan started — " + target.request().method() + " " + target.request().path());
+        log.accept("════════════════════════════════════════════════");
+        log.accept("ICARUS scan started — " + target.request().method() + " " + target.request().path());
 
         if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
             String server = target.response().headerValue("Server");
@@ -114,7 +121,7 @@ public final class ScanRunner {
                 int choice = choiceHolder[0];
 
                 if (choice == 1) {
-                    context.log("User chose SAFE MODE (WAF bypass)");
+                    log.accept("User chose SAFE MODE (WAF bypass)");
                     String safePayloads = config.getString("waf.safelist_payloads", "' OR 1=1--");
                     config.set("pv.payload_sqli", safePayloads);
                     config.set("pv.payload_xss", safePayloads);
@@ -128,21 +135,21 @@ public final class ScanRunner {
         for (var module : modules) {
             if (!isModuleEnabled(module) || !module.includeInBulkScan()) continue;
 
-            context.log("──── Running: " + module.name() + " ────");
+            log.accept("──── Running: " + module.name() + " ────");
 
             try {
-                var findings = module.run(target, config, verboseLogger(context::log, config));
-                context.addFindings(findings);
-                context.log(module.name() + " → " + findings.size() + " findings");
+                var moduleFindings = module.run(target, config, verboseLogger(log, config));
+                findings.addAll(moduleFindings);
+                log.accept(module.name() + " → " + moduleFindings.size() + " findings");
             } catch (Exception e) {
-                context.error(module.name() + " failed: " + e.getMessage());
+                error.accept(module.name() + " failed: " + e.getMessage());
             }
         }
 
-        onFindings.accept(context.findings(), isManual);
+        onFindings.accept(findings, isManual);
 
-        context.log("ICARUS scan complete — " + context.findings().size() + " total findings.");
-        context.log("════════════════════════════════════════════════");
+        log.accept("ICARUS scan complete — " + findings.size() + " total findings.");
+        log.accept("════════════════════════════════════════════════");
     }
 
     private void runSingleModule(IcarusModule module, HttpRequestResponse target, boolean isManual) {

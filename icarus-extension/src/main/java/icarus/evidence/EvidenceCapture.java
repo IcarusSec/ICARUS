@@ -26,7 +26,6 @@ public final class EvidenceCapture {
     // Burp Dark Theme Colors
     private static final Color BG_COLOR = new Color(34, 34, 34);
     private static final Color TEXT_COLOR = new Color(190, 190, 190);
-    private static final Color HEADER_BG = new Color(45, 45, 45);
     private static final Color ACCENT_COLOR = new Color(255, 102, 51);
     private static final Color SEPARATOR_COLOR = new Color(80, 80, 80);
 
@@ -83,9 +82,7 @@ public final class EvidenceCapture {
     }
 
     private void showPhase1(Finding finding) {
-        JDialog editor = new JDialog();
-        editor.setTitle("ICARUS Evidence Editor - Phase 1: Text Cleanup");
-        editor.setModal(false);
+        JDialog editor = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Editor - Phase 1: Text Cleanup", false);
         editor.setSize(1200, 800);
         editor.setLocationRelativeTo(null);
         editor.setLayout(new BorderLayout());
@@ -93,23 +90,24 @@ public final class EvidenceCapture {
         // Top Metadata Bar
         JPanel pnlTop = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 10));
         pnlTop.setBorder(new EmptyBorder(10, 10, 10, 10));
-        pnlTop.setBackground(HEADER_BG);
 
         JLabel lblTitle = new JLabel("Evidence Title:");
         lblTitle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        lblTitle.setForeground(Color.WHITE);
+        api.userInterface().applyThemeToComponent(lblTitle);
         JTextField txtName = new JTextField(finding.type(), 20);
         txtName.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        api.userInterface().applyThemeToComponent(txtName);
 
         JLabel lblDesc = new JLabel("Description:");
         lblDesc.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        lblDesc.setForeground(Color.WHITE);
+        api.userInterface().applyThemeToComponent(lblDesc);
         JTextField txtDesc = new JTextField(finding.description() != null ? finding.description() : "", 40);
         txtDesc.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        api.userInterface().applyThemeToComponent(txtDesc);
 
         JLabel lblSev = new JLabel("Severity:");
         lblSev.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        lblSev.setForeground(Color.WHITE);
+        api.userInterface().applyThemeToComponent(lblSev);
         JComboBox<Severity> cbSev = new JComboBox<>(Severity.values());
         cbSev.setSelectedItem(finding.severity());
         cbSev.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
@@ -120,6 +118,7 @@ public final class EvidenceCapture {
         pnlTop.add(txtDesc);
         pnlTop.add(lblSev);
         pnlTop.add(cbSev);
+        api.userInterface().applyThemeToComponent(pnlTop);
 
         // Text Areas — include the request line (method + path) and status line
         var rr = finding.evidence();
@@ -189,7 +188,6 @@ public final class EvidenceCapture {
         });
 
         JButton btnProceed = createModernButton("Proceed to Annotation ➔", ACCENT_COLOR);
-        btnProceed.setForeground(Color.WHITE);
 
         btnCleanNoise.addActionListener(e -> {
             reqArea.setText(cleanNoise(reqArea.getText()));
@@ -865,11 +863,12 @@ public final class EvidenceCapture {
         parentEditor.setTitle("ICARUS Evidence — Annotation");
         parentEditor.setMinimumSize(new Dimension(640, 480));
 
-        // Make the dialog behave like a proper window with minimize/maximize
-        JFrame frame = new JFrame("ICARUS Evidence — Annotation");
+        // Owned by the Burp suite frame so it doesn't get lost behind Burp (was a
+        // top-level, owner-less JFrame before).
+        JDialog frame = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence — Annotation", false);
         frame.setSize(1200, 800);
         frame.setLocationRelativeTo(null);
-        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
         JPanel root = new JPanel(new BorderLayout());
 

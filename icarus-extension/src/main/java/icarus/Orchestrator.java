@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Burp integration facade: wires context-menu items and the passive HTTP handler to
@@ -46,7 +47,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
     }
 
-    public void addListener(FindingRegistry.ScanListener listener) {
+    public void addListener(Consumer<List<FindingRecord>> listener) {
         findings.addListener(listener);
     }
 

@@ -23,7 +23,7 @@ public final class FindingRegistry {
 
     private final Map<String, FindingRecord> activeFindings = new ConcurrentHashMap<>();
     private final List<String> auditLog = new ArrayList<>();
-    private final List<ScanListener> listeners = new ArrayList<>();
+    private final List<Consumer<List<FindingRecord>>> listeners = new ArrayList<>();
 
     public FindingRegistry(MontoyaApi api, ModuleConfig config, Consumer<Runnable> uiDispatcher) {
         this.api = api;
@@ -54,7 +54,7 @@ public final class FindingRegistry {
         }
     }
 
-    public void addListener(ScanListener listener) {
+    public void addListener(Consumer<List<FindingRecord>> listener) {
         listeners.add(listener);
     }
 
@@ -187,12 +187,8 @@ public final class FindingRegistry {
     private void notifyListenersOfUpdate() {
         uiDispatcher.accept(() -> {
             for (var listener : listeners) {
-                listener.onScanComplete(new ArrayList<>(activeFindings.values()));
+                listener.accept(new ArrayList<>(activeFindings.values()));
             }
         });
-    }
-
-    public interface ScanListener {
-        void onScanComplete(List<FindingRecord> records);
     }
 }

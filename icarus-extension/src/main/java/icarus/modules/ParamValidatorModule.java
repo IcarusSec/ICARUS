@@ -60,6 +60,8 @@ public final class ParamValidatorModule implements IcarusModule {
             eligiblePaths.add(path);
         }
 
+        logger.accept("Detected " + eligiblePaths.size() + " inputs on body.");
+
         int maxMutations = config.getInt("pv.max_mutations", 60);
         List<Mutation> mutations = new ArrayList<>();
         
@@ -130,12 +132,22 @@ public final class ParamValidatorModule implements IcarusModule {
         List<HttpRequestResponse> responses = new ArrayList<>();
         
         for (int i = 0; i < mutatedRequests.size(); i++) {
+            Mutation m = mutations.get(i);
+            logger.accept("testing " + shortPath(m.path()) + " with " + m.description().toLowerCase() + "...");
+
             long startTime = System.currentTimeMillis();
             try {
                 HttpRequestResponse result = api.http().sendRequest(mutatedRequests.get(i));
                 responses.add(result);
+                if (result != null && result.response() != null) {
+                    int st = result.response().statusCode();
+                    if (st == 401 || st == 403) {
+                        logger.accept("tool is returning " + st);
+                    }
+                }
             } catch (Exception e) {
                 api.logging().logToError("Param Validator: mutation request failed: " + e);
+                logger.accept("request failed: " + e.getMessage());
                 responses.add(null);
             }
             requestTimes[i] = System.currentTimeMillis() - startTime;
@@ -237,10 +249,15 @@ public final class ParamValidatorModule implements IcarusModule {
                         .meta("length", String.valueOf(length))
                         .meta("responseTime", String.valueOf(responseTime))
                         .build());
+                logger.accept("[FINDING] " + shortPath(mutation.path()) + " → " + mutation.type() + " (HTTP " + status + ")");
             }
         }
-        
+
         return findings;
+    }
+
+    private static String shortPath(String path) {
+        return path.startsWith("$.") ? path.substring(2) : path;
     }
 
     private static final class SpecsFactory {

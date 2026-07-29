@@ -112,7 +112,7 @@ public class JwtCheckerModule implements IcarusModule {
         boolean runActiveTests = confirmActiveTests();
 
         for (var candidate : jwtCandidates) {
-            analyzeCandidate(candidate, baseReq, requestResponse, findings, config, runActiveTests);
+            analyzeCandidate(candidate, baseReq, requestResponse, findings, config, runActiveTests, logger);
         }
 
         return findings;
@@ -169,7 +169,8 @@ public class JwtCheckerModule implements IcarusModule {
     }
 
     private void analyzeCandidate(JwtCandidate candidate, HttpRequest baseReq, HttpRequestResponse baseRR,
-                                   List<Finding> findings, ModuleConfig config, boolean runActiveTests) {
+                                   List<Finding> findings, ModuleConfig config, boolean runActiveTests,
+                                   Consumer<String> logger) {
         String token = candidate.token;
         var jwtParts = token.split("\\.", -1);
         if (jwtParts.length < 2) {
@@ -288,6 +289,7 @@ public class JwtCheckerModule implements IcarusModule {
 
         // Active Tests
         BiConsumer<String, String> testToken = (label, tokenToSend) -> {
+            logger.accept("Testing " + humanizeLabel(label) + "...");
             try {
                 String newHeaderValue = candidate.headerValue.replace(candidate.token, tokenToSend);
                 HttpRequest mutatedReq = baseReq.withUpdatedHeader(candidate.headerName, newHeaderValue).withService(baseReq.httpService());
@@ -310,11 +312,16 @@ public class JwtCheckerModule implements IcarusModule {
                     && !lowerBody.contains("forbidden")
                     && !lowerBody.contains("expired")) {
                     findings.add(createFinding("ACTIVE_HIT_" + label, "Active test HIT for " + label, Severity.HIGH, result));
+                    logger.accept("[FINDING] worked (HTTP " + st + ")");
                 } else if (verbose) {
                     findings.add(createFinding("VERBOSE_ERROR_" + label, "Active test triggered verbose error for " + label, Severity.MEDIUM, result));
+                    logger.accept("[FINDING] worked - verbose error leaked (HTTP " + st + ")");
+                } else {
+                    logger.accept("Not worked, returned " + st + ".");
                 }
             } catch (Exception e) {
                 api.logging().logToError("JWT Checker: active test '" + label + "' failed: " + e);
+                logger.accept("request failed: " + e.getMessage());
             }
         };
 
@@ -480,6 +487,11 @@ public class JwtCheckerModule implements IcarusModule {
 
     private static String buildRawToken(String headerStr, String payloadStr, String signaturePart) {
         return b64UrlEncode(headerStr) + "." + b64UrlEncode(payloadStr) + "." + signaturePart;
+    }
+
+    /** Turns a kebab-case test label like "future-nbf" or "alg-none-empty-signature" into readable log text. */
+    private static String humanizeLabel(String label) {
+        return label.replace('-', ' ');
     }
 
     private static String b64UrlEncode(String input) {

@@ -12,6 +12,7 @@ import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 public final class ParamValidatorModule implements IcarusModule {
 
@@ -30,7 +31,7 @@ public final class ParamValidatorModule implements IcarusModule {
     record Mutation(String path, String type, String description, Category category, String body, Object value) {}
 
     @Override
-    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         HttpRequest request = requestResponse.request();
         String contentType = request.headerValue("Content-Type");
         String originalBody = request.bodyToString();

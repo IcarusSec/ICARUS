@@ -19,6 +19,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 public class PostmanExportModule implements IcarusModule {
 
@@ -42,7 +43,7 @@ public class PostmanExportModule implements IcarusModule {
     }
 
     @Override
-    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config) {
+    public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("export.enabled", true)) {
             return List.of();
         }

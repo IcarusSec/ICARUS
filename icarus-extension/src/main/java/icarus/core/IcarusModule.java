@@ -3,6 +3,7 @@ package icarus.core;
 import burp.api.montoya.http.message.HttpRequestResponse;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Contract for every ICARUS security testing module.
@@ -21,9 +22,10 @@ public interface IcarusModule {
      *
      * @param requestResponse the target (must have been sent already)
      * @param config          module-specific configuration snapshot
+     * @param logger          sink for SQLMap-style verbose progress lines, shown live to the user
      * @return list of findings (empty if nothing detected)
      */
-    List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config);
+    List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger);
 
     /**
      * Whether this module should run as part of "Run All Modules". Utility modules that

@@ -13,7 +13,9 @@ import icarus.evidence.ReportGenerator;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Burp integration facade: wires context-menu items and the passive HTTP handler to
@@ -153,7 +155,19 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private void routeFindings(List<Finding> newFindings, boolean isManual) {
         List<Finding> newOrUpdated = findings.processDeduplication(newFindings, false);
 
-        if (!newOrUpdated.isEmpty() && (isManual || config.getBool("ui.show_popups", true))) {
+        if (isManual && !newFindings.isEmpty()) {
+            // Manual scans show results even on a re-run that only produced duplicates —
+            // look up every incoming finding by hash, not just the newly-created ones.
+            List<FindingRecord> recordsToShow = new ArrayList<>();
+            Set<String> seenHashes = new HashSet<>();
+            for (Finding f : newFindings) {
+                String hash = f.similarityHash();
+                if (!seenHashes.add(hash)) continue; // already resolved this hash this batch
+                FindingRecord r = findings.getRecordByHash(hash);
+                if (r != null && !r.isSuppressed()) recordsToShow.add(r);
+            }
+            SwingUtilities.invokeLater(() -> showFindingsDialog(recordsToShow));
+        } else if (!newOrUpdated.isEmpty() && config.getBool("ui.show_popups", true)) {
             List<FindingRecord> recordsToShow = new ArrayList<>();
             for (Finding f : newOrUpdated) {
                 FindingRecord r = findings.getRecordByHash(f.similarityHash());

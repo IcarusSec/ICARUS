@@ -131,7 +131,7 @@ public final class ScanRunner {
             context.log("──── Running: " + module.name() + " ────");
 
             try {
-                var findings = module.run(target, config, context::log);
+                var findings = module.run(target, config, verboseLogger(context::log, config));
                 context.addFindings(findings);
                 context.log(module.name() + " → " + findings.size() + " findings");
             } catch (Exception e) {
@@ -152,9 +152,18 @@ public final class ScanRunner {
             api.logging().logToOutput(msg);
         };
         logger.accept("ICARUS → Running " + module.name());
-        var findings = module.run(target, config, logger);
+        var findings = module.run(target, config, verboseLogger(logger, config));
         onFindings.accept(findings, isManual);
         logger.accept("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
+    }
+
+    /**
+     * Gates a module's step-by-step logging behind the "Verbose Mode" setting (default on),
+     * without every module needing to check the config itself. Scan start/complete/phase-banner
+     * lines logged directly via {@code context::log} elsewhere are unaffected.
+     */
+    private static Consumer<String> verboseLogger(Consumer<String> logger, ModuleConfig config) {
+        return config.getBool("verbose.enabled", true) ? logger : msg -> {};
     }
 
     private Consumer<String> createLiveLogWindow(String title) {

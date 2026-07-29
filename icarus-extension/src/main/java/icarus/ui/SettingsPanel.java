@@ -24,8 +24,7 @@ public class SettingsPanel {
         this.api = api;
         this.config = config;
         this.themeHelper = themeHelper;
-        this.mainPanel = new JPanel();
-        this.mainPanel.setLayout(new BoxLayout(this.mainPanel, BoxLayout.Y_AXIS));
+        this.mainPanel = new JPanel(new BorderLayout(0, 10));
         this.mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         themeHelper.applyTheme(this.mainPanel);
 
@@ -33,9 +32,13 @@ public class SettingsPanel {
     }
 
     public Component getComponent() {
-        JScrollPane scroll = new JScrollPane(mainPanel);
-        scroll.getVerticalScrollBar().setUnitIncrement(16);
+        return mainPanel;
+    }
+
+    private Component wrapInScroll(Component content) {
+        JScrollPane scroll = new JScrollPane(content);
         scroll.setBorder(null);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
         themeHelper.applyTheme(scroll);
         return scroll;
     }
@@ -60,8 +63,11 @@ public class SettingsPanel {
         themeHelper.styleButton(btnSave);
         btnSave.addActionListener(e -> saveAll());
         pnlTop.add(btnSave);
-        mainPanel.add(pnlTop);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        mainPanel.add(pnlTop, BorderLayout.NORTH);
+
+        JTabbedPane settingsTabs = new JTabbedPane();
+        themeHelper.applyTheme(settingsTabs);
+        mainPanel.add(settingsTabs, BorderLayout.CENTER);
 
         // Global Toggles
         JPanel pnlGlobal = createSection("General & Modules");
@@ -73,15 +79,19 @@ public class SettingsPanel {
         addCheckbox(pnlGlobal, "sh.passive", "Sensitive Headers (Passive / Background)");
         addCheckbox(pnlGlobal, "export.enabled", "Postman Export");
         addCheckbox(pnlGlobal, "rl.enabled", "Rate Limit Tester");
-        mainPanel.add(pnlGlobal);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
 
         // WAF & Safe Lists
         JPanel pnlWaf = createSection("WAF Evasion & Safe Lists");
         addCheckbox(pnlWaf, "waf.detect_akamai", "Detect Akamai and prompt for Safe Mode");
         addTextArea(pnlWaf, "waf.safelist_payloads", "Safe List Payloads (one per line):", true);
-        mainPanel.add(pnlWaf);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+
+        JPanel pnlGeneralTab = new JPanel();
+        pnlGeneralTab.setLayout(new BoxLayout(pnlGeneralTab, BoxLayout.Y_AXIS));
+        themeHelper.applyTheme(pnlGeneralTab);
+        pnlGeneralTab.add(pnlGlobal);
+        pnlGeneralTab.add(Box.createRigidArea(new Dimension(0, 10)));
+        pnlGeneralTab.add(pnlWaf);
+        settingsTabs.addTab("General", wrapInScroll(pnlGeneralTab));
 
         // ParamValidator
         JPanel pnlPv = createSection("ParamValidator");
@@ -100,8 +110,7 @@ public class SettingsPanel {
         addTextArea(pnlPv, "pv.payload_nosqli", "NoSQLi Payloads:", true);
         addTextArea(pnlPv, "pv.payload_format_string", "Format String Payloads:", true);
 
-        mainPanel.add(pnlPv);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        settingsTabs.addTab("ParamValidator", wrapInScroll(pnlPv));
 
         // HTTP Verb
         JPanel pnlHv = createSection("HTTP Verb Tester");
@@ -113,14 +122,12 @@ public class SettingsPanel {
         addCheckbox(pnlHv, "hv.test_trace", "Test TRACE");
         addCheckbox(pnlHv, "hv.enable_state_changing", "Enable state-changing methods (POST/PUT/DELETE/PATCH)");
         addField(pnlHv, "hv.body_strategy", "Body Strategy (AUTO/KEEP/REMOVE):");
-        mainPanel.add(pnlHv);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        settingsTabs.addTab("HTTP Verb", wrapInScroll(pnlHv));
 
         // JWT Checker
         JPanel pnlJwt = createSection("JWT / Bearer Token Checker");
         addCheckbox(pnlJwt, "jwt.redact_sensitive_claims", "Redact sensitive claim values in findings/logs/reports (show key only)");
-        mainPanel.add(pnlJwt);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        settingsTabs.addTab("JWT", wrapInScroll(pnlJwt));
 
         // Rate Limit Tester
         JPanel pnlRl = createSection("Rate Limit Tester");
@@ -130,8 +137,7 @@ public class SettingsPanel {
         addCheckbox(pnlRl, "rl.bypass_headers", "Try IP header rotation bypass (X-Forwarded-For, etc.)");
         addCheckbox(pnlRl, "rl.bypass_path", "Try path normalization bypass (/api/./v1, //api, etc.)");
         addCheckbox(pnlRl, "rl.bypass_query", "Try cache-buster query param bypass (?_icarus=N)");
-        mainPanel.add(pnlRl);
-        mainPanel.add(Box.createRigidArea(new Dimension(0, 10)));
+        settingsTabs.addTab("Rate Limit", wrapInScroll(pnlRl));
 
         // Evidence
         JPanel pnlEvidence = createSection("Evidence Capture");
@@ -139,7 +145,7 @@ public class SettingsPanel {
         addCheckbox(pnlEvidence, "evidence.include_project_name", "Include Project Name in Evidence/Report");
         addComboBox(pnlEvidence, "evidence.manual_severity", "Manual \"Create Evidence\" Severity:",
                 java.util.Arrays.stream(Severity.values()).map(Enum::name).toArray(String[]::new));
-        mainPanel.add(pnlEvidence);
+        settingsTabs.addTab("Evidence", wrapInScroll(pnlEvidence));
 
         // Initially hide expandable lists
         for (JComponent c : expandableLists) {
@@ -227,6 +233,20 @@ public class SettingsPanel {
 
         JScrollPane scroll = new JScrollPane(ta);
         themeHelper.applyTheme(scroll);
+        
+        scroll.addMouseWheelListener(e -> {
+            JScrollBar vbar = scroll.getVerticalScrollBar();
+            if (!vbar.isVisible() || 
+                (e.getWheelRotation() < 0 && vbar.getValue() == 0) || 
+                (e.getWheelRotation() > 0 && vbar.getValue() >= vbar.getMaximum() - vbar.getVisibleAmount())) {
+                
+                Container parent = SwingUtilities.getAncestorOfClass(JScrollPane.class, scroll);
+                if (parent != null) {
+                    parent.dispatchEvent(SwingUtilities.convertMouseEvent(scroll, e, parent));
+                }
+            }
+        });
+        
         p.add(scroll, BorderLayout.CENTER);
 
         JPanel inner = (JPanel) parent.getComponent(0);

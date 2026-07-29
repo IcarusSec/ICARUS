@@ -130,6 +130,15 @@ public class SettingsPanel {
         addCheckbox(pnlJwt, "jwt.redact_sensitive_claims", "Redact sensitive claim values in findings/logs/reports (show key only)");
         settingsTabs.addTab("JWT", wrapInScroll(pnlJwt));
 
+        // Sensitive Headers - CWE-200
+        JPanel pnlSh = createSection("Sensitive Headers - CWE-200 Detection");
+        addCheckbox(pnlSh, "sh.check_cwe200_pii", "PII / National ID leaks (SSN, NINO, SIN, CPF, NIR)");
+        addCheckbox(pnlSh, "sh.check_cwe200_financial", "Financial data leaks (credit cards, IBAN)");
+        addCheckbox(pnlSh, "sh.check_cwe200_backend", "Backend stack trace / framework error leaks");
+        addCheckbox(pnlSh, "sh.check_cwe200_infra", "Internal IP / internal domain leaks");
+        addCheckbox(pnlSh, "sh.redact_pii_values", "Redact PII values in findings (show header name only)");
+        settingsTabs.addTab("Sensitive Headers", wrapInScroll(pnlSh));
+
         // Rate Limit Tester
         JPanel pnlRl = createSection("Rate Limit Tester");
         addField(pnlRl, "rl.request_count", "Requests per blast:");

@@ -125,6 +125,7 @@ public final class FindingRegistry {
                     continue;
                 }
                 record.incrementCount();
+                record.updateFinding(finding); // Keep the latest evidence and metadata
                 logAudit("Duplicate finding incremented to " + record.getCount() + "x: " + hash);
                 notifyListenersOfUpdate();
             } else {

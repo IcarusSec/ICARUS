@@ -1,7 +1,7 @@
 package icarus.core;
 
 public class FindingRecord {
-    private final Finding finding;
+    private Finding finding;
     private int count;
     private boolean suppressed;
 
@@ -12,6 +12,7 @@ public class FindingRecord {
     }
 
     public Finding getFinding() { return finding; }
+    public void updateFinding(Finding newFinding) { this.finding = newFinding; }
     public int getCount() { return count; }
     public void incrementCount() { this.count++; }
     

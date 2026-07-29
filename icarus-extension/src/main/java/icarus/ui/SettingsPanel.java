@@ -121,7 +121,7 @@ public class SettingsPanel {
         addCheckbox(pnlHv, "hv.test_options", "Test OPTIONS");
         addCheckbox(pnlHv, "hv.test_trace", "Test TRACE");
         addCheckbox(pnlHv, "hv.enable_state_changing", "Enable state-changing methods (POST/PUT/DELETE/PATCH)");
-        addField(pnlHv, "hv.body_strategy", "Body Strategy (AUTO/KEEP/REMOVE):");
+        addComboBox(pnlHv, "hv.body_strategy", "Body Strategy:", new String[]{"AUTO", "KEEP", "REMOVE"});
         settingsTabs.addTab("HTTP Verb", wrapInScroll(pnlHv));
 
         // JWT Checker
@@ -240,9 +240,9 @@ public class SettingsPanel {
                 (e.getWheelRotation() < 0 && vbar.getValue() == 0) || 
                 (e.getWheelRotation() > 0 && vbar.getValue() >= vbar.getMaximum() - vbar.getVisibleAmount())) {
                 
-                Container parent = SwingUtilities.getAncestorOfClass(JScrollPane.class, scroll);
-                if (parent != null) {
-                    parent.dispatchEvent(SwingUtilities.convertMouseEvent(scroll, e, parent));
+                Container ancestorScroll = SwingUtilities.getAncestorOfClass(JScrollPane.class, scroll);
+                if (ancestorScroll != null) {
+                    ancestorScroll.dispatchEvent(SwingUtilities.convertMouseEvent(scroll, e, ancestorScroll));
                 }
             }
         });

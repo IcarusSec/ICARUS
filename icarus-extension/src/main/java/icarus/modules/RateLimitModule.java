@@ -120,17 +120,22 @@ public class RateLimitModule implements IcarusModule {
         String endTime = LocalDateTime.now().format(dtf);
 
         if (detection.blockedAt < 0) {
+            double seconds = detectionElapsedMs / 1000.0;
+            double rps = detection.requestsSent / seconds;
+            String rpsStr = String.format("%.1f RPS", rps);
+
             // No rate limiting detected — that IS a finding
             findings.add(Finding.builder(name(), "NO_RATE_LIMIT")
-                    .description("No rate limiting detected after " + totalRequests + " identical requests to " + path
-                            + ". All responses returned status " + detection.dominantStatus + ".")
+                    .description(String.format("No rate limiting detected after %d identical requests to %s. All responses returned status %d. Achieved around %s in %.1f seconds.",
+                            detection.requestsSent, path, detection.dominantStatus, rpsStr, seconds))
                     .severity(Severity.MEDIUM)
                     .category(Category.RATE_LIMIT)
                     .path(path)
                     .evidence(requestResponse)
-                    .meta("requests_sent", String.valueOf(totalRequests))
+                    .meta("requests_sent", String.valueOf(detection.requestsSent))
                     .meta("concurrency", String.valueOf(concurrency))
                     .meta("all_status", String.valueOf(detection.dominantStatus))
+                    .meta("rps", rpsStr)
                     .meta("blast_log", detection.serializedLog)
                     .meta("start_time", startTime)
                     .meta("end_time", endTime)

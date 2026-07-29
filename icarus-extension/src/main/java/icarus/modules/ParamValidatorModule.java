@@ -10,6 +10,7 @@ import icarus.core.IcarusModule;
 import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
+import icarus.core.VerboseErrorDetector;
 
 import java.util.*;
 import java.util.function.Consumer;
@@ -212,12 +213,15 @@ public final class ParamValidatorModule implements IcarusModule {
                     behavioralHit = true;
                     behavioralReason = "Time anomaly (" + responseTime + "ms vs baseline " + baselineTime + "ms)";
                 } else {
-                    String lowerBody = bodyStr.toLowerCase();
-                    if ((lowerBody.contains("syntax error") || lowerBody.contains("sql syntax")
-                            || lowerBody.contains("ora-") || lowerBody.contains("warning: mysql_")) &&
-                        (requireBaseline ? !baselineBodyLower.contains("syntax error") : true)) {
-                        behavioralHit = true;
-                        behavioralReason = "Backend error anomaly";
+                    String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(bodyStr);
+                    if (verboseMatch != null) {
+                        boolean baselineHasError = requireBaseline
+                                && VerboseErrorDetector.getVerboseErrorMatch(baselineBodyLower) != null;
+
+                        if (!baselineHasError) {
+                            behavioralHit = true;
+                            behavioralReason = "Backend error anomaly: " + verboseMatch;
+                        }
                     }
                 }
                 if (behavioralHit) {

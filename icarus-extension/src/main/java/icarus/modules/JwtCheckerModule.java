@@ -26,27 +26,6 @@ public class JwtCheckerModule implements IcarusModule {
 
     private static final Pattern JWT_REGEX = Pattern.compile("eyJ[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+(?:\\.[a-zA-Z0-9_-]*)?");
 
-    private static final List<Pattern> VERBOSE_ERROR_PATTERNS = List.of(
-            Pattern.compile("(?i)\\bstack ?trace\\b"),
-            Pattern.compile("(?i)Traceback \\(most recent call last\\)"),
-            Pattern.compile("(?i)Whitelabel Error Page"),
-            Pattern.compile("(?i)Fatal error:.*on line \\d+"),
-            Pattern.compile("(?i)Warning:.*on line \\d+"),
-            Pattern.compile("(?i)Notice:.*on line \\d+"),
-            Pattern.compile("(?i)Caused by:"),
-            Pattern.compile("(?i)UnhandledPromiseRejection"),
-            Pattern.compile("(?i)TypeError:.*"),
-            Pattern.compile("(?i)ReferenceError:.*"),
-            Pattern.compile("(?i)SyntaxError:.*"),
-            Pattern.compile("(?i)\\bjava\\.lang\\.\\w+Exception"),
-            Pattern.compile("(?i)\\bSystem\\.\\w+Exception"),
-            Pattern.compile("(?i)\\bJsonWebTokenError\\b"),
-            Pattern.compile("(?i)\\bjsonwebtoken\\b"),
-            Pattern.compile("(?i)\\bjjwt\\b"),
-            Pattern.compile("(?i)\\bjose\\b"),
-            Pattern.compile("(?i)\\borg\\.springframework\\.\\w+\\b")
-    );
-
     public JwtCheckerModule(MontoyaApi api) {
         this.api = api;
     }
@@ -302,7 +281,8 @@ public class JwtCheckerModule implements IcarusModule {
                 int st = result.response().statusCode();
                 String body = result.response().bodyToString();
                 String lowerBody = body.toLowerCase();
-                boolean verbose = hasVerboseError(body);
+                String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(body);
+                boolean verbose = (verboseMatch != null);
 
                 if (st < 400
                     && !lowerBody.contains("invalid token")
@@ -314,7 +294,7 @@ public class JwtCheckerModule implements IcarusModule {
                     findings.add(createFinding("ACTIVE_HIT_" + label, "Active test HIT for " + label, Severity.HIGH, result));
                     logger.accept("[FINDING] worked (HTTP " + st + ")");
                 } else if (verbose) {
-                    findings.add(createFinding("VERBOSE_ERROR_" + label, "Active test triggered verbose error for " + label, Severity.MEDIUM, result));
+                    findings.add(createFinding("VERBOSE_ERROR_" + label, "Active test triggered verbose error for " + label + ". Leak: " + verboseMatch, Severity.MEDIUM, result));
                     logger.accept("[FINDING] worked - verbose error leaked (HTTP " + st + ")");
                 } else {
                     logger.accept("Not worked, returned " + st + ".");
@@ -525,10 +505,6 @@ public class JwtCheckerModule implements IcarusModule {
             if (h.name().equalsIgnoreCase(name)) return h.value();
         }
         return null;
-    }
-
-    private static boolean hasVerboseError(String body) {
-        return VERBOSE_ERROR_PATTERNS.stream().anyMatch(p -> p.matcher(body).find());
     }
 
     private static class JwtCandidate {

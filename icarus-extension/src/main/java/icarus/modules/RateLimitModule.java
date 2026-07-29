@@ -115,7 +115,7 @@ public class RateLimitModule implements IcarusModule {
         long detectionStartMs = System.currentTimeMillis();
 
         // ── Phase 1: Detection ──
-        BlastResult detection = blast(baseRequest, totalRequests, concurrency);
+        BlastResult detection = blast(baseRequest, totalRequests, concurrency, logger);
 
         long detectionElapsedMs = Math.max(1, System.currentTimeMillis() - detectionStartMs);
         String endTime = LocalDateTime.now().format(dtf);
@@ -154,15 +154,15 @@ public class RateLimitModule implements IcarusModule {
             try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
 
             if (config.getBool("rl.bypass_headers", true)) {
-                tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path);
+                tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, logger);
             }
 
             if (config.getBool("rl.bypass_path", true)) {
-                tryPathBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+                tryPathBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs, logger);
             }
 
             if (config.getBool("rl.bypass_query", true)) {
-                tryQueryBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs);
+                tryQueryBypass(baseRequest, detection, totalRequests, concurrency, bypassLog, path, cooldownMs, logger);
             }
         }
 
@@ -219,8 +219,8 @@ public class RateLimitModule implements IcarusModule {
 
     // ── Blast Engine ──
 
-    private BlastResult blast(HttpRequest request, int count, int concurrency) {
-        return blastWithMutator(count, concurrency, idx -> request);
+    private BlastResult blast(HttpRequest request, int count, int concurrency, Consumer<String> logger) {
+        return blastWithMutator(count, concurrency, idx -> request, logger);
     }
 
     /**
@@ -230,7 +230,7 @@ public class RateLimitModule implements IcarusModule {
      */
     private static final int SKIPPED_STATUS = -1;
 
-    private BlastResult blastWithMutator(int count, int concurrency, java.util.function.IntFunction<HttpRequest> mutator) {
+    private BlastResult blastWithMutator(int count, int concurrency, java.util.function.IntFunction<HttpRequest> mutator, Consumer<String> logger) {
         ExecutorService pool = Executors.newFixedThreadPool(concurrency);
         List<Future<SingleResult>> futures = new ArrayList<>();
         AtomicInteger blockCount = new AtomicInteger(0);
@@ -245,7 +245,10 @@ public class RateLimitModule implements IcarusModule {
                     return new SingleResult(idx, SKIPPED_STATUS, 0, 0, null);
                 }
                 // Counted before sendRequest() so a mid-request exception still counts as sent.
-                sentCount.incrementAndGet();
+                int current = sentCount.incrementAndGet();
+                if (count > 0 && current % Math.max(1, count / 10) == 0) {
+                    logger.accept(String.format("[%d%%] Reached %d requests from %d.", (int) ((current / (double) count) * 100), current, count));
+                }
 
                 HttpRequest mutated = mutator.apply(idx);
                 long start = System.currentTimeMillis();
@@ -316,7 +319,7 @@ public class RateLimitModule implements IcarusModule {
     // ── Bypass: IP Headers ──
 
     private void tryHeaderBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
-                                  StringBuilder bypassLog, String path) {
+                                  StringBuilder bypassLog, String path, Consumer<String> logger) {
         String[] headers = {
                 "X-Forwarded-For", "X-Real-IP", "X-Originating-IP",
                 "X-Client-IP", "True-Client-IP", "CF-Connecting-IP"
@@ -330,7 +333,7 @@ public class RateLimitModule implements IcarusModule {
                 mutated = mutated.withAddedHeader(h, fakeIp);
             }
             return mutated;
-        });
+        }, logger);
         boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
         bypassLog.append(bypassed ? "✓ " : "✗ ")
@@ -343,7 +346,7 @@ public class RateLimitModule implements IcarusModule {
     // ── Bypass: Path Normalization ──
 
     private void tryPathBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
-                                StringBuilder bypassLog, String path, int cooldownMs) {
+                                StringBuilder bypassLog, String path, int cooldownMs, Consumer<String> logger) {
         String[] pathVariants = {
                 path + "/",
                 path.replaceFirst("/", "/./"),
@@ -368,7 +371,7 @@ public class RateLimitModule implements IcarusModule {
             try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
 
             HttpRequest mutated = base.withPath(variant);
-            BlastResult bypassResult = blast(mutated, count, concurrency);
+            BlastResult bypassResult = blast(mutated, count, concurrency, logger);
             boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
             if (bypassed) {
@@ -384,14 +387,14 @@ public class RateLimitModule implements IcarusModule {
     // ── Bypass: Query Cache Busting ──
 
     private void tryQueryBypass(HttpRequest base, BlastResult detection, int count, int concurrency,
-                                 StringBuilder bypassLog, String path, int cooldownMs) {
+                                 StringBuilder bypassLog, String path, int cooldownMs, Consumer<String> logger) {
         try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
 
         // Each request gets a unique query parameter
         BlastResult bypassResult = blastWithMutator(count, concurrency, idx -> {
             String sep = base.path().contains("?") ? "&" : "?";
             return base.withPath(base.path() + sep + "_icarus=" + idx);
-        });
+        }, logger);
         boolean bypassed = bypassResult.blockedAt < 0 || bypassResult.blockedAt > detection.blockedAt * 2;
 
         bypassLog.append(bypassed ? "✓ " : "✗ ")

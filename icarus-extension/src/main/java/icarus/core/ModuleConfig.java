@@ -1,5 +1,9 @@
 package icarus.core;
 
+import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.util.*;
 
 /**
@@ -81,54 +85,30 @@ public final class ModuleConfig {
 
     // ── Persistence (round-trips through a single string, e.g. Burp's extensionData) ──
 
-    /** Serializes all entries as "key=value\n" pairs, escaping embedded backslashes/newlines/equals-signs in both. */
+    /** Serializes all entries as Java {@link Properties} text. */
     public String serialize() {
-        StringBuilder sb = new StringBuilder();
-        for (var entry : values.entrySet()) {
-            sb.append(escape(entry.getKey())).append('=').append(escape(entry.getValue())).append('\n');
+        Properties props = new Properties();
+        props.putAll(values);
+        StringWriter writer = new StringWriter();
+        try {
+            props.store(writer, null);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e); // StringWriter never actually throws
         }
-        return sb.toString();
+        return writer.toString();
     }
 
-    /** Loads entries from a string produced by {@link #serialize()}, unescaping keys/values back to their original form. */
+    /** Loads entries from a string produced by {@link #serialize()}. */
     public void loadSerialized(String serialized) {
         if (serialized == null) return;
-        for (String line : serialized.split("\n")) {
-            int eq = indexOfUnescapedEquals(line);
-            if (eq >= 0) {
-                values.put(unescape(line.substring(0, eq)), unescape(line.substring(eq + 1)));
-            }
+        Properties props = new Properties();
+        try {
+            props.load(new StringReader(serialized));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e); // StringReader never actually throws
         }
-    }
-
-    /** Finds the first '=' not preceded by an escaping backslash, so escaped "\=" inside a key is not mistaken for the separator. */
-    private static int indexOfUnescapedEquals(String line) {
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '\\') {
-                i++; // skip the escaped character, whatever it is
-            } else if (c == '=') {
-                return i;
-            }
+        for (String name : props.stringPropertyNames()) {
+            values.put(name, props.getProperty(name));
         }
-        return -1;
-    }
-
-    private static String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\n", "\\n").replace("=", "\\=");
-    }
-
-    private static String unescape(String value) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (c == '\\' && i + 1 < value.length()) {
-                char next = value.charAt(++i);
-                sb.append(next == 'n' ? '\n' : next);
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
     }
 }

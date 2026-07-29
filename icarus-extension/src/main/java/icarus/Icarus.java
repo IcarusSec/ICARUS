@@ -148,6 +148,11 @@ public class Icarus implements BurpExtension {
         config.set("sh.check_sensitive_leak", true);
         config.set("sh.check_debug_headers", true);
         config.set("sh.check_cookie_flags", true);
+        config.set("sh.check_cwe200_pii", true);
+        config.set("sh.check_cwe200_financial", true);
+        config.set("sh.check_cwe200_backend", true);
+        config.set("sh.check_cwe200_infra", true);
+        config.set("sh.redact_pii_values", true);
 
         // ── PostmanExport defaults ──
         config.set("export.enabled", true);

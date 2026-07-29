@@ -23,6 +23,53 @@ public class SensitiveHeaderModule implements IcarusModule {
     private static final Pattern VERSION_PATTERN = Pattern.compile("[/\\s]\\d+\\.");
     private static final Pattern INTERNAL_IP_PATTERN = Pattern.compile("^(10\\.\\d+|172\\.(1[6-9]|2\\d|3[0-1])\\.\\d+|192\\.168\\.\\d+)\\.\\d+");
 
+    // ==========================================
+    // CWE-200: PII & National Identification Numbers
+    // ==========================================
+    private static final Pattern US_SSN_PATTERN = Pattern.compile("\\b(?!000|666)[0-8]\\d{2}-(?!00)\\d{2}-(?!0000)\\d{4}\\b");
+    private static final Pattern UK_NINO_PATTERN = Pattern.compile("\\b[A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]\\s?\\d{2}\\s?\\d{2}\\s?\\d{2}\\s?[A-D]\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CA_SIN_PATTERN = Pattern.compile("\\b\\d{3}[\\s-]\\d{3}[\\s-]\\d{3}\\b");
+    private static final Pattern BR_CPF_PATTERN = Pattern.compile("\\b\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}\\b");
+    private static final Pattern FR_NIR_PATTERN = Pattern.compile("\\b[12]\\s?\\d{2}\\s?(?:0[1-9]|1[0-2])\\s?(?:2[AB]|\\d{2})\\s?\\d{3}\\s?\\d{3}\\s?\\d{2}\\b");
+
+    // ==========================================
+    // CWE-200: Financial Information
+    // ==========================================
+    // Structural match only - MUST be paired with isValidLuhn() before raising a finding.
+    private static final Pattern CREDIT_CARD_PATTERN = Pattern.compile("\\b(?:\\d[ -]*?){13,16}\\b");
+    // Structural match only, no per-country length/checksum validation - kept low-confidence.
+    private static final Pattern IBAN_PATTERN = Pattern.compile("\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b");
+
+    // ==========================================
+    // CWE-200: Backend Information & Stack Traces
+    // ==========================================
+    private static final Pattern BACKEND_INFO_PATTERN = Pattern.compile(
+        "(?i)(" +
+        "java\\.[a-z0-9_\\.]+(?:Exception|Error)|" +
+        "org\\.(?:apache|springframework|hibernate)\\.|" +
+        "at java\\.base/|" +
+        "Traceback \\(most recent call last\\):|" +
+        "File \"[^\"]+\", line \\d+, in|" +
+        "werkzeug\\.exceptions\\.|" +
+        "Fatal error: Uncaught|" +
+        "PHP (?:Warning|Notice|Parse error):|" +
+        "Stack trace:|" +
+        "\\w+\\.rb:\\d+:in|" +
+        "actionpack-[\\d\\.]+/lib/|" +
+        "Error: .*\\n\\s+at (?:.*/)?.*:\\d+:\\d+|" +
+        "node_modules/express/|" +
+        "at \\S+\\.pm line \\d+" +
+        ")"
+    );
+
+    // ==========================================
+    // CWE-200: Infrastructure & Network Leaks
+    // ==========================================
+    // Named distinctly from INTERNAL_IP_PATTERN above (narrower, anchored, IPv4-only) to avoid a
+    // duplicate-field clash; this one is broader (IPv6, unanchored) for general header scanning.
+    private static final Pattern CWE200_INTERNAL_IP_PATTERN = Pattern.compile("\\b(10\\.\\d+\\.\\d+\\.\\d+|192\\.168\\.\\d+\\.\\d+|172\\.(?:1[6-9]|2\\d|3[0-1])\\.\\d+\\.\\d+|fc00:[a-f0-9:]+|fe80:[a-f0-9:]+)\\b", Pattern.CASE_INSENSITIVE);
+    private static final Pattern INTERNAL_DOMAIN_PATTERN = Pattern.compile("\\b[a-zA-Z0-9.-]+\\.(local|corp|internal|lan|pri)\\b", Pattern.CASE_INSENSITIVE);
+
     public SensitiveHeaderModule(MontoyaApi api) {
         this.api = api;
     }
@@ -62,6 +109,11 @@ public class SensitiveHeaderModule implements IcarusModule {
         boolean checkLeak = config.getBool("sh.check_sensitive_leak", true);
         boolean checkDebug = config.getBool("sh.check_debug_headers", true);
         boolean checkCookie = config.getBool("sh.check_cookie_flags", true);
+        boolean checkCwe200Pii = config.getBool("sh.check_cwe200_pii", true);
+        boolean checkCwe200Financial = config.getBool("sh.check_cwe200_financial", true);
+        boolean checkCwe200Backend = config.getBool("sh.check_cwe200_backend", true);
+        boolean checkCwe200Infra = config.getBool("sh.check_cwe200_infra", true);
+        boolean redactPiiValues = config.getBool("sh.redact_pii_values", true);
 
         boolean hasHsts = false;
         boolean hasCsp = false;
@@ -118,6 +170,60 @@ public class SensitiveHeaderModule implements IcarusModule {
                 }
             }
 
+            // CWE-200: PII / National IDs
+            if (checkCwe200Pii) {
+                if (US_SSN_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "PII_US_SSN_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential US SSN leaked in header '" + name + "'");
+                } else if (UK_NINO_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "PII_UK_NINO_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential UK NINO leaked in header '" + name + "'");
+                } else if (CA_SIN_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "PII_CA_SIN_LEAK", Severity.LOW, Category.HEADER_LEAK, "Potential Canada SIN leaked in header '" + name + "' (low-confidence structural match)");
+                } else if (BR_CPF_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "PII_BR_CPF_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential Brazil CPF leaked in header '" + name + "'");
+                } else if (FR_NIR_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "PII_FR_NIR_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential France SSN (NIR) leaked in header '" + name + "'");
+                }
+
+                if (lowerName.contains("name") || lowerName.contains("user") || lowerName.contains("author") || lowerName.contains("email")) {
+                    if (!lowerName.equals("user-agent") && !lowerName.equals("server-timing")
+                            && !lowerName.contains("authorization")) {
+                        String displayValue = redactPiiValues ? "[REDACTED]" : value;
+                        addFinding(findings, evidence, "PII_HEADER_KEY_LEAK", Severity.LOW, Category.HEADER_LEAK,
+                            "Header key suggests PII disclosure: " + name + " = " + displayValue);
+                    }
+                }
+            }
+
+            // CWE-200: Financial Data
+            if (checkCwe200Financial) {
+                var ccMatcher = CREDIT_CARD_PATTERN.matcher(value);
+                if (ccMatcher.find() && isValidLuhn(ccMatcher.group())) {
+                    addFinding(findings, evidence, "CREDIT_CARD_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential Credit Card leaked in header '" + name + "'");
+                }
+                if (IBAN_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "IBAN_LEAK", Severity.LOW, Category.HEADER_LEAK, "Potential IBAN leaked in header '" + name + "' (low-confidence structural match)");
+                }
+            }
+
+            // CWE-200: Backend Information / Stacktraces
+            if (checkCwe200Backend) {
+                if (BACKEND_INFO_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "BACKEND_INFO_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Backend stacktrace or framework details leaked in header '" + name + "'");
+                }
+            }
+
+            // CWE-200: Internal Infrastructure
+            if (checkCwe200Infra) {
+                if (!lowerName.equals("x-forwarded-for") && !lowerName.equals("x-real-ip")) {
+                    if (CWE200_INTERNAL_IP_PATTERN.matcher(value).find()) {
+                        addFinding(findings, evidence, "INTERNAL_IP_LEAK", Severity.MEDIUM, Category.HEADER_LEAK, "Internal IP (IPv4/IPv6) leaked in header '" + name + "': " + value);
+                    }
+                }
+                if (INTERNAL_DOMAIN_PATTERN.matcher(value).find()) {
+                    addFinding(findings, evidence, "INTERNAL_DOMAIN_LEAK", Severity.MEDIUM, Category.HEADER_LEAK, "Internal domain/hostname leaked in header '" + name + "': " + value);
+                }
+            }
+
             // Missing Security Headers tracking
             if (checkMissing) {
                 if (lowerName.equals("strict-transport-security")) hasHsts = true;
@@ -140,6 +246,25 @@ public class SensitiveHeaderModule implements IcarusModule {
         }
 
         return findings;
+    }
+
+    /** Luhn checksum validation to filter credit-card-shaped digit runs before raising a finding. */
+    private static boolean isValidLuhn(String candidate) {
+        String digits = candidate.replaceAll("[^0-9]", "");
+        if (digits.length() < 13 || digits.length() > 19) return false;
+
+        int sum = 0;
+        boolean alternate = false;
+        for (int i = digits.length() - 1; i >= 0; i--) {
+            int n = digits.charAt(i) - '0';
+            if (alternate) {
+                n *= 2;
+                if (n > 9) n -= 9;
+            }
+            sum += n;
+            alternate = !alternate;
+        }
+        return sum % 10 == 0;
     }
 
     private void addFinding(List<Finding> findings, HttpRequestResponse evidence, String type, Severity severity, Category category, String description) {

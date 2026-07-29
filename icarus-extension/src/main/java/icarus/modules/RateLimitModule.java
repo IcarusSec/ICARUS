@@ -143,10 +143,11 @@ public class RateLimitModule implements IcarusModule {
             double rps = detection.requestsSent / seconds;
             String rpsStr = String.format("%.1f RPS", rps);
 
-            // No rate limiting detected — that IS a finding
+            // No rate limiting detected — that IS a finding. RPS isn't repeated here since
+            // the evidence image already appends it from the "rps" meta field below.
             findings.add(Finding.builder(name(), "NO_RATE_LIMIT")
-                    .description(String.format("No rate limiting detected after %d identical requests to %s. All responses returned status %d. Achieved around %s in %.1f seconds.",
-                            detection.requestsSent, path, detection.dominantStatus, rpsStr, seconds))
+                    .description(String.format("No rate limiting detected after %d identical requests to %s. All responses returned status %d in %.1f seconds.",
+                            detection.requestsSent, path, detection.dominantStatus, seconds))
                     .severity(Severity.MEDIUM)
                     .category(Category.RATE_LIMIT)
                     .path(path)

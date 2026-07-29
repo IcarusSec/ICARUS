@@ -4,93 +4,141 @@
 <h1 align="center">ICARUS</h1>
 
 <p align="center">
-<img src="https://img.shields.io/badge/BurpSuite-Extension-orange" alt="Burp Suite">
-<img src="https://img.shields.io/badge/Security-Testing-blue" alt="Security">
-<img src="https://img.shields.io/badge/Language-Java-red" alt="Java">
+  <a href="https://portswigger.net/burp/extender"><img src="https://img.shields.io/badge/BurpSuite-Extension-orange?style=for-the-badge&logo=burpsuite" alt="Burp Suite"></a>
+  <a href="https://java.com/"><img src="https://img.shields.io/badge/Language-Java_21-red?style=for-the-badge&logo=openjdk" alt="Java"></a>
+  <a href="https://github.com/Trecto34/BurpCustomActions/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
+  <img src="https://img.shields.io/badge/Security-Testing-brightgreen?style=for-the-badge" alt="Security">
 </p>
 
-<div align="center">
-  <a href="#features">Features</a>
-  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="#modules">Modules</a>
-  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="#installation--usage">Installation & Usage</a>
-  <span>&nbsp;&nbsp;•&nbsp;&nbsp;</span>
-  <a href="#disclaimer">Disclaimer</a>
-  <br />
-</div>
+---
 
-## What is ICARUS?
+## 📖 Table of Contents
+- [Overview](#-overview)
+- [Core Features](#-core-features)
+- [Extension Modules](#-extension-modules)
+- [Installation & Compilation](#-installation--compilation)
+- [Usage Guidelines](#-usage-guidelines)
+- [Disclaimer](#-disclaimer)
+- [License](#-license)
 
-**ICARUS** is a comprehensive security testing extension for Burp Suite, designed to automate and streamline API security testing tasks directly from your Burp workflow. It provides a unified interface, automated scanning capabilities, and advanced evidence capture for rapid, effective vulnerability assessment and reporting.
+---
 
-## Features
+## 🎯 Overview
 
-- **Unified Interface:** A centralized control panel (`ICARUS` tab) for configuring all modules, tracking tasks, and managing findings.
-- **Smart Evidence Capture:** Advanced workflow for generating clean, actionable reports. Includes full payload logging, a built-in image editor (with annotation tools like box, arrow, highlight, and redact), and HTML report generation.
-- **Automated Scanning:** Run comprehensive checks against selected requests with a single click from the Burp context menu.
+**ICARUS** is a comprehensive, enterprise-grade security testing extension for Burp Suite. Designed to automate and streamline API security assessments, it brings powerful vulnerability detection, intelligent fuzzing, and smart evidence capture directly into your Burp workflow. By centralizing operations within a unified interface, ICARUS accelerates security workflows from discovery to reporting.
 
-## Modules
+---
 
-ICARUS integrates multiple powerful security testing tools into a single extension:
+## ✨ Core Features
 
-### 1. JSON Input Validation (`ParamValidator`)
-Focuses on testing JSON request parameter validation. It answers a simple question: **Did the API accept input that should have been rejected?**
-- Structural validation tests (null values, removed fields, empty objects/arrays).
-- Type confusion tests (e.g., string → number, boolean → string).
-- Boundary value tests (e.g., empty string, very long strings, zero, negative numbers).
-- Injection payload tests (SQLi, XSS, NoSQL, Path Traversal, etc.).
+- **Unified Command Interface:** A centralized control panel (`ICARUS` tab) for configuring all modules, tracking active tasks, and managing vulnerability findings in real-time.
+- **Smart Evidence Capture:** An advanced reporting workflow that generates clean, actionable evidence. It features full HTTP payload logging, a built-in interactive image editor (equipped with annotation tools like box, arrow, highlight, and redact), and automated HTML report generation.
+- **Automated Rapid Scanning:** Execute comprehensive security checks against selected HTTP requests with a single click directly from the Burp context menu.
 
-### 2. HTTP Verb Tester (`HttpVerbModule`)
-Performs basic HTTP verb validation for API security testing. Generates variations using alternate HTTP methods (`GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to identify misconfigurations or accepted alternative methods.
-- Automatic handling of body content based on the method.
-- Support for `OPTIONS` / `Allow` header validation.
-- TRACE reflection detection.
+---
 
-### 3. JWT / Bearer Token Checker (`JwtCheckerModule`)
-A comprehensive tool for detecting and testing JSON Web Tokens (JWTs) and Bearer tokens for common security vulnerabilities.
-- Detects multiple JWTs across standard headers and cookies.
-- Algorithm Analysis (e.g., weak configurations like `alg=none`, embedded claims like `jwk`, `jku`, `kid`).
-- Payload Tampering (e.g., tampering with `admin`, `role`, `scope`).
-- Signature Removal testing.
-- Time-based Attacks (missing `exp`/`iat` claims).
+## 🧩 Extension Modules
 
-### 4. Rate Limit Tester (`RateLimitModule`)
-Sends repeated requests to detect, characterize, and attempt to bypass rate limiting.
-- Burst detection to determine whether throttling exists.
-- Configurable thresholds for request counts and timing.
-- Captures requests per second (RPS) and timestamps in evidence generation.
+ICARUS integrates multiple specialized security testing engines into a single cohesive extension. Click to expand each module's technical capabilities:
 
-### 5. Sensitive Header Scanner (`SensitiveHeaderModule`)
-Automatically inspects responses for sensitive headers or caching misconfigurations that could lead to data leakage.
+<details>
+<summary><b>1. JSON Input Validation (ParamValidator)</b></summary>
+<br>
+Focuses on rigorous testing of JSON request parameter validation to determine if the backend API processes malformed or malicious inputs that violate the expected schema contract.
 
-### 6. Export to Postman (`PostmanExportModule`)
-Exports the current request directly to a Postman Collection JSON format.
-- Accurate extraction of HTTP method, headers, and URL structure.
-- Secure body payload preservation with proper JSON escaping.
+- **Structural Validation**: Identifies missing enforcement of null values, removed fields, and empty objects/arrays.
+- **Type Confusion**: Tests for unsafe type casting (e.g., passing strings as booleans/integers).
+- **Boundary Testing**: Validates enforcement of limits using empty strings, excessive lengths, and negative boundaries.
+- **Injection Payloads**: Automates the discovery of SQLi, XSS, NoSQL injection, and Path Traversal vulnerabilities.
+</details>
 
-## Installation & Usage
+<details>
+<summary><b>2. HTTP Verb Tester (HttpVerbModule)</b></summary>
+<br>
+Performs exhaustive HTTP verb validation for API security testing, automatically mutating standard requests using alternate methods (`GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to uncover endpoint misconfigurations.
 
-1. **Build the extension:** Run `./build.sh` inside the `icarus-extension/` directory. This will download the Montoya API, compile the Java files, and generate a JAR file in `icarus-extension/build_manual/libs/`.
-2. **Load into Burp Suite:**
-   - Go to the **Extensions** tab.
+- Automatically adjusts request body content based on the injected HTTP method.
+- Provides deep `OPTIONS` and `Allow` header validation.
+- Detects unsafe `TRACE` reflection vulnerabilities.
+</details>
+
+<details>
+<summary><b>3. JWT / Bearer Token Checker (JwtCheckerModule)</b></summary>
+<br>
+A robust engine for detecting, parsing, and exploiting JSON Web Tokens (JWTs) and Bearer tokens for critical security flaws.
+
+- **Automated Discovery**: Hunts for JWTs across all standard HTTP headers and cookies.
+- **Algorithm Analysis**: Detects weak configurations (e.g., `alg=none` bypasses) and flags unsafe embedded claims (`jwk`, `jku`, `kid`).
+- **Payload Tampering**: Attempts automatic privilege escalation by manipulating common claims (`admin`, `role`, `scope`).
+- **Signature Attacks**: Tests endpoint resilience against improper signature validation and signature stripping.
+- **Time-based Attacks**: Detects missing `exp`/`iat` claims to prevent token expiration bypasses.
+</details>
+
+<details>
+<summary><b>4. Rate Limit Tester (RateLimitModule)</b></summary>
+<br>
+Executes high-velocity requests to accurately detect, characterize, and attempt bypasses on API rate limiting implementations.
+
+- **Burst Detection**: Determines active throttling behaviors and block thresholds.
+- **Highly Configurable**: Granular control over request counts, concurrency, and timing delays.
+- **Advanced Evidence**: Captures precise Requests Per Second (RPS) metrics and timestamps for accurate reporting.
+</details>
+
+<details>
+<summary><b>5. Sensitive Header Scanner (SensitiveHeaderModule)</b></summary>
+<br>
+Passively and actively inspects HTTP responses for sensitive header disclosures or caching misconfigurations that could lead to critical data leakage.
+</details>
+
+<details>
+<summary><b>6. Export to Postman (PostmanExportModule)</b></summary>
+<br>
+Streamlines cross-team collaboration by exporting complex, active HTTP requests directly into a standard Postman Collection JSON format.
+
+- Accurately extracts the HTTP method, headers, and intricate URL structures.
+- Secures complex body payloads with proper JSON escaping.
+</details>
+
+---
+
+## 🚀 Installation & Compilation
+
+1. **Compile the Extension**  
+   Run the build script from the `icarus-extension/` directory. This script automatically downloads the required Montoya API dependency, compiles the Java source, and packages the JAR.
+   ```bash
+   cd icarus-extension/
+   ./build.sh
+   ```
+   *Output will be located at:* `icarus-extension/build_manual/libs/icarus-<version>.jar`
+
+2. **Load into Burp Suite**  
+   - Open Burp Suite and navigate to the **Extensions** tab.
    - Click **Add**.
    - Select **Java** as the extension type.
-   - Choose the generated `icarus-<version>.jar` file.
-3. **Usage:**
-   - Navigate to the **ICARUS** tab in Burp Suite to configure module settings and view findings.
-   - Right-click any request in the Repeater or Proxy history, go to **Extensions** -> **ICARUS**, and select a specific module or **Run All Modules**.
+   - Select the generated `icarus-<version>.jar` file.
 
-## Disclaimer
+---
 
-These tools are intended for:
-- Security research
-- Defensive security testing
-- Authorized penetration testing
-- Secure software development
+## 🛠 Usage Guidelines
 
-> **Use only against systems you are authorized to test.**
+- **Configuration:** Navigate to the dedicated **ICARUS** tab in the main Burp Suite interface to configure specific module settings, manage your active tasks, and review detailed findings.
+- **Execution:** Right-click any HTTP request in the **Repeater**, **Proxy history**, or **Target** scope, navigate to **Extensions → ICARUS**, and select an individual module or choose **Run All Modules** for a full assessment.
 
-## License
+---
 
-ICARUS is open-sourced under the MIT license. See the [LICENSE](LICENSE) file for more information.
+## ⚠️ Disclaimer
+
+> [!WARNING]
+> These tools are explicitly intended for:
+> - Security research and vulnerability analysis
+> - Defensive security engineering
+> - Authorized penetration testing engagements
+> - Secure software development lifecycles
+>
+> **You must only use this software against systems, networks, and applications that you are explicitly authorized to test.**
+
+---
+
+## ⚖️ License
+
+ICARUS is open-sourced software licensed under the [MIT License](LICENSE).

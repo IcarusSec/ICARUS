@@ -120,6 +120,24 @@ public class RateLimitModule implements IcarusModule {
         long detectionElapsedMs = Math.max(1, System.currentTimeMillis() - detectionStartMs);
         String endTime = LocalDateTime.now().format(dtf);
 
+        if (detection.serverCrashed) {
+            logger.accept("Server crashed (status " + detection.blockStatus + ") — halting bypass attempts.");
+            findings.add(Finding.builder(name(), "SERVER_CRASH")
+                    .description(String.format("Target crashed while blasting %s — %d of %d requests returned status %d/0 (connection failure). Bypass attempts skipped to avoid further load on a downed server.",
+                            path, detection.requestsSent, totalRequests, detection.blockStatus))
+                    .severity(Severity.HIGH)
+                    .category(Category.RATE_LIMIT)
+                    .path(path)
+                    .evidence(detection.blockEvidence != null ? detection.blockEvidence : requestResponse)
+                    .meta("requests_sent", String.valueOf(detection.requestsSent))
+                    .meta("crash_status", String.valueOf(detection.blockStatus))
+                    .meta("blast_log", detection.serializedLog)
+                    .meta("start_time", startTime)
+                    .meta("end_time", endTime)
+                    .build());
+            return findings;
+        }
+
         if (detection.blockedAt < 0) {
             double seconds = detectionElapsedMs / 1000.0;
             double rps = detection.requestsSent / seconds;
@@ -234,6 +252,7 @@ public class RateLimitModule implements IcarusModule {
         ExecutorService pool = Executors.newFixedThreadPool(concurrency);
         List<Future<SingleResult>> futures = new ArrayList<>();
         AtomicInteger blockCount = new AtomicInteger(0);
+        AtomicInteger crashCount = new AtomicInteger(0);
         AtomicInteger sentCount = new AtomicInteger(0);
 
         for (int i = 0; i < count; i++) {
@@ -241,7 +260,9 @@ public class RateLimitModule implements IcarusModule {
             futures.add(pool.submit(() -> {
                 // Once the block is confirmed (3+ block responses observed), stop actually
                 // sending — the threshold is already known and further requests just add load.
-                if (blockCount.get() >= 3) {
+                // Same debounce for a crashing server (3+ 0/500/502/504 responses) so a downed
+                // target doesn't get hammered with the rest of `count` requests.
+                if (blockCount.get() >= 3 || crashCount.get() >= 3) {
                     return new SingleResult(idx, SKIPPED_STATUS, 0, 0, null);
                 }
                 // Counted before sendRequest() so a mid-request exception still counts as sent.
@@ -258,6 +279,8 @@ public class RateLimitModule implements IcarusModule {
                 int len = rr.response() != null ? rr.response().body().length() : 0;
                 if (status == 429 || status == 403 || status == 503) {
                     blockCount.incrementAndGet();
+                } else if (status == 0 || status == 500 || status == 502 || status == 504) {
+                    crashCount.incrementAndGet();
                 }
                 return new SingleResult(idx, status, len, elapsed, rr);
             }));
@@ -281,7 +304,7 @@ public class RateLimitModule implements IcarusModule {
     }
 
     private BlastResult analyzeResults(List<SingleResult> results, int requestsSent) {
-        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null, "", requestsSent);
+        if (results.isEmpty()) return new BlastResult(-1, 0, 0, null, "", requestsSent, false);
 
         StringBuilder sb = new StringBuilder();
         for (SingleResult r : results) {
@@ -290,6 +313,14 @@ public class RateLimitModule implements IcarusModule {
               .append(r.elapsedMs).append(";");
         }
         String log = sb.toString();
+
+        // A single 0/500/502/504 can be a transient blip — mirror the block-detection
+        // debounce and only trust a server crash once 3+ requests confirm it.
+        long crashSamples = results.stream().filter(r -> isCrashStatus(r.status)).count();
+        if (crashSamples >= 3) {
+            SingleResult firstCrash = results.stream().filter(r -> isCrashStatus(r.status)).findFirst().get();
+            return new BlastResult(firstCrash.index, results.get(0).status, firstCrash.status, firstCrash.evidence, log, requestsSent, true);
+        }
 
         // Find the dominant (first) status code
         int firstStatus = results.get(0).status;
@@ -300,14 +331,20 @@ public class RateLimitModule implements IcarusModule {
         for (int i = 1; i < results.size(); i++) {
             SingleResult r = results.get(i);
             if (isBlockResponse(r.status, firstStatus)) {
-                return new BlastResult(r.index, firstStatus, r.status, r.evidence, log, requestsSent);
+                return new BlastResult(r.index, firstStatus, r.status, r.evidence, log, requestsSent, false);
             }
         }
 
-        return new BlastResult(-1, firstStatus, 0, null, log, requestsSent);
+        return new BlastResult(-1, firstStatus, 0, null, log, requestsSent, false);
+    }
+
+    private boolean isCrashStatus(int status) {
+        return status == 0 || status == 500 || status == 502 || status == 504;
     }
 
     private boolean isBlockResponse(int currentStatus, int normalStatus) {
+        // Crash statuses are handled separately in analyzeResults — never a rate-limit block.
+        if (isCrashStatus(currentStatus)) return false;
         if (currentStatus == 429) return true;
         if (currentStatus == 503 && normalStatus != 503) return true;
         if (currentStatus == 403 && normalStatus != 403) return true;
@@ -424,5 +461,5 @@ public class RateLimitModule implements IcarusModule {
 
     private record SingleResult(int index, int status, int bodyLength, long elapsedMs, HttpRequestResponse evidence) {}
 
-    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence, String serializedLog, int requestsSent) {}
+    private record BlastResult(int blockedAt, int dominantStatus, int blockStatus, HttpRequestResponse blockEvidence, String serializedLog, int requestsSent, boolean serverCrashed) {}
 }

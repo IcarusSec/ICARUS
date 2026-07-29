@@ -159,21 +159,21 @@ public final class ScanRunner {
         JTextArea[] textAreaHolder = new JTextArea[1];
 
         runOnEdtAndWait(() -> {
-            JFrame frame = new JFrame(title);
+            JDialog frame = new JDialog(api.userInterface().swingUtils().suiteFrame(), title, false);
             frame.setSize(800, 400);
-            frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             frame.setLocationRelativeTo(null); // Center on screen
 
             JTextArea textArea = new JTextArea();
             textArea.setEditable(false);
             textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-            textArea.setBackground(new Color(34, 34, 34));
-            textArea.setForeground(new Color(200, 200, 200));
+            api.userInterface().applyThemeToComponent(textArea);
 
             JScrollPane scrollPane = new JScrollPane(textArea);
             scrollPane.setBorder(BorderFactory.createEmptyBorder());
             frame.add(scrollPane, BorderLayout.CENTER);
 
+            api.userInterface().applyThemeToComponent(frame);
             frame.setVisible(true);
             textAreaHolder[0] = textArea;
         });

@@ -244,7 +244,7 @@ public final class ReportGenerator {
                             <tr><th>Target Path</th><td><code>%s</code></td></tr>
                             <tr><th>Description</th><td>%s</td></tr>
             """.formatted(
-                index++, f.type(),
+                index++, escapeHtml(f.type()),
                 f.severity().name(), f.severity().name(),
                 f.module(), f.category().name(),
                 escapeHtml(f.path()), escapeHtml(f.description())

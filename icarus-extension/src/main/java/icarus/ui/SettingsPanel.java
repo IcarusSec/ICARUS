@@ -72,6 +72,7 @@ public class SettingsPanel {
         // Global Toggles
         JPanel pnlGlobal = createSection("General & Modules");
         addCheckbox(pnlGlobal, "ui.show_popups", "Show pop-up dialog with findings after an active scan completes");
+        addCheckbox(pnlGlobal, "verbose.enabled", "Verbose Mode (live step-by-step scan logging)");
         addCheckbox(pnlGlobal, "pv.enabled", "ParamValidator (JSON Mutation Fuzzer)");
         addCheckbox(pnlGlobal, "hv.enabled", "HTTP Verb Tester");
         addCheckbox(pnlGlobal, "jwt.enabled", "JWT / Bearer Token Checker");

@@ -131,6 +131,9 @@ public class PostmanExportModule implements IcarusModule {
             }
         }
         json.append("\n          ],\n");
+        if (parsedUrl.getPort() != -1) {
+            json.append("          \"port\": \"").append(parsedUrl.getPort()).append("\",\n");
+        }
 
         // Path
         json.append("          \"path\": [\n");

@@ -9,7 +9,10 @@ public class VerboseErrorDetector {
         Pattern.compile("(?i)ORA-\\d{5}:"), // Oracle
         Pattern.compile("(?i)SQL syntax.*MySQL"), // MySQL
         Pattern.compile("(?i)PostgreSQL query failed"), // PostgreSQL
-        Pattern.compile("(?i)SQLite3::SQLException"), // SQLite
+        Pattern.compile("(?i)SQLite3::SQLException"), // SQLite (PHP)
+        Pattern.compile("(?i)sqlite3\\.\\w*Error"), // SQLite (Python)
+        Pattern.compile("(?i)SQLITE_(ERROR|CONSTRAINT|BUSY|MISUSE|CORRUPT|FULL|IOERR|LOCKED|READONLY|NOTADB)"), // SQLite raw error codes
+        Pattern.compile("(?i)near \".*?\": syntax error"), // SQLite raw syntax error (language-agnostic, straight from libsqlite3)
         Pattern.compile("(?i)MongoError:"), // MongoDB
         Pattern.compile("(?i)(?:ODBC|JDBC|OLEDB) Driver\\[.*?\\]"), // ODBC/JDBC/OLEDB
         Pattern.compile("(?i)SQLServerException") // MSSQL

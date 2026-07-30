@@ -144,6 +144,7 @@ public class SettingsPanel {
         addField(pnlRl, "rl.request_count", "Requests per blast:");
         addField(pnlRl, "rl.concurrency", "Concurrent threads:");
         addField(pnlRl, "rl.cooldown_wait_ms", "Cooldown between bypasses (ms):");
+        addField(pnlRl, "rl.max_rps", "Max RPS (0 = unlimited):");
         addCheckbox(pnlRl, "rl.bypass_headers", "Try IP header rotation bypass (X-Forwarded-For, etc.)");
         addCheckbox(pnlRl, "rl.bypass_path", "Try path normalization bypass (/api/./v1, //api, etc.)");
         addCheckbox(pnlRl, "rl.bypass_query", "Try cache-buster query param bypass (?_icarus=N)");

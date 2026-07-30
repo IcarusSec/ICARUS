@@ -222,6 +222,13 @@ public final class ParamValidatorModule implements IcarusModule {
                 continue;
             }
 
+            // Any other 4xx is an expected application-level rejection (400/404/422 etc.),
+            // not a WAF block — only the generic size/time drift heuristic below is gated on
+            // it. Time-based SQLi, XSS reflection, and the CWE-209 verbose-error check still
+            // run on 4xx responses since apps commonly leak SQL/stack errors on validation
+            // failure pages coded 400/422, not just 500.
+            boolean isExpectedRejection = status >= 400 && status <= 499;
+
             // ── Injection Context Extraction Engine ──
             String extractedContext = "";
             boolean isInjectionFinding = false;
@@ -268,7 +275,9 @@ public final class ParamValidatorModule implements IcarusModule {
                 // Generic behavioral drift (size/time) — preserved from the original
                 // pre-rewrite logic, don't drop it. Even weaker signal than a DB error
                 // keyword: flags "something's different", not specifically an injection.
-                if (!backendErrorHit) {
+                // Skipped on 4xx: an app's own rejection page naturally differs in size/timing
+                // from the 2xx baseline, which was firing false anomalies on every 400/404/422.
+                if (!backendErrorHit && !isExpectedRejection) {
                     double diffRatio = baselineLength <= 0 ? 0 : Math.abs(length - baselineLength) / (double) baselineLength;
                     if (diffRatio > 0.20) {
                         isInjectionFinding = true;

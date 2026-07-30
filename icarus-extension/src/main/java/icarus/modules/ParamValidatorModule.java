@@ -131,10 +131,17 @@ public final class ParamValidatorModule implements IcarusModule {
 
         long[] requestTimes = new long[mutatedRequests.size()];
         List<HttpRequestResponse> responses = new ArrayList<>();
-        
+
+        boolean promptedThrottle = false;
+        int delayMs = 0;
+
         for (int i = 0; i < mutatedRequests.size(); i++) {
             Mutation m = mutations.get(i);
             logger.accept("testing " + shortPath(m.path()) + " with " + m.description().toLowerCase() + "...");
+
+            if (delayMs > 0) {
+                try { Thread.sleep(delayMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            }
 
             long startTime = System.currentTimeMillis();
             try {
@@ -144,6 +151,24 @@ public final class ParamValidatorModule implements IcarusModule {
                     int st = result.response().statusCode();
                     if (st == 401 || st == 403) {
                         logger.accept("tool is returning " + st);
+                        if (!promptedThrottle) {
+                            promptedThrottle = true;
+                            // Blocking dialog must run on the EDT (CLAUDE.md) — same invokeAndWait
+                            // pattern ScanRunner already uses for its Akamai prompt.
+                            int[] choiceHolder = { javax.swing.JOptionPane.NO_OPTION };
+                            try {
+                                javax.swing.SwingUtilities.invokeAndWait(() -> choiceHolder[0] = javax.swing.JOptionPane.showConfirmDialog(null,
+                                    "WAF Block (" + st + ") detected! Slow down requests (add 2s delay)?",
+                                    "WAF Block Detected", javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE));
+                            } catch (InterruptedException ex) {
+                                Thread.currentThread().interrupt();
+                            } catch (java.lang.reflect.InvocationTargetException ex) {
+                                api.logging().logToError("Param Validator: WAF throttle dialog failed: " + ex.getCause());
+                            }
+                            if (choiceHolder[0] == javax.swing.JOptionPane.YES_OPTION) {
+                                delayMs = 2000;
+                            }
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -175,6 +200,7 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         List<Finding> findings = new ArrayList<>();
+        Map<String, List<MutationResult>> groupedByPath = new LinkedHashMap<>();
 
         int analyzedCount = Math.min(mutations.size(), responses.size());
         for (int i = 0; i < analyzedCount; i++) {
@@ -189,72 +215,166 @@ public final class ParamValidatorModule implements IcarusModule {
             long responseTime = requestTimes[i];
             String bodyStr = mutatedResponse.bodyToString();
 
+            // Robust rejection of 401/403 (WAF/Auth block fix) — checked BEFORE injection
+            // detection so a WAF block page can't be mistaken for a confirmed injection hit
+            // just because it echoes the payload back or mentions a DB error keyword.
+            if (status == 401 || status == 403) {
+                continue;
+            }
+
+            // ── Injection Context Extraction Engine ──
+            String extractedContext = "";
+            boolean isInjectionFinding = false;
+            String injectionDesc = "";
+            Severity injectionSeverity = Severity.HIGH;
+
             boolean timeDelayHit = mutation.type().equals("STRING_SQLI_TIME") && responseTime >= timeDelayMs;
+            if (timeDelayHit) {
+                isInjectionFinding = true;
+                injectionDesc = "Time-based SQLi anomaly detected. Baseline was " + baselineTime + "ms, payload took " + responseTime + "ms.";
+            }
 
             boolean xssReflectionHit = false;
             if (checkXssReflection && mutation.type().equals("STRING_XSS") && mutation.value() instanceof String payload) {
-                xssReflectionHit = bodyStr.contains(payload);
+                if (bodyStr.contains(payload)) {
+                    xssReflectionHit = true;
+                    isInjectionFinding = true;
+                    extractedContext = extractContext(bodyStr, payload, 60);
+                    injectionDesc = "XSS Payload reflection detected. Context:\n`" + extractedContext + "`";
+                }
             }
 
-            boolean accepted = (status >= findingStatusMin && status <= findingStatusMax) || timeDelayHit || xssReflectionHit;
-
-            if (accepted && filterExactMatch && length == baselineLength && !timeDelayHit && !xssReflectionHit) {
-                accepted = false;
-            }
-
-            boolean behavioralHit = false;
-            String behavioralReason = "";
-            if (behavioralAnalysis && baselineLength != -1 && !accepted) {
-                double diffRatio = baselineLength == 0 ? 0 : Math.abs(length - baselineLength) / (double) baselineLength;
-                if (diffRatio > 0.20) {
-                    behavioralHit = true;
-                    behavioralReason = "Size anomaly (" + length + " vs baseline " + baselineLength + ")";
-                } else if (baselineTime > 0 && responseTime > baselineTime * 5 && responseTime > 3000) {
-                    behavioralHit = true;
-                    behavioralReason = "Time anomaly (" + responseTime + "ms vs baseline " + baselineTime + "ms)";
-                } else {
-                    String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(bodyStr);
-                    if (verboseMatch != null) {
-                        boolean baselineHasError = requireBaseline
-                                && VerboseErrorDetector.getVerboseErrorMatch(baselineBodyLower) != null;
-
-                        if (!baselineHasError) {
-                            behavioralHit = true;
-                            behavioralReason = "Backend error anomaly: " + verboseMatch;
-                        }
+            // Weaker signal than a confirmed time delay or reflection — tiered to MEDIUM below.
+            // Reuses VerboseErrorDetector (already imported, centralized in 763efe4) instead of a
+            // second, weaker hardcoded signature list — same class the drift check below leans on.
+            boolean backendErrorHit = false;
+            // Gate the whole block on !isInjectionFinding — a confirmed HIGH hit above
+            // (time delay, XSS reflection) must not get downgraded to MEDIUM just because
+            // the same payload also happens to shift body size or trip an error pattern.
+            if (behavioralAnalysis && !isInjectionFinding) {
+                String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(bodyStr);
+                if (verboseMatch != null) {
+                    // Lazy, same as before: only check the baseline once we actually have
+                    // a candidate match, not on every mutation.
+                    boolean baselineHasError = requireBaseline && VerboseErrorDetector.getVerboseErrorMatch(baselineBodyLower) != null;
+                    if (!baselineHasError) {
+                        backendErrorHit = true;
+                        isInjectionFinding = true;
+                        injectionSeverity = Severity.MEDIUM;
+                        injectionDesc = "Backend Error / SQLi Anomaly detected. " + verboseMatch;
                     }
                 }
-                if (behavioralHit) {
-                    accepted = true;
+
+                // Generic behavioral drift (size/time) — preserved from the original
+                // pre-rewrite logic, don't drop it. Even weaker signal than a DB error
+                // keyword: flags "something's different", not specifically an injection.
+                if (!backendErrorHit) {
+                    double diffRatio = baselineLength <= 0 ? 0 : Math.abs(length - baselineLength) / (double) baselineLength;
+                    if (diffRatio > 0.20) {
+                        isInjectionFinding = true;
+                        injectionSeverity = Severity.MEDIUM;
+                        injectionDesc = "Behavioral size anomaly detected (" + length + " bytes vs baseline " + baselineLength + " bytes).";
+                    } else if (baselineTime > 0 && responseTime > baselineTime * 5 && responseTime > 3000) {
+                        isInjectionFinding = true;
+                        injectionSeverity = Severity.MEDIUM;
+                        injectionDesc = "Behavioral time anomaly detected (" + responseTime + "ms vs baseline " + baselineTime + "ms).";
+                    }
                 }
             }
 
-            if (accepted) {
-                Severity severity = Severity.HIGH;
-                if (!behavioralHit && !timeDelayHit && !xssReflectionHit) {
-                    if (mutation.category() == Category.STRUCTURAL) severity = Severity.MEDIUM;
-                    else if (mutation.category() == Category.BOUNDARY) severity = Severity.MEDIUM;
-                    else if (mutation.category() == Category.TYPE_CONFUSION) severity = Severity.MEDIUM;
-                }
-
-                String findingDesc = mutation.description() + " | HTTP=" + status + " | size=" + length;
-                if (timeDelayHit) findingDesc += " | time=" + responseTime + "ms";
-                else if (xssReflectionHit) findingDesc += " | XSS payload reflected!";
-                else if (behavioralHit) findingDesc += " | Behavioral: " + behavioralReason;
-                else findingDesc += " | payload accepted";
-                
+            // Immediately spin out dedicated Injection Findings for pentester review.
+            // Named by mutation.type() (e.g. STRING_XSS, STRING_SQLI_TIME) so distinct
+            // injection classes on the same parameter don't collide under one shared name.
+            if (isInjectionFinding) {
                 findings.add(Finding.builder(name(), mutation.type())
-                        .description(findingDesc)
-                        .severity(severity)
+                        .description("Manual Evaluation Required. Injection anomaly detected on parameter `" + mutation.path() + "` using payload `" + mutation.value() + "`.\n\n" + injectionDesc)
+                        .severity(injectionSeverity)
                         .category(mutation.category())
                         .path(mutation.path())
                         .evidence(mutatedResult)
                         .meta("status", String.valueOf(status))
                         .meta("length", String.valueOf(length))
                         .meta("responseTime", String.valueOf(responseTime))
+                        .meta("context", extractedContext)
                         .build());
                 logger.accept("[FINDING] " + shortPath(mutation.path()) + " → " + mutation.type() + " (HTTP " + status + ")");
+                continue; // Skip adding to the grouped validation bucket
             }
+
+            // ── Standard Validation Logic ──
+            boolean accepted = (status >= findingStatusMin && status <= findingStatusMax);
+
+            if (accepted && filterExactMatch && length == baselineLength) {
+                accepted = false;
+            }
+
+            if (accepted) {
+                Severity severity = Severity.MEDIUM;
+                String findingDesc = mutation.description() + " | HTTP=" + status + " | size=" + length;
+
+                // Group standard missing-validation findings
+                groupedByPath.computeIfAbsent(mutation.path(), k -> new ArrayList<>())
+                             .add(new MutationResult(mutation, mutatedResult, severity, findingDesc, status, length, responseTime));
+            }
+        }
+
+        // Intelligent Finding Synthesis (For Standard Validation)
+        for (var entry : groupedByPath.entrySet()) {
+            String path = entry.getKey();
+            List<MutationResult> pathFindings = entry.getValue();
+
+            boolean structuralFailure = false;
+            boolean typeFailure = false;
+            boolean boundaryFailure = false;
+
+            for (MutationResult res : pathFindings) {
+                Category cat = res.mutation().category();
+                if (cat == Category.STRUCTURAL) structuralFailure = true;
+                else if (cat == Category.TYPE_CONFUSION) typeFailure = true;
+                else if (cat == Category.BOUNDARY) boundaryFailure = true;
+            }
+
+            // Worst-first priority: an omitted/nulled field beats a type mismatch, which
+            // beats an out-of-range value. Drives both the finding's Category tag and
+            // which mutation's response we show as evidence.
+            Category worstCategory = structuralFailure ? Category.STRUCTURAL
+                    : typeFailure ? Category.TYPE_CONFUSION
+                    : Category.BOUNDARY;
+
+            MutationResult worstEvidence = pathFindings.stream()
+                    .filter(r -> r.mutation().category() == worstCategory)
+                    .findFirst()
+                    .orElse(pathFindings.get(0));
+
+            String findingName = "Missing Input Validation";
+            StringBuilder desc = new StringBuilder("The parameter `" + path + "` lacks comprehensive input validation. Based on the automated tests, the endpoint accepted:\n\n");
+
+            if (structuralFailure) {
+                desc.append("- **Missing Structural Enforcement:** The endpoint accepted requests where this parameter was completely omitted, set to null, or replaced with empty objects/arrays.\n");
+            }
+            if (typeFailure) {
+                desc.append("- **Type Confusion:** The endpoint accepted data types that violate the expected schema (e.g., accepting strings instead of booleans/integers).\n");
+            }
+            if (boundaryFailure) {
+                desc.append("- **Missing Boundary Checks:** The endpoint accepted extreme boundary values (e.g., negative numbers, massive strings, or zero).\n");
+            }
+
+            // Per-mutation detail — keeps the specific payload/status/size a pentester
+            // needs to reproduce each bypass, instead of only the rolled-up summary above.
+            desc.append("\nContributing payloads:\n");
+            for (MutationResult res : pathFindings) {
+                desc.append("- `").append(res.mutation().type()).append("`: ").append(res.desc()).append("\n");
+            }
+
+            findings.add(Finding.builder(name(), findingName)
+                .description(desc.toString())
+                .severity(Severity.MEDIUM)
+                .category(worstCategory)
+                .path(path)
+                .evidence(worstEvidence.evidence())
+                .meta("status", String.valueOf(worstEvidence.status()))
+                .meta("length", String.valueOf(worstEvidence.length()))
+                .build());
         }
 
         return findings;
@@ -262,6 +382,22 @@ public final class ParamValidatorModule implements IcarusModule {
 
     private static String shortPath(String path) {
         return path.startsWith("$.") ? path.substring(2) : path;
+    }
+
+    private record MutationResult(Mutation mutation, HttpRequestResponse evidence, Severity severity, String desc, int status, int length, long responseTime) {}
+
+    private String extractContext(String fullBody, String targetStr, int padding) {
+        if (fullBody == null || targetStr == null || targetStr.isEmpty()) return "";
+        int idx = fullBody.toLowerCase().indexOf(targetStr.toLowerCase());
+        if (idx == -1) return "";
+
+        int start = Math.max(0, idx - padding);
+        int end = Math.min(fullBody.length(), idx + targetStr.length() + padding);
+        String prefix = (start > 0) ? "..." : "";
+        String suffix = (end < fullBody.length()) ? "..." : "";
+
+        // Clean up newlines/tabs for display
+        return prefix + fullBody.substring(start, end).replaceAll("[\\r\\n\\t]+", " ") + suffix;
     }
 
     private static final class SpecsFactory {

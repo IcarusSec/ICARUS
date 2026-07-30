@@ -107,8 +107,13 @@ public final class ScanRunner {
         log.accept("ICARUS scan started — " + target.request().method() + " " + target.request().path());
 
         if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
-            String server = target.response().headerValue("Server");
-            if (server != null && server.toLowerCase().contains("akamai")) {
+            // ponytail: one-liner header check via stream matching. Ceiling: exact header string matching.
+            boolean isAkamai = target.response().headers().stream()
+                .anyMatch(h -> h.name().toLowerCase().startsWith("ak-") ||
+                               h.name().toLowerCase().startsWith("x-akamai-") ||
+                               (h.name().equalsIgnoreCase("server") && h.value().toLowerCase().contains("akamai")));
+
+            if (isAkamai) {
                 int[] choiceHolder = { -1 };
                 runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(null,
                         "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",

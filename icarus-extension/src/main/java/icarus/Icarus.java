@@ -5,6 +5,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.ui.hotkey.HotKey;
 import burp.api.montoya.ui.hotkey.HotKeyContext;
 
+import icarus.autoauth.AutoAuthModule;
 import icarus.core.*;
 import icarus.modules.*;
 import icarus.evidence.EvidenceCapture;
@@ -22,7 +23,7 @@ import java.util.List;
 public class Icarus implements BurpExtension {
 
     public static final String NAME = "ICARUS";
-    public static final String VERSION = "1.1.7b";
+    public static final String VERSION = "1.1.8";
 
     @Override
     public void initialize(MontoyaApi api) {
@@ -48,8 +49,9 @@ public class Icarus implements BurpExtension {
 
         var evidenceCapture = new EvidenceCapture(api, config);
         var reportGenerator = new ReportGenerator(api);
+        var autoAuth = new AutoAuthModule(api, config);
 
-        var orchestrator = new Orchestrator(api, modules, config, evidenceCapture, reportGenerator);
+        var orchestrator = new Orchestrator(api, modules, config, evidenceCapture, reportGenerator, autoAuth);
 
         // Register UI tab
         var tab = new IcarusTab(api, config, modules, orchestrator);
@@ -180,6 +182,10 @@ public class Icarus implements BurpExtension {
         config.set("rl.bypass_headers", true);
         config.set("rl.bypass_path", true);
         config.set("rl.bypass_query", true);
+
+        // ── AutoAuth defaults ──
+        config.set("autoauth.enabled", true);
+        config.set("autoauth.refresh_minutes", 15);
 
         // ── Evidence defaults ──
         config.set("evidence.enabled", true);

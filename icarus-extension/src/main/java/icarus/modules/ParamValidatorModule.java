@@ -8,6 +8,7 @@ import icarus.core.Category;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.JsonParser;
+import icarus.core.JsonPaths;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 import icarus.core.VerboseErrorDetector;
@@ -45,7 +46,7 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         Object originalRoot = JsonParser.parse(originalBody);
-        List<List<Object>> allPaths = Paths.collect(originalRoot);
+        List<List<Object>> allPaths = JsonPaths.collect(originalRoot);
 
         PathRules pathRules = new PathRules(
                 config.getStringList("pv.include_paths"),
@@ -55,7 +56,7 @@ public final class ParamValidatorModule implements IcarusModule {
 
         List<List<Object>> eligiblePaths = new ArrayList<>();
         for (List<Object> path : allPaths) {
-            String pathString = Paths.pathToString(path);
+            String pathString = JsonPaths.pathToString(path);
             if (!pathRules.isIncluded(pathString)) continue;
             if (pathRules.isExcluded(pathString)) continue;
             eligiblePaths.add(path);
@@ -68,15 +69,15 @@ public final class ParamValidatorModule implements IcarusModule {
         
         outer:
         for (List<Object> path : eligiblePaths) {
-            String pathString = Paths.pathToString(path);
-            Object leafValue = Paths.getAt(JsonParser.parse(originalBody), path);
+            String pathString = JsonPaths.pathToString(path);
+            Object leafValue = JsonPaths.getAt(JsonParser.parse(originalBody), path);
             
             for (MutationSpec spec : SpecsFactory.specsFor(leafValue, config)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 if (mutations.size() >= maxMutations) break outer;
                 
                 Object clonedRoot = JsonParser.parse(originalBody);
-                boolean applied = Paths.applyAt(clonedRoot, path, spec);
+                boolean applied = JsonPaths.applyAt(clonedRoot, path, spec.value(), spec.remove());
                 if (applied) {
                     mutations.add(new Mutation(
                             pathString,
@@ -545,80 +546,6 @@ public final class ParamValidatorModule implements IcarusModule {
                 }
             }
             return specs;
-        }
-    }
-
-    private static final class Paths {
-        static List<List<Object>> collect(Object root) {
-            List<List<Object>> out = new ArrayList<>();
-            walk(root, new ArrayList<>(), out);
-            return out;
-        }
-
-        private static void walk(Object node, List<Object> current, List<List<Object>> out) {
-            if (node instanceof Map<?, ?> map) {
-                for (Object key : map.keySet()) {
-                    List<Object> childPath = new ArrayList<>(current);
-                    childPath.add(key);
-                    out.add(childPath);
-                    Object value = map.get(key);
-                    if (value instanceof Map || value instanceof List) walk(value, childPath, out);
-                }
-            } else if (node instanceof List<?> list) {
-                for (int i = 0; i < list.size(); i++) {
-                    List<Object> childPath = new ArrayList<>(current);
-                    childPath.add(i);
-                    out.add(childPath);
-                    Object value = list.get(i);
-                    if (value instanceof Map || value instanceof List) walk(value, childPath, out);
-                }
-            }
-        }
-
-        static Object getAt(Object root, List<Object> path) {
-            Object current = root;
-            for (Object key : path) {
-                if (current instanceof Map<?, ?> m && key instanceof String s) current = m.get(s);
-                else if (current instanceof List<?> l && key instanceof Integer idx) current = l.get(idx);
-                else return null;
-            }
-            return current;
-        }
-
-        @SuppressWarnings("unchecked")
-        static boolean applyAt(Object root, List<Object> path, MutationSpec spec) {
-            Object parent = root;
-            for (int i = 0; i < path.size() - 1; i++) {
-                Object key = path.get(i);
-                if (parent instanceof Map<?, ?> m && key instanceof String s) parent = m.get(s);
-                else if (parent instanceof List<?> l && key instanceof Integer idx) parent = l.get(idx);
-                else return false;
-            }
-            Object lastKey = path.get(path.size() - 1);
-            if (spec.remove()) {
-                if (parent instanceof Map<?, ?> m && lastKey instanceof String s) {
-                    ((Map<Object, Object>) m).remove(s);
-                    return true;
-                }
-                return false; 
-            }
-            if (parent instanceof Map<?, ?> m && lastKey instanceof String s) {
-                ((Map<Object, Object>) m).put(s, spec.value());
-                return true;
-            } else if (parent instanceof List<?> l && lastKey instanceof Integer idx) {
-                ((List<Object>) l).set(idx, spec.value());
-                return true;
-            }
-            return false;
-        }
-
-        static String pathToString(List<Object> path) {
-            StringBuilder sb = new StringBuilder("$");
-            for (Object p : path) {
-                if (p instanceof String s) sb.append(".").append(s);
-                else sb.append("[").append(p).append("]");
-            }
-            return sb.toString();
         }
     }
 

@@ -66,6 +66,13 @@ Focuses on rigorous testing of JSON request parameter validation to determine if
 <summary><b>2. HTTP Verb Tester (HttpVerbModule)</b></summary>
 <br>
 Performs exhaustive HTTP verb validation for API security testing, automatically mutating standard requests using alternate methods (`GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to uncover endpoint misconfigurations.
+<br>
+<br>
+
+<p align="center">
+  <img src="./.images/httverb.gif" alt="HTTP Verb Tester Demo" width="900">
+</p>
+<br>
 
 - Automatically adjusts request body content based on the injected HTTP method.
 - Provides deep `OPTIONS` and `Allow` header validation.

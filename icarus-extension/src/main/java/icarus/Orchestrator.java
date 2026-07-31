@@ -71,6 +71,18 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         evidenceCapture.captureInteractive(finding);
     }
 
+    /** Shared by the "Create Evidence" context-menu item and the Ctrl+P hotkey handler. */
+    public void createManualEvidence(HttpRequestResponse rr) {
+        Severity manualSeverity = parseSeverity(config.getString("evidence.manual_severity", "INFO"));
+        Finding manualFinding = Finding.builder("Manual", "MANUAL_EVIDENCE")
+                .description("Manual evidence capture triggered by user.")
+                .severity(manualSeverity)
+                .category(Category.MANUAL)
+                .evidence(rr)
+                .build();
+        evidenceCapture.captureInteractive(manualFinding);
+    }
+
     public void runScan(HttpRequestResponse target, boolean isManual) {
         scanRunner.runScan(target, isManual);
     }
@@ -107,15 +119,8 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         var createEvidence = new JMenuItem("ICARUS → Create Evidence");
         createEvidence.addActionListener(e -> {
-            Severity manualSeverity = parseSeverity(config.getString("evidence.manual_severity", "INFO"));
             for (var rr : requestResponses) {
-                Finding manualFinding = Finding.builder("Manual", "MANUAL_EVIDENCE")
-                        .description("Manual evidence capture triggered by user.")
-                        .severity(manualSeverity)
-                        .category(Category.MANUAL)
-                        .evidence(rr)
-                        .build();
-                evidenceCapture.captureInteractive(manualFinding);
+                createManualEvidence(rr);
             }
         });
         items.add(createEvidence);

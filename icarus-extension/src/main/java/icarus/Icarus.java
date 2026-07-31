@@ -2,6 +2,7 @@ package icarus;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.ui.hotkey.HotKeyContext;
 
 import icarus.core.*;
 import icarus.modules.*;
@@ -55,6 +56,14 @@ public class Icarus implements BurpExtension {
 
         // Register context menu
         api.userInterface().registerContextMenuItemsProvider(orchestrator);
+
+        // Ctrl+P — create evidence for the request/response open in the current editor.
+        // Uses Montoya's native hotkey API rather than a JMenuItem accelerator, which
+        // only registers a real keybinding when the item lives in a JMenuBar — Burp's
+        // context menu is a transient popup, so an accelerator there is cosmetic only.
+        api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, "ctrl P",
+                event -> event.messageEditorRequestResponse()
+                        .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
 
         // Register passive HTTP handler for SensitiveHeaderModule
         api.http().registerHttpHandler(orchestrator);

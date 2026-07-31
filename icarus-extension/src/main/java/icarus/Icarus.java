@@ -61,7 +61,13 @@ public class Icarus implements BurpExtension {
         // Uses Montoya's native hotkey API rather than a JMenuItem accelerator, which
         // only registers a real keybinding when the item lives in a JMenuBar — Burp's
         // context menu is a transient popup, so an accelerator there is cosmetic only.
-        api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, "ctrl P",
+        // Combo format is "Ctrl+P" (capitalized, plus-separated — "same format as within
+        // Burp's Settings"), confirmed against the bundled Montoya API sources/tutorial in
+        // /usr/share/burpsuite/burpsuite.jar. This overload is deprecated in favor of
+        // registerHotKeyHandler(HotKeyContext, HotKey, HotKeyHandler) — but the HotKey class
+        // wasn't added until montoya-api 2025.11, and build.sh pins 2025.6, so this is the
+        // only overload actually available until that dependency is bumped.
+        api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, "Ctrl+P",
                 event -> event.messageEditorRequestResponse()
                         .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
 

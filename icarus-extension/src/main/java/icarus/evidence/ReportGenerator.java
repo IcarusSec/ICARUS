@@ -13,7 +13,9 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Generates a standalone HTML report linking all captured findings
@@ -32,21 +34,28 @@ public final class ReportGenerator {
      *                       (e.g. via a save dialog). Every referenced evidence image is
      *                       copied alongside it so the relative &lt;img&gt; links resolve
      *                       regardless of where the images were originally saved.
+     * @return true if a report file was actually written, false if generation was skipped
+     *         (report disabled in settings, or no findings to report).
      */
-    public void generate(List<Finding> findings, ModuleConfig config, EvidenceCapture capture, Path outputHtmlFile) throws IOException {
+    public boolean generate(List<Finding> findings, ModuleConfig config, EvidenceCapture capture, Path outputHtmlFile) throws IOException {
         if (!config.getBool("evidence.html_report", true) || findings.isEmpty()) {
-            return;
+            return false;
         }
 
-        // Only generate report for findings that were actually captured by the user
-        var captured = capture.getCaptured();
-
-        if (captured.isEmpty()) return;
+        // Screenshots are optional per finding — captured by identity, since
+        // captureInteractive() is always called with the same Finding reference
+        // that's already in `findings` (never a copy).
+        var evidenceByFinding = new IdentityHashMap<Finding, CapturedEvidence>();
+        for (var c : capture.getCaptured()) {
+            evidenceByFinding.put(c.finding(), c);
+        }
 
         Path reportDir = outputHtmlFile.toAbsolutePath().getParent();
         Files.createDirectories(reportDir);
 
-        for (var c : captured) {
+        for (Finding f : findings) {
+            var c = evidenceByFinding.get(f);
+            if (c == null) continue;
             Path src = c.imagePath().toAbsolutePath().normalize();
             Path dest = reportDir.resolve(c.imagePath().getFileName()).normalize();
             if (!src.equals(dest)) {
@@ -66,12 +75,13 @@ public final class ReportGenerator {
 
         StringBuilder html = new StringBuilder();
         appendHeader(html, reportDir.getFileName().toString(), projectName);
-        appendSummary(html, captured);
-        appendFindings(html, captured);
+        appendSummary(html, findings);
+        appendFindings(html, findings, evidenceByFinding);
         appendFooter(html);
 
         Files.writeString(outputHtmlFile, html.toString());
         api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
+        return true;
     }
 
     private void appendHeader(StringBuilder html, String reportName, String projectName) {
@@ -184,11 +194,11 @@ public final class ReportGenerator {
             ));
     }
 
-    private void appendSummary(StringBuilder html, List<CapturedEvidence> captured) {
-        long critical = countBySeverity(captured, "CRITICAL");
-        long high = countBySeverity(captured, "HIGH");
-        long medium = countBySeverity(captured, "MEDIUM");
-        long low = countBySeverity(captured, "LOW");
+    private void appendSummary(StringBuilder html, List<Finding> findings) {
+        long critical = countBySeverity(findings, "CRITICAL");
+        long high = countBySeverity(findings, "HIGH");
+        long medium = countBySeverity(findings, "MEDIUM");
+        long low = countBySeverity(findings, "LOW");
 
         html.append("""
                 <div class="summary">
@@ -214,23 +224,21 @@ public final class ReportGenerator {
                     </div>
                 </div>
                 <h2>Findings</h2>
-            """.formatted(critical, high, medium, low, captured.size()));
+            """.formatted(critical, high, medium, low, findings.size()));
     }
 
-    private long countBySeverity(List<CapturedEvidence> captured, String severity) {
+    private long countBySeverity(List<Finding> findings, String severity) {
         if (severity.equals("LOW")) {
-            return captured.stream().filter(c ->
-                c.finding().severity().name().equals("LOW") ||
-                c.finding().severity().name().equals("INFO")).count();
+            return findings.stream().filter(f ->
+                f.severity().name().equals("LOW") ||
+                f.severity().name().equals("INFO")).count();
         }
-        return captured.stream().filter(c -> c.finding().severity().name().equals(severity)).count();
+        return findings.stream().filter(f -> f.severity().name().equals(severity)).count();
     }
 
-    private void appendFindings(StringBuilder html, List<CapturedEvidence> captured) {
+    private void appendFindings(StringBuilder html, List<Finding> findings, Map<Finding, CapturedEvidence> evidenceByFinding) {
         int index = 1;
-        for (var c : captured) {
-            var f = c.finding();
-
+        for (Finding f : findings) {
             html.append("""
                 <div class="finding-card">
                     <div class="finding-header">
@@ -258,13 +266,23 @@ public final class ReportGenerator {
                 }
             }
 
-            html.append("""
+            var c = evidenceByFinding.get(f);
+            if (c != null) {
+                html.append("""
                         </table>
                         <h4>Evidence</h4>
                         <img class="evidence-img" src="%s" alt="Evidence for %s">
                     </div>
                 </div>
             """.formatted(c.imagePath().getFileName().toString(), f.type()));
+            } else {
+                html.append("""
+                        </table>
+                        <p style="color: var(--text-muted)">No screenshot captured for this finding.</p>
+                    </div>
+                </div>
+            """);
+            }
         }
     }
 

@@ -405,12 +405,17 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                     reportFindings.add(r.getFinding());
                 }
                 java.nio.file.Path outputFile = fc.getSelectedFile().toPath();
-                reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
-                if (selectedFile.getParentFile() != null) {
-                    config.set("evidence.output_dir", selectedFile.getParentFile().getAbsolutePath());
-                    api.persistence().extensionData().setString("config", config.serialize());
+                boolean written = reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+                if (written) {
+                    if (selectedFile.getParentFile() != null) {
+                        config.set("evidence.output_dir", selectedFile.getParentFile().getAbsolutePath());
+                        api.persistence().extensionData().setString("config", config.serialize());
+                    }
+                    JOptionPane.showMessageDialog(dialog, "HTML Report generated: " + outputFile.toAbsolutePath());
+                } else {
+                    JOptionPane.showMessageDialog(dialog,
+                            "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
                 }
-                JOptionPane.showMessageDialog(dialog, "HTML Report generated: " + outputFile.toAbsolutePath());
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(dialog, "Report generation failed: " + ex.getMessage());
             }

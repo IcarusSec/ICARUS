@@ -15,6 +15,8 @@ import java.awt.*;
 import java.awt.event.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -31,6 +33,7 @@ public final class EvidenceCapture {
 
     private static final Font MONO_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 14);
     private static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 14);
+    private static final int BINARY_TRUNCATE_BYTES = 2048;
 
     private final MontoyaApi api;
     private final ModuleConfig config;
@@ -989,17 +992,22 @@ public final class EvidenceCapture {
         JPanel bar = new JPanel(new GridLayout(0, 1, 0, 6));
         bar.setBorder(new EmptyBorder(8, 8, 8, 8));
 
-        JToggleButton panBtn = new JToggleButton("Pan", true);
+        JToggleButton panBtn = new JToggleButton("Pan (space)", true);
         JToggleButton boxBtn = new JToggleButton("Box (s)");
         JToggleButton arrowBtn = new JToggleButton("Arrow (a)");
-        JToggleButton hiBtn = new JToggleButton("Highlight");
-        JToggleButton redactBtn = new JToggleButton("Redact");
+        JToggleButton hiBtn = new JToggleButton("Highlight (h)");
+        JToggleButton redactBtn = new JToggleButton("Redact (r)");
 
         ButtonGroup grp = new ButtonGroup();
         grp.add(panBtn); grp.add(boxBtn); grp.add(arrowBtn); grp.add(hiBtn); grp.add(redactBtn);
 
+        // Non-focusable: Space is Swing's default "activate button" key, so a focused
+        // toolbar button (the common state right after selecting a tool) would swallow
+        // the hold-to-pan Space binding below via its own WHEN_FOCUSED keymap entry
+        // instead of letting it reach the window-level shortcut. Mouse clicks are unaffected.
         for (var b : List.of(panBtn, boxBtn, arrowBtn, hiBtn, redactBtn)) {
             b.setFont(b.getFont().deriveFont(Font.BOLD, 13f));
+            b.setFocusable(false);
         }
 
         ActionListener modeSel = a -> {
@@ -1019,12 +1027,14 @@ public final class EvidenceCapture {
         redactBtn.addActionListener(modeSel);
 
         JButton colourBtn = createModernButton("Colour", curCol[0]);
+        colourBtn.setFocusable(false);
         colourBtn.addActionListener(a -> {
             Color chosen = JColorChooser.showDialog(frame, "Choose colour", curCol[0]);
             if (chosen != null) { curCol[0] = chosen; colourBtn.setBackground(curCol[0]); }
         });
 
         JButton undoBtn = createModernButton("Undo", new Color(70, 70, 70));
+        undoBtn.setFocusable(false);
         undoBtn.addActionListener(a -> {
             if (!shapes.isEmpty()) {
                 shapes.remove(shapes.size() - 1);
@@ -1035,32 +1045,10 @@ public final class EvidenceCapture {
         });
 
         JButton saveBtn = createModernButton("Save Evidence", ACCENT_COLOR);
+        saveBtn.setFocusable(false);
         saveBtn.addActionListener(a -> {
             try {
-                BufferedImage out = new BufferedImage(snap.getWidth(), snap.getHeight(), BufferedImage.TYPE_INT_ARGB);
-                Graphics2D g2 = out.createGraphics();
-                g2.drawImage(snap, 0, 0, null);
-                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setStroke(new BasicStroke(3f));
-                for (int i = 0; i < shapes.size(); i++) {
-                    String kind = kinds.get(i);
-                    Shape s = shapes.get(i);
-                    if ("HIGHLIGHT".equals(kind)) {
-                        g2.setColor(new Color(255, 255, 0, 80));
-                        g2.fill(s);
-                    } else if ("REDACT".equals(kind)) {
-                        g2.setColor(Color.BLACK);
-                        g2.fill(s);
-                    } else if ("ARROW".equals(kind)) {
-                        g2.setColor(cols.get(i));
-                        g2.fill(s);
-                        g2.draw(s);
-                    } else {
-                        g2.setColor(cols.get(i));
-                        g2.draw(s);
-                    }
-                }
-                g2.dispose();
+                BufferedImage out = renderFinalImage(snap, shapes, kinds, cols);
 
                 String lastDir = config.getString("evidence.output_dir", System.getProperty("user.home"));
                 JFileChooser fc = new JFileChooser(new File(lastDir));
@@ -1081,6 +1069,23 @@ public final class EvidenceCapture {
             }
         });
 
+        JButton copyBtn = createModernButton("Copy to Clipboard", ACCENT_COLOR.darker());
+        copyBtn.setFocusable(false);
+        copyBtn.addActionListener(a -> {
+            try {
+                BufferedImage out = renderFinalImage(snap, shapes, kinds, cols);
+                Transferable transferable = new Transferable() {
+                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[] { DataFlavor.imageFlavor }; }
+                    public boolean isDataFlavorSupported(DataFlavor flavor) { return DataFlavor.imageFlavor.equals(flavor); }
+                    public Object getTransferData(DataFlavor flavor) { return out; }
+                };
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(transferable, null);
+                JOptionPane.showMessageDialog(frame, "Image copied to clipboard.");
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+        });
+
         bar.add(panBtn);
         bar.add(new JSeparator());
         bar.add(colourBtn);
@@ -1091,6 +1096,7 @@ public final class EvidenceCapture {
         bar.add(undoBtn);
         bar.add(new JSeparator());
         bar.add(saveBtn);
+        bar.add(copyBtn);
         root.add(bar, BorderLayout.EAST);
 
         // Flameshot-style shortcuts. Routed through doClick() on the existing toolbar
@@ -1115,12 +1121,79 @@ public final class EvidenceCapture {
             public void actionPerformed(ActionEvent e) { undoBtn.doClick(); }
         });
 
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, 0), "icarus.modeHighlight");
+        shortcutActions.put("icarus.modeHighlight", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { hiBtn.doClick(); }
+        });
+
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_R, 0), "icarus.modeRedact");
+        shortcutActions.put("icarus.modeRedact", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) { redactBtn.doClick(); }
+        });
+
+        // Spacebar hold-to-pan: switch to Pan on press, restore the previous tool on
+        // release. The mode[0] guard makes repeated KEY_PRESSED events from OS key-repeat
+        // (fired continuously while held) a no-op after the first one.
+        String[] prevMode = { null };
+
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0, false), "icarus.panDown");
+        shortcutActions.put("icarus.panDown", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                if (!"PAN".equals(mode[0])) {
+                    prevMode[0] = mode[0];
+                    panBtn.doClick();
+                }
+            }
+        });
+
+        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0, true), "icarus.panUp");
+        shortcutActions.put("icarus.panUp", new AbstractAction() {
+            public void actionPerformed(ActionEvent e) {
+                if (prevMode[0] != null) {
+                    if ("BOX".equals(prevMode[0])) boxBtn.doClick();
+                    else if ("ARROW".equals(prevMode[0])) arrowBtn.doClick();
+                    else if ("HIGHLIGHT".equals(prevMode[0])) hiBtn.doClick();
+                    else if ("REDACT".equals(prevMode[0])) redactBtn.doClick();
+                    prevMode[0] = null;
+                }
+            }
+        });
+
         // Default cursor for pan mode
         canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
 
         parentEditor.dispose(); // Close the Phase 1 dialog
         frame.setContentPane(root);
         frame.setVisible(true);
+    }
+
+    /** Flattens the base snapshot + committed annotations into one image. Shared by Save and Copy. */
+    private BufferedImage renderFinalImage(BufferedImage snap, List<Shape> shapes, List<String> kinds, List<Color> cols) {
+        BufferedImage out = new BufferedImage(snap.getWidth(), snap.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = out.createGraphics();
+        g2.drawImage(snap, 0, 0, null);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g2.setStroke(new BasicStroke(3f));
+        for (int i = 0; i < shapes.size(); i++) {
+            String kind = kinds.get(i);
+            Shape s = shapes.get(i);
+            if ("HIGHLIGHT".equals(kind)) {
+                g2.setColor(new Color(255, 255, 0, 80));
+                g2.fill(s);
+            } else if ("REDACT".equals(kind)) {
+                g2.setColor(Color.BLACK);
+                g2.fill(s);
+            } else if ("ARROW".equals(kind)) {
+                g2.setColor(cols.get(i));
+                g2.fill(s);
+                g2.draw(s);
+            } else {
+                g2.setColor(cols.get(i));
+                g2.draw(s);
+            }
+        }
+        g2.dispose();
+        return out;
     }
 
     /**
@@ -1176,13 +1249,27 @@ public final class EvidenceCapture {
         }
 
         if (isBinary) {
-            int choice = JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(),
-                    "This payload appears to be binary. Format it as a HEX dump for evidence?",
-                    "Binary Payload Detected", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
-            if (choice != JOptionPane.YES_OPTION) {
-                return "\n[Binary Payload Omitted]";
+            Object[] options = {"Hex Dump", "Keep Original", "Truncate"};
+            int choice = JOptionPane.showOptionDialog(api.userInterface().swingUtils().suiteFrame(),
+                    "This payload appears to be binary. How should it be formatted?",
+                    "Binary Payload Detected", JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+
+            if (choice == 0) {
+                return "\n--- BINARY PAYLOAD (HEX DUMP) ---\n" + toHexDump(body);
+            } else if (choice == 1) {
+                String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+                return "\n" + JsonParser.formatJsonString(text);
+            } else if (choice == 2) {
+                int limit = Math.min(body.length, BINARY_TRUNCATE_BYTES);
+                byte[] truncated = Arrays.copyOf(body, limit);
+                String suffix = limit < body.length
+                        ? "\n... [truncated, showing " + limit + " of " + body.length + " bytes]"
+                        : "";
+                return "\n--- BINARY PAYLOAD (HEX DUMP, TRUNCATED) ---\n" + toHexDump(truncated) + suffix;
             }
-            return "\n--- BINARY PAYLOAD (HEX DUMP) ---\n" + toHexDump(body);
+            // Dialog dismissed without a choice — same safe default as before (omit).
+            return "\n[Binary Payload Omitted]";
         } else {
             String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
             return "\n" + JsonParser.formatJsonString(text);

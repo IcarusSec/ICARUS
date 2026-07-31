@@ -13,7 +13,7 @@ import java.util.*;
  * <ul>
  *   <li>{@code LinkedHashMap<String, Object>} for objects (preserves key order)</li>
  *   <li>{@code ArrayList<Object>} for arrays</li>
- *   <li>{@code String}, {@code Long}, {@code Double}, {@code Boolean}, or {@code null} for primitives</li>
+ *   <li>{@code String}, {@link RawNumber}, {@code Boolean}, or {@code null} for primitives</li>
  * </ul>
  */
 public final class JsonParser {
@@ -115,20 +115,17 @@ public final class JsonParser {
         return sb.toString();
     }
 
+    /**
+     * Kept as the raw source text (not parsed into a Double/Long) so round-tripping through
+     * {@link #write} can't mangle it — e.g. a scientific-notation-looking token like {@code 2e2}
+     * would otherwise come back out as {@code 200.0}.
+     */
     private static Object parseNumber(String s, int[] p) {
         int start = p[0];
         while (p[0] < s.length() && "-+.eE0123456789".indexOf(s.charAt(p[0])) >= 0) {
             p[0]++;
         }
-        String num = s.substring(start, p[0]);
-        if (num.contains(".") || num.contains("e") || num.contains("E")) {
-            return Double.parseDouble(num);
-        }
-        try {
-            return Long.parseLong(num);
-        } catch (NumberFormatException e) {
-            return Double.parseDouble(num);
-        }
+        return new RawNumber(s.substring(start, p[0]));
     }
 
     // ── Serialize ───────────────────────────────────────────────
@@ -136,6 +133,7 @@ public final class JsonParser {
     public static String write(Object o) {
         if (o == null) return "null";
         if (o instanceof String str)    return "\"" + escape(str) + "\"";
+        if (o instanceof RawNumber rn)  return rn.value();
         if (o instanceof Boolean)       return String.valueOf(o);
         if (o instanceof Long)          return String.valueOf(o);
         if (o instanceof Integer)       return String.valueOf(o);
@@ -172,6 +170,7 @@ public final class JsonParser {
     public static String prettyPrint(Object o, int indentLevel) {
         if (o == null) return "null";
         if (o instanceof String str) return "\"" + escape(str) + "\"";
+        if (o instanceof RawNumber rn) return rn.value();
         if (o instanceof Boolean || o instanceof Long || o instanceof Integer || o instanceof Double) return String.valueOf(o);
 
         String indent = "  ".repeat(indentLevel);
@@ -244,5 +243,16 @@ public final class JsonParser {
             return copy;
         }
         return o; // primitives are immutable
+    }
+
+    /** `java -cp build_manual/libs/icarus-<version>.jar icarus.core.JsonParser` — parse/write round-trip self-check. */
+    public static void main(String[] args) {
+        assert write(parse("2e2")).equals("2e2") : "exponent-looking number must not become 200.0";
+        assert write(parse("42")).equals("42");
+        assert write(parse("3.14")).equals("3.14");
+        assert ((RawNumber) parse("2e2")).isInteger() == false;
+        assert ((RawNumber) parse("42")).isInteger();
+        assert write(parse("{\"a\":2e2,\"b\":[1,2.5]}")).equals("{\"a\":2e2,\"b\":[1,2.5]}");
+        System.out.println("JsonParser self-check passed (run with -ea to enforce).");
     }
 }

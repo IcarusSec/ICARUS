@@ -10,6 +10,7 @@ import icarus.core.IcarusModule;
 import icarus.core.JsonParser;
 import icarus.core.JsonPaths;
 import icarus.core.ModuleConfig;
+import icarus.core.RawNumber;
 import icarus.core.Severity;
 import icarus.core.VerboseErrorDetector;
 
@@ -487,7 +488,8 @@ public final class ParamValidatorModule implements IcarusModule {
                         specs.add(new MutationSpec("TYPE_BOOLEAN", "String replaced by boolean", Boolean.TRUE, false, Category.TYPE_CONFUSION));
                     }
                 }
-            } else if (value instanceof Long || value instanceof Integer) {
+            } else if (value instanceof Long || value instanceof Integer
+                    || (value instanceof RawNumber rn && rn.isInteger())) {
                 if (testBoundary) {
                     if (config.getBool("pv.number_zero", true)) {
                         specs.add(new MutationSpec("NUMBER_ZERO", "Zero value", 0L, false, Category.BOUNDARY));
@@ -510,7 +512,7 @@ public final class ParamValidatorModule implements IcarusModule {
                         specs.add(new MutationSpec("TYPE_STRING_NUMERIC", "Number replaced by numeric string", "123", false, Category.TYPE_CONFUSION));
                     }
                 }
-            } else if (value instanceof Double) {
+            } else if (value instanceof Double || (value instanceof RawNumber rn && !rn.isInteger())) {
                 if (testBoundary) {
                     if (config.getBool("pv.number_zero", true)) {
                         specs.add(new MutationSpec("NUMBER_ZERO", "Zero value", 0.0, false, Category.BOUNDARY));

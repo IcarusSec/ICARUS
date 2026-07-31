@@ -3,6 +3,7 @@ package icarus;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
 import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
@@ -87,6 +88,13 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
      * both entry points get Smart Evidence detection for free by routing through here.
      */
     public void createManualEvidence(HttpRequestResponse rr) {
+        // AutoAuth injects the token on the wire (handleHttpRequestToBeSent), but that never
+        // touches the UI's copy of the request — without this, captured evidence shows the
+        // stale pre-injection token instead of what was actually sent.
+        HttpRequest injectedRequest = autoAuth.injectIfApplicable(rr.request());
+        if (injectedRequest != rr.request()) {
+            rr = HttpRequestResponse.httpRequestResponse(injectedRequest, rr.response());
+        }
         Finding smart = detectSmartEvidence(rr);
         evidenceCapture.captureInteractive(smart != null ? smart : blankManualFinding(rr));
     }
@@ -192,6 +200,20 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         // AutoAuth: only shown when the user actually highlighted text in a message editor —
         // these need selection offsets that scan-style modules never receive.
         event.messageEditorRequestResponse().ifPresent(selection -> {
+            // Montoya's HttpHandler only controls what goes out on the wire — it has no hook
+            // back into an already-open editor pane (e.g. a Repeater tab), so the injected
+            // token never appears there on its own. setRequest() is the one API that can push
+            // an update into the pane the user is looking at, so offer it as an explicit action.
+            if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.REQUEST) {
+                var syncToken = new JMenuItem("ICARUS → Sync AutoAuth Token");
+                syncToken.addActionListener(e -> {
+                    HttpRequest current = selection.requestResponse().request();
+                    HttpRequest updated = autoAuth.injectIfApplicable(current);
+                    if (updated != current) selection.setRequest(updated);
+                });
+                items.add(syncToken);
+            }
+
             if (selection.selectionOffsets().isEmpty()) return;
             if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.RESPONSE) {
                 var setSource = new JMenuItem("ICARUS → Set as Auth Token Source");

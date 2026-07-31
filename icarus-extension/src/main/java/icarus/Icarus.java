@@ -6,6 +6,7 @@ import burp.api.montoya.ui.hotkey.HotKey;
 import burp.api.montoya.ui.hotkey.HotKeyContext;
 
 import icarus.autoauth.AutoAuthModule;
+import icarus.autoauth.AutoAuthPreviewEditorProvider;
 import icarus.core.*;
 import icarus.modules.*;
 import icarus.evidence.EvidenceCapture;
@@ -60,6 +61,10 @@ public class Icarus implements BurpExtension {
 
         // Register context menu
         api.userInterface().registerContextMenuItemsProvider(orchestrator);
+
+        // Read-only "AutoAuth" request-editor tab (Repeater included) that Burp keeps in sync
+        // automatically — the fix for AutoAuth's injected token not showing up after a Send.
+        api.userInterface().registerHttpRequestEditorProvider(new AutoAuthPreviewEditorProvider(autoAuth));
 
         // Ctrl+P — create evidence for the request/response open in the current editor.
         // Uses Montoya's native hotkey API rather than a JMenuItem accelerator, which

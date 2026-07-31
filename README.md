@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://portswigger.net/burp/extender"><img src="https://img.shields.io/badge/BurpSuite-Extension-orange?style=for-the-badge&logo=burpsuite" alt="Burp Suite"></a>
   <a href="https://java.com/"><img src="https://img.shields.io/badge/Language-Java_21-red?style=for-the-badge&logo=openjdk" alt="Java"></a>
-  <a href="https://github.com/Trecto34/BurpCustomActions/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
+  <a href="https://github.com/IcarusSec/ICARUS/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="License"></a>
   <img src="https://img.shields.io/badge/Security-Testing-brightgreen?style=for-the-badge" alt="Security">
 </p>
 
@@ -18,6 +18,7 @@
 - [Extension Modules](#-extension-modules)
 - [Installation & Compilation](#-installation--compilation)
 - [Usage Guidelines](#-usage-guidelines)
+- [Changelog](CHANGELOG.md)
 - [Disclaimer](#-disclaimer)
 - [License](#-license)
 
@@ -32,7 +33,9 @@
 ## ✨ Core Features
 
 - **Unified Command Interface:** A centralized control panel (`ICARUS` tab) for configuring all modules, tracking active tasks, and managing vulnerability findings in real-time.
-- **Smart Evidence Capture:** An advanced reporting workflow that generates clean, actionable evidence. It features full HTTP payload logging, a built-in interactive image editor (equipped with annotation tools like box, arrow, highlight, and redact), and automated HTML report generation.
+- **AutoAuth:** Replaces clunky Burp Macros with a highlight-and-click workflow — mark a token in a response as the source, mark where it needs to go in a request, and ICARUS silently keeps it fresh and injected in the background from then on.
+- **Smart Evidence Capture:** An advanced reporting workflow that generates clean, actionable evidence. Hitting Ctrl+P or "Create Evidence" now quietly checks the response first and offers to auto-populate the title, description, and severity if it spots something (a verbose error leak, an unencoded reflection). Features full HTTP payload logging, a built-in interactive image editor (box, arrow, highlight, redact, plus copy-to-clipboard), and automated HTML report generation.
+- **Passive Threat Detection:** Background monitoring that flags server errors and verbose error/stack-trace leaks as they cross the proxy, with a lightweight toast notification so you know to check the Results tab.
 - **Automated Rapid Scanning:** Execute comprehensive security checks against selected HTTP requests with a single click directly from the Burp context menu.
 
 ---
@@ -97,6 +100,23 @@ Streamlines cross-team collaboration by exporting complex, active HTTP requests 
 
 - Accurately extracts the HTTP method, headers, and intricate URL structures.
 - Secures complex body payloads with proper JSON escaping.
+</details>
+
+<details>
+<summary><b>7. AutoAuth (AutoAuthModule)</b></summary>
+<br>
+Replaces Burp's Macros with a highlight-and-click workflow for managing authentication tokens, so expired sessions never interrupt a testing flow again.
+
+- **Highlight & Click Setup**: Right-click a token value in a response → "Set as Auth Token Source". Right-click a header or JSON field in a request → "Add Auth Token Destination".
+- **Silent Background Refresh**: Detects an expired cached token, quietly re-fetches it from the source request, and injects it into every matching outgoing request.
+- **Host-Scoped Injection**: A token captured from one site can never leak into another site's requests.
+- **Persistent**: Your source/destination mapping survives extension reloads and Burp restarts.
+</details>
+
+<details>
+<summary><b>8. Passive Error Detector (PassiveErrorModule)</b></summary>
+<br>
+Runs quietly in the background, flagging HTTP 500+ responses and verbose error/stack-trace leaks (SQL errors, framework tracebacks, etc.) as they cross the proxy — no manual scan required.
 </details>
 
 ---

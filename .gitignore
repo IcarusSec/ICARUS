@@ -35,6 +35,7 @@ libs/
 *.bak
 *.swp
 *~.nib
+*:Zone.Identifier
 
 # Anthropic Claude
 .claude/

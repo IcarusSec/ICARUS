@@ -48,6 +48,13 @@ ICARUS integrates multiple specialized security testing engines into a single co
 <summary><b>1. JSON Input Validation (ParamValidator)</b></summary>
 <br>
 Focuses on rigorous testing of JSON request parameter validation to determine if the backend API processes malformed or malicious inputs that violate the expected schema contract.
+<br>
+<br>
+
+<p align="center">
+  <img src="./.images/paramval.gif" alt="Json Param Validator Demo" width="900">
+</p>
+<br>
 
 - **Structural Validation**: Identifies missing enforcement of null values, removed fields, and empty objects/arrays.
 - **Type Confusion**: Tests for unsafe type casting (e.g., passing strings as booleans/integers).

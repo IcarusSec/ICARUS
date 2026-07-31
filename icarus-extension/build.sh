@@ -7,9 +7,9 @@ echo "[*] Building ICARUS Burp Extension v${VERSION}..."
 
 # 1. Download Montoya API dependency if not present
 mkdir -p libs
-if [ ! -f "libs/montoya-api-2025.6.jar" ]; then
+if [ ! -f "libs/montoya-api-2026.7.jar" ]; then
     echo "[*] Downloading Montoya API..."
-    wget -q -O libs/montoya-api-2025.6.jar "https://repo1.maven.org/maven2/net/portswigger/burp/extensions/montoya-api/2025.6/montoya-api-2025.6.jar"
+    wget -q -O libs/montoya-api-2026.7.jar "https://repo1.maven.org/maven2/net/portswigger/burp/extensions/montoya-api/2026.7/montoya-api-2026.7.jar"
 fi
 
 # 2. Prepare build directory
@@ -26,7 +26,7 @@ echo "[+] Found $SOURCE_COUNT Java files"
 # 4. Compile
 echo "[*] Compiling sources..."
 javac -d build_manual/classes \
-      -cp "libs/montoya-api-2025.6.jar" \
+      -cp "libs/montoya-api-2026.7.jar" \
       --release 21 \
       @build_manual/sources.txt
 

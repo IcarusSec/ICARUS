@@ -14,6 +14,7 @@ import icarus.core.ModuleConfig;
 
 import javax.swing.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -32,15 +33,24 @@ public final class AutoAuthModule {
 
     private enum TargetKind { HEADER, BODY }
 
-    private record InjectionTarget(String host, TargetKind kind, String headerName, String headerPrefix, List<Object> bodyPath) {}
+    private record InjectionTarget(String host, TargetKind kind, String headerName, String headerPrefix, List<Object> bodyPath, int sourceIndex) {}
+
+    /** One "Set as Auth Token Source" capture. Multiple can coexist; destinations pick which one feeds them. */
+    private static final class Source {
+        final HttpRequest sourceRequest;
+        final List<Object> extractionPath;
+        volatile String cachedToken;
+        volatile long expiresAt;
+
+        Source(HttpRequest sourceRequest, List<Object> extractionPath) {
+            this.sourceRequest = sourceRequest;
+            this.extractionPath = extractionPath;
+        }
+    }
 
     private static final String K_ENABLED = "autoauth.enabled";
     private static final String K_REFRESH_MINUTES = "autoauth.refresh_minutes";
-    private static final String K_SOURCE_HOST = "autoauth.source_host";
-    private static final String K_SOURCE_PORT = "autoauth.source_port";
-    private static final String K_SOURCE_SECURE = "autoauth.source_secure";
-    private static final String K_SOURCE_RAW = "autoauth.source_raw";
-    private static final String K_EXTRACTION_PATH = "autoauth.extraction_path";
+    private static final String K_SOURCE_COUNT = "autoauth.source_count";
     private static final String K_TARGETS = "autoauth.targets";
 
     private final MontoyaApi api;
@@ -53,12 +63,8 @@ public final class AutoAuthModule {
     // instead of recursively refreshing forever or rewriting the login request itself.
     private final ReentrantLock refreshLock = new ReentrantLock();
 
-    private HttpRequest sourceRequest;
-    private List<Object> extractionPath = List.of();
+    private final List<Source> sources = new ArrayList<>();
     private final List<InjectionTarget> targets = new ArrayList<>();
-
-    private volatile String cachedToken;
-    private volatile long expiresAt;
 
     public AutoAuthModule(MontoyaApi api, ModuleConfig config) {
         this.api = api;
@@ -90,22 +96,22 @@ public final class AutoAuthModule {
             warn("Could not locate the highlighted text as a JSON value in the response body.");
             return;
         }
+        List<Object> chosen = choosePath(matches);
+        if (chosen == null) return; // user cancelled the picker
 
+        int index;
         refreshLock.lock();
         try {
-            this.sourceRequest = rr.request();
-            this.extractionPath = matches.get(0);
-            this.cachedToken = null;
-            this.expiresAt = 0;
+            sources.add(new Source(rr.request(), chosen));
+            index = sources.size();
         } finally {
             refreshLock.unlock();
         }
         persistSession();
 
-        String pathLabel = JsonPaths.pathToString(matches.get(0));
-        String note = matches.size() > 1 ? pathLabel + " (first of " + matches.size() + " matches)" : pathLabel;
-        api.logging().logToOutput("AutoAuth: source set — " + note);
-        info("AutoAuth source set: " + note);
+        String note = "Source " + index + " (" + JsonPaths.pathToString(chosen) + ")";
+        api.logging().logToOutput("AutoAuth: " + note + " set.");
+        info("AutoAuth " + note + " set.");
     }
 
     /** "ICARUS -> Add Auth Token Destination" — highlighted text in a request (header or body). */
@@ -119,11 +125,14 @@ public final class AutoAuthModule {
         String highlighted = extractSelection(raw, range);
         if (highlighted == null || highlighted.isEmpty()) return;
 
+        int sourceIndex = chooseSource();
+        if (sourceIndex < 0) return; // no source configured, or user cancelled the picker
+
         String host = request.httpService() != null ? request.httpService().host() : "";
         InjectionTarget target;
 
         if (range.startIndexInclusive() < request.bodyOffset()) {
-            target = buildHeaderTarget(raw, range, host);
+            target = buildHeaderTarget(raw, range, host, sourceIndex);
             if (target == null) {
                 warn("Could not determine which header the highlighted text belongs to.");
                 return;
@@ -141,7 +150,9 @@ public final class AutoAuthModule {
                 warn("Could not locate the highlighted text as a JSON value in the request body.");
                 return;
             }
-            target = new InjectionTarget(host, TargetKind.BODY, null, null, matches.get(0));
+            List<Object> chosen = choosePath(matches);
+            if (chosen == null) return; // user cancelled the picker
+            target = new InjectionTarget(host, TargetKind.BODY, null, null, chosen, sourceIndex);
         }
 
         refreshLock.lock();
@@ -160,11 +171,8 @@ public final class AutoAuthModule {
     public void clearSession() {
         refreshLock.lock();
         try {
-            sourceRequest = null;
-            extractionPath = List.of();
+            sources.clear();
             targets.clear();
-            cachedToken = null;
-            expiresAt = 0;
         } finally {
             refreshLock.unlock();
         }
@@ -172,63 +180,75 @@ public final class AutoAuthModule {
     }
 
     public String statusSummary() {
-        if (sourceRequest == null) return "No source configured.";
-        String host = sourceRequest.httpService() != null ? sourceRequest.httpService().host() : "?";
-        return "Source: " + host + sourceRequest.path() + " — " + targets.size() + " destination(s) mapped.";
+        if (sources.isEmpty()) return "No source configured.";
+        return sources.size() + " source(s) configured — " + targets.size() + " destination(s) mapped.";
     }
 
     // ── Request interception ─────────────────────────────────────────────
 
     /** Called from Orchestrator.handleHttpRequestToBeSent for every outgoing request. */
     public HttpRequest processOutgoingRequest(HttpRequestToBeSent request) {
-        if (!config.getBool(K_ENABLED, true)) return request;
-        if (sourceRequest == null || targets.isEmpty()) return request;
-
-        String host = request.httpService() != null ? request.httpService().host() : "";
-        List<InjectionTarget> applicable = new ArrayList<>();
-        for (InjectionTarget t : targets) {
-            if (t.host().equals(host) && targetPresent(request, t)) applicable.add(t);
-        }
-        if (applicable.isEmpty()) return request;
-
         if (refreshLock.isHeldByCurrentThread()) {
             // Reentrant: this IS the token-fetch sendRequest() below, routed back through
             // us on the same thread. Never rewrite the login request itself.
             return request;
         }
+        return injectIfApplicable(request);
+    }
+
+    /**
+     * Applies the same token injection {@link #processOutgoingRequest} does, for callers that
+     * have a plain {@link HttpRequest} rather than a live {@link HttpRequestToBeSent} — e.g.
+     * Orchestrator building manual/smart evidence from a request that already went out on the
+     * wire with the token injected, so the captured evidence shows what was actually sent
+     * instead of the stale pre-injection body.
+     */
+    public HttpRequest injectIfApplicable(HttpRequest request) {
+        if (!config.getBool(K_ENABLED, true)) return request;
+        if (sources.isEmpty() || targets.isEmpty()) return request;
+
+        String host = request.httpService() != null ? request.httpService().host() : "";
+        List<InjectionTarget> applicable = new ArrayList<>();
+        for (InjectionTarget t : targets) {
+            boolean sourceOk = t.sourceIndex() >= 0 && t.sourceIndex() < sources.size() && sources.get(t.sourceIndex()) != null;
+            if (sourceOk && t.host().equals(host) && targetPresent(request, t)) {
+                applicable.add(t);
+            }
+        }
+        if (applicable.isEmpty()) return request;
 
         refreshLock.lock();
         try {
-            ensureFreshToken();
+            for (InjectionTarget t : applicable) {
+                ensureFreshToken(sources.get(t.sourceIndex()));
+            }
         } finally {
             refreshLock.unlock();
         }
 
-        String token = cachedToken;
-        if (token == null) return request; // refresh failed — fail open, don't break the request
-
         HttpRequest updated = request;
         for (InjectionTarget t : applicable) {
+            String token = sources.get(t.sourceIndex()).cachedToken;
+            if (token == null) continue; // that source's refresh failed — fail open for this target only
             updated = inject(updated, t, token);
         }
         return updated;
     }
 
-    private void ensureFreshToken() {
-        if (cachedToken != null && System.currentTimeMillis() < expiresAt) return; // refreshed while we waited for the lock
-        if (sourceRequest == null) return;
+    private void ensureFreshToken(Source s) {
+        if (s.cachedToken != null && System.currentTimeMillis() < s.expiresAt) return; // refreshed while we waited for the lock
 
         HttpRequestResponse result;
         try {
-            result = api.http().sendRequest(sourceRequest);
+            result = api.http().sendRequest(s.sourceRequest);
         } catch (Exception e) {
             api.logging().logToError("AutoAuth: token refresh request failed: " + e);
-            cachedToken = null;
+            s.cachedToken = null;
             return;
         }
         if (result == null || result.response() == null) {
             api.logging().logToError("AutoAuth: token refresh got no response.");
-            cachedToken = null;
+            s.cachedToken = null;
             return;
         }
 
@@ -237,20 +257,20 @@ public final class AutoAuthModule {
             root = JsonParser.parse(result.response().bodyToString());
         } catch (Exception e) {
             api.logging().logToError("AutoAuth: token refresh response wasn't valid JSON.");
-            cachedToken = null;
+            s.cachedToken = null;
             return;
         }
 
-        Object value = JsonPaths.getAt(root, extractionPath);
+        Object value = JsonPaths.getAt(root, s.extractionPath);
         if (!(value instanceof String tokenValue) || tokenValue.isBlank()) {
-            api.logging().logToError("AutoAuth: no token found at " + JsonPaths.pathToString(extractionPath) + " in the refresh response.");
-            cachedToken = null;
+            api.logging().logToError("AutoAuth: no token found at " + JsonPaths.pathToString(s.extractionPath) + " in the refresh response.");
+            s.cachedToken = null;
             return;
         }
 
-        cachedToken = tokenValue;
+        s.cachedToken = tokenValue;
         int refreshMinutes = Math.max(1, config.getInt(K_REFRESH_MINUTES, 15));
-        expiresAt = System.currentTimeMillis() + refreshMinutes * 60_000L;
+        s.expiresAt = System.currentTimeMillis() + refreshMinutes * 60_000L;
         api.logging().logToOutput("AutoAuth: token refreshed, valid for " + refreshMinutes + " minutes.");
     }
 
@@ -284,6 +304,59 @@ public final class AutoAuthModule {
 
     // ── Selection parsing helpers ─────────────────────────────────────────
 
+    /**
+     * When the highlighted text matches more than one JSON leaf, asks the user which one was
+     * meant instead of silently defaulting to the first. Returns {@code null} if the user
+     * cancels the dialog.
+     */
+    private List<Object> choosePath(List<List<Object>> matches) {
+        if (matches.size() == 1) return matches.get(0);
+
+        String[] options = matches.stream().map(JsonPaths::pathToString).toArray(String[]::new);
+        String choice = (String) JOptionPane.showInputDialog(
+                api.userInterface().swingUtils().suiteFrame(),
+                "Multiple occurrences found. Which path should be used?",
+                "AutoAuth", JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+        if (choice == null) return null;
+
+        int idx = Arrays.asList(options).indexOf(choice);
+        return matches.get(idx < 0 ? 0 : idx);
+    }
+
+    /**
+     * Picks which configured {@link Source} a new destination should pull its token from.
+     * Auto-selects when there's exactly one; returns -1 if none exist yet or the user cancels.
+     */
+    private int chooseSource() {
+        List<Integer> validIndices = new ArrayList<>();
+        for (int i = 0; i < sources.size(); i++) {
+            if (sources.get(i) != null) validIndices.add(i);
+        }
+
+        if (validIndices.isEmpty()) {
+            warn("No Auth Token Source configured yet. Use \"Set as Auth Token Source\" first.");
+            return -1;
+        }
+        if (validIndices.size() == 1) return validIndices.get(0);
+
+        String[] options = new String[validIndices.size()];
+        for (int i = 0; i < options.length; i++) options[i] = describeSource(validIndices.get(i));
+        String choice = (String) JOptionPane.showInputDialog(
+                api.userInterface().swingUtils().suiteFrame(),
+                "Multiple sources configured. Which one should this destination use?",
+                "AutoAuth", JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+        if (choice == null) return -1;
+
+        int idx = Arrays.asList(options).indexOf(choice);
+        return validIndices.get(idx < 0 ? 0 : idx);
+    }
+
+    private String describeSource(int i) {
+        Source s = sources.get(i);
+        String host = s.sourceRequest.httpService() != null ? s.sourceRequest.httpService().host() : "?";
+        return "Source " + (i + 1) + ": " + host + s.sourceRequest.path() + " → " + JsonPaths.pathToString(s.extractionPath);
+    }
+
     private static String extractSelection(String raw, Range range) {
         if (range.startIndexInclusive() < 0 || range.endIndexExclusive() > raw.length()
                 || range.startIndexInclusive() >= range.endIndexExclusive()) {
@@ -293,7 +366,7 @@ public final class AutoAuthModule {
     }
 
     /** Finds the header line containing the selection start and captures any preceding value prefix (e.g. "Bearer "). */
-    private InjectionTarget buildHeaderTarget(String raw, Range range, String host) {
+    private InjectionTarget buildHeaderTarget(String raw, Range range, String host, int sourceIndex) {
         int lineStart = raw.lastIndexOf('\n', range.startIndexInclusive() - 1) + 1;
         int lineEnd = raw.indexOf('\n', range.startIndexInclusive());
         if (lineEnd == -1) lineEnd = raw.length();
@@ -308,33 +381,50 @@ public final class AutoAuthModule {
 
         int selStart = range.startIndexInclusive();
         String prefix = selStart > valueStart ? raw.substring(valueStart, Math.min(selStart, lineEnd)) : "";
-        return new InjectionTarget(host, TargetKind.HEADER, headerName, prefix, null);
+        return new InjectionTarget(host, TargetKind.HEADER, headerName, prefix, null, sourceIndex);
     }
 
     private String describeTarget(InjectionTarget t) {
+        String base;
         if (t.kind() == TargetKind.HEADER) {
-            return t.host() + " header `" + t.headerName() + "`"
+            base = t.host() + " header `" + t.headerName() + "`"
                     + (t.headerPrefix() != null && !t.headerPrefix().isEmpty() ? " (prefix \"" + t.headerPrefix() + "\")" : "");
+        } else {
+            base = t.host() + " body " + JsonPaths.pathToString(t.bodyPath());
         }
-        return t.host() + " body " + JsonPaths.pathToString(t.bodyPath());
+        return base + " ← Source " + (t.sourceIndex() + 1);
     }
 
     // ── Persistence (survives Burp/extension restarts, same pattern as RateLimitModule) ──
 
-    private void loadSession() {
-        String raw = config.getString(K_SOURCE_RAW, "");
-        String host = config.getString(K_SOURCE_HOST, "");
-        if (raw.isBlank() || host.isBlank()) return;
+    /**
+     * Each source's raw HTTP request text contains real embedded newlines, so it can't be
+     * packed into the same newline-joined list format {@link #K_TARGETS} uses (that would
+     * fragment mid-request). Every source instead gets its own numbered key group.
+     */
+    private static String sourceKey(int i, String suffix) {
+        return "autoauth.source." + i + "." + suffix;
+    }
 
-        int port = config.getInt(K_SOURCE_PORT, 443);
-        boolean secure = config.getBool(K_SOURCE_SECURE, true);
-        try {
-            this.sourceRequest = HttpRequest.httpRequest(HttpService.httpService(host, port, secure), raw);
-        } catch (Exception e) {
-            api.logging().logToError("AutoAuth: failed to restore persisted source request: " + e);
-            return;
+    private void loadSession() {
+        sources.clear();
+        int count = config.getInt(K_SOURCE_COUNT, 0);
+        for (int i = 0; i < count; i++) {
+            String raw = config.getString(sourceKey(i, "raw"), "");
+            String host = config.getString(sourceKey(i, "host"), "");
+            if (raw.isBlank() || host.isBlank()) continue;
+
+            int port = config.getInt(sourceKey(i, "port"), 443);
+            boolean secure = config.getBool(sourceKey(i, "secure"), true);
+            try {
+                HttpRequest req = HttpRequest.httpRequest(HttpService.httpService(host, port, secure), raw);
+                List<Object> path = JsonPaths.parsePath(config.getString(sourceKey(i, "extraction_path"), ""));
+                sources.add(new Source(req, path));
+            } catch (Exception e) {
+                api.logging().logToError("AutoAuth: failed to restore persisted source " + (i + 1) + ": " + e);
+                sources.add(null); // keep the index aligned with persisted targets' sourceIndex
+            }
         }
-        this.extractionPath = JsonPaths.parsePath(config.getString(K_EXTRACTION_PATH, ""));
 
         targets.clear();
         for (String line : config.getStringList(K_TARGETS)) {
@@ -344,17 +434,16 @@ public final class AutoAuthModule {
     }
 
     private void persistSession() {
-        if (sourceRequest == null) {
-            config.set(K_SOURCE_RAW, "");
-            config.set(K_SOURCE_HOST, "");
-        } else {
-            config.set(K_SOURCE_RAW, sourceRequest.toString());
-            HttpService service = sourceRequest.httpService();
-            config.set(K_SOURCE_HOST, service != null ? service.host() : "");
-            config.set(K_SOURCE_PORT, service != null ? service.port() : 443);
-            config.set(K_SOURCE_SECURE, service == null || service.secure());
+        config.set(K_SOURCE_COUNT, sources.size());
+        for (int i = 0; i < sources.size(); i++) {
+            Source s = sources.get(i);
+            config.set(sourceKey(i, "raw"), s.sourceRequest.toString());
+            HttpService service = s.sourceRequest.httpService();
+            config.set(sourceKey(i, "host"), service != null ? service.host() : "");
+            config.set(sourceKey(i, "port"), service != null ? service.port() : 443);
+            config.set(sourceKey(i, "secure"), service == null || service.secure());
+            config.set(sourceKey(i, "extraction_path"), JsonPaths.pathToString(s.extractionPath));
         }
-        config.set(K_EXTRACTION_PATH, JsonPaths.pathToString(extractionPath));
 
         StringBuilder sb = new StringBuilder();
         for (InjectionTarget t : targets) sb.append(serializeTarget(t)).append("\n");
@@ -365,9 +454,9 @@ public final class AutoAuthModule {
 
     private String serializeTarget(InjectionTarget t) {
         if (t.kind() == TargetKind.HEADER) {
-            return "HEADER|" + t.host() + "|" + t.headerName() + "|" + (t.headerPrefix() == null ? "" : t.headerPrefix());
+            return "HEADER|" + t.host() + "|" + t.headerName() + "|" + (t.headerPrefix() == null ? "" : t.headerPrefix()) + "|" + t.sourceIndex();
         }
-        return "BODY|" + t.host() + "|" + JsonPaths.pathToString(t.bodyPath());
+        return "BODY|" + t.host() + "|" + JsonPaths.pathToString(t.bodyPath()) + "|" + t.sourceIndex();
     }
 
     private InjectionTarget parseTarget(String line) {
@@ -375,12 +464,14 @@ public final class AutoAuthModule {
         if (parts.length < 3) return null;
         try {
             if ("HEADER".equals(parts[0])) {
-                return new InjectionTarget(parts[1], TargetKind.HEADER, parts[2], parts.length > 3 ? parts[3] : "", null);
+                int sourceIndex = Integer.parseInt(parts[4]);
+                return new InjectionTarget(parts[1], TargetKind.HEADER, parts[2], parts[3], null, sourceIndex);
             } else if ("BODY".equals(parts[0])) {
-                return new InjectionTarget(parts[1], TargetKind.BODY, null, null, JsonPaths.parsePath(parts[2]));
+                int sourceIndex = Integer.parseInt(parts[3]);
+                return new InjectionTarget(parts[1], TargetKind.BODY, null, null, JsonPaths.parsePath(parts[2]), sourceIndex);
             }
         } catch (Exception ignored) {
-            // malformed persisted line — skip it rather than fail the whole load
+            // malformed/pre-multi-source persisted line — skip it rather than fail the whole load
         }
         return null;
     }

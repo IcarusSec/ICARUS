@@ -1,6 +1,7 @@
 package icarus.ui;
 
 import burp.api.montoya.MontoyaApi;
+import icarus.autoauth.AutoAuthModule;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 import icarus.evidence.EvidenceColorScheme;
@@ -15,15 +16,17 @@ public class SettingsPanel {
     private final MontoyaApi api;
     private final ModuleConfig config;
     private final ThemeHelper themeHelper;
+    private final AutoAuthModule autoAuth;
     private final JPanel mainPanel;
 
     private final List<Runnable> saveHooks = new ArrayList<>();
     private final List<JComponent> expandableLists = new ArrayList<>();
 
-    public SettingsPanel(MontoyaApi api, ModuleConfig config, ThemeHelper themeHelper) {
+    public SettingsPanel(MontoyaApi api, ModuleConfig config, ThemeHelper themeHelper, AutoAuthModule autoAuth) {
         this.api = api;
         this.config = config;
         this.themeHelper = themeHelper;
+        this.autoAuth = autoAuth;
         this.mainPanel = new JPanel(new BorderLayout(0, 10));
         this.mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         themeHelper.applyTheme(this.mainPanel);
@@ -80,6 +83,7 @@ public class SettingsPanel {
         addCheckbox(pnlGlobal, "sh.passive", "Sensitive Headers (Passive / Background)");
         addCheckbox(pnlGlobal, "export.enabled", "Postman Export");
         addCheckbox(pnlGlobal, "rl.enabled", "Rate Limit Tester");
+        addCheckbox(pnlGlobal, "autoauth.enabled", "AutoAuth (background token refresh/injection)");
 
         // WAF & Safe Lists
         JPanel pnlWaf = createSection("WAF Evasion & Safe Lists");
@@ -149,6 +153,16 @@ public class SettingsPanel {
         addCheckbox(pnlRl, "rl.bypass_path", "Try path normalization bypass (/api/./v1, //api, etc.)");
         addCheckbox(pnlRl, "rl.bypass_query", "Try cache-buster query param bypass (?_icarus=N)");
         settingsTabs.addTab("Rate Limit", wrapInScroll(pnlRl));
+
+        // AutoAuth
+        JPanel pnlAuto = createSection("AutoAuth");
+        addField(pnlAuto, "autoauth.refresh_minutes", "Refresh token every X minutes:");
+        JLabel autoAuthStatus = addStatusLabel(pnlAuto, autoAuth.statusSummary());
+        addButton(pnlAuto, "Clear Active Config", () -> {
+            autoAuth.clearSession();
+            autoAuthStatus.setText(autoAuth.statusSummary());
+        });
+        settingsTabs.addTab("AutoAuth", wrapInScroll(pnlAuto));
 
         // Evidence
         JPanel pnlEvidence = createSection("Evidence Capture");
@@ -227,6 +241,27 @@ public class SettingsPanel {
         inner.add(p);
 
         saveHooks.add(() -> config.set(key, (String) combo.getSelectedItem()));
+    }
+
+    private JLabel addStatusLabel(JPanel parent, String initialText) {
+        JLabel lbl = new JLabel(initialText);
+        themeHelper.applyTheme(lbl);
+        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        lbl.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
+
+        JPanel inner = (JPanel) parent.getComponent(0);
+        inner.add(lbl);
+        return lbl;
+    }
+
+    private void addButton(JPanel parent, String label, Runnable action) {
+        JButton btn = new JButton(label);
+        themeHelper.styleButton(btn);
+        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btn.addActionListener(e -> action.run());
+
+        JPanel inner = (JPanel) parent.getComponent(0);
+        inner.add(btn);
     }
 
     private void addTextArea(JPanel parent, String key, String label, boolean expandable) {

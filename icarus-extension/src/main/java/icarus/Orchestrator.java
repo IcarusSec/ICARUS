@@ -5,7 +5,9 @@ import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
 import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 
+import icarus.autoauth.AutoAuthModule;
 import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
@@ -30,6 +32,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ModuleConfig config;
     private final EvidenceCapture evidenceCapture;
     private final ReportGenerator reportGenerator;
+    private final AutoAuthModule autoAuth;
     private final ScanRunner scanRunner;
     private final FindingRegistry findings;
 
@@ -37,14 +40,20 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                         List<IcarusModule> modules,
                         ModuleConfig config,
                         EvidenceCapture evidenceCapture,
-                        ReportGenerator reportGenerator) {
+                        ReportGenerator reportGenerator,
+                        AutoAuthModule autoAuth) {
         this.api = api;
         this.modules = modules;
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.reportGenerator = reportGenerator;
+        this.autoAuth = autoAuth;
         this.findings = new FindingRegistry(api, config, SwingUtilities::invokeLater);
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
+    }
+
+    public AutoAuthModule autoAuth() {
+        return autoAuth;
     }
 
     public void addListener(Consumer<List<FindingRecord>> listener) {
@@ -125,6 +134,21 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(createEvidence);
 
+        // AutoAuth: only shown when the user actually highlighted text in a message editor —
+        // these need selection offsets that scan-style modules never receive.
+        event.messageEditorRequestResponse().ifPresent(selection -> {
+            if (selection.selectionOffsets().isEmpty()) return;
+            if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.RESPONSE) {
+                var setSource = new JMenuItem("ICARUS → Set as Auth Token Source");
+                setSource.addActionListener(e -> autoAuth.setSourceFromSelection(selection));
+                items.add(setSource);
+            } else {
+                var addDestination = new JMenuItem("ICARUS → Add Auth Token Destination");
+                addDestination.addActionListener(e -> autoAuth.addDestinationFromSelection(selection));
+                items.add(addDestination);
+            }
+        });
+
         for (var module : modules) {
             var item = new JMenuItem("ICARUS → " + module.name());
             item.addActionListener(e -> {
@@ -140,7 +164,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     @Override
     public RequestToBeSentAction handleHttpRequestToBeSent(HttpRequestToBeSent request) {
-        return RequestToBeSentAction.continueWith(request);
+        return RequestToBeSentAction.continueWith(autoAuth.processOutgoingRequest(request));
     }
 
     @Override

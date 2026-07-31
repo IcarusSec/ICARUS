@@ -84,7 +84,7 @@ public class IcarusTab {
         themeHelper.applyTheme(tabs);
 
         // ── Settings Tab ──
-        tabs.addTab("Settings", new SettingsPanel(api, config, themeHelper).getComponent());
+        tabs.addTab("Settings", new SettingsPanel(api, config, themeHelper, orchestrator.autoAuth()).getComponent());
 
         // ── Results Tab ──
         JPanel resultsPanel = new JPanel(new BorderLayout());

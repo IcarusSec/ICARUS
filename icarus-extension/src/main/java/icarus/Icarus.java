@@ -2,6 +2,7 @@ package icarus;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.ui.hotkey.HotKey;
 import burp.api.montoya.ui.hotkey.HotKeyContext;
 
 import icarus.core.*;
@@ -63,11 +64,10 @@ public class Icarus implements BurpExtension {
         // context menu is a transient popup, so an accelerator there is cosmetic only.
         // Combo format is "Ctrl+P" (capitalized, plus-separated — "same format as within
         // Burp's Settings"), confirmed against the bundled Montoya API sources/tutorial in
-        // /usr/share/burpsuite/burpsuite.jar. This overload is deprecated in favor of
-        // registerHotKeyHandler(HotKeyContext, HotKey, HotKeyHandler) — but the HotKey class
-        // wasn't added until montoya-api 2025.11, and build.sh pins 2025.6, so this is the
-        // only overload actually available until that dependency is bumped.
-        api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, "Ctrl+P",
+        // /usr/share/burpsuite/burpsuite.jar. Registering via a HotKey object (rather than
+        // the deprecated raw-String overload) also surfaces this in Burp's Command Palette.
+        HotKey createEvidenceHotKey = HotKey.hotKey("ICARUS: Create Evidence", "Ctrl+P");
+        api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, createEvidenceHotKey,
                 event -> event.messageEditorRequestResponse()
                         .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
 

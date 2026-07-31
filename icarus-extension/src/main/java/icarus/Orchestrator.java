@@ -11,6 +11,8 @@ import icarus.autoauth.AutoAuthModule;
 import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
+import icarus.modules.PassiveErrorModule;
+import icarus.ui.ToastNotification;
 
 import javax.swing.*;
 import java.awt.*;
@@ -80,16 +82,69 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         evidenceCapture.captureInteractive(finding);
     }
 
-    /** Shared by the "Create Evidence" context-menu item and the Ctrl+P hotkey handler. */
+    /**
+     * Shared by the "Create Evidence" context-menu item and the Ctrl+P hotkey handler —
+     * both entry points get Smart Evidence detection for free by routing through here.
+     */
     public void createManualEvidence(HttpRequestResponse rr) {
+        Finding smart = detectSmartEvidence(rr);
+        evidenceCapture.captureInteractive(smart != null ? smart : blankManualFinding(rr));
+    }
+
+    /**
+     * Quietly checks the response for something worth flagging (verbose error / server
+     * error, or an unencoded reflection of a request parameter) and, if the user confirms,
+     * pre-fills the evidence with that finding instead of the blank manual template.
+     */
+    private Finding detectSmartEvidence(HttpRequestResponse rr) {
+        if (rr.response() == null) return null;
+
+        // Reuse PassiveErrorModule's detection instead of a second copy of the same
+        // VerboseErrorDetector/status-code checks living here.
+        List<Finding> errorFindings = new PassiveErrorModule().run(rr, config, msg -> {});
+        if (!errorFindings.isEmpty()) {
+            Finding candidate = errorFindings.get(0);
+            return confirmSmartEvidence(candidate.type(), candidate.description()) ? candidate : null;
+        }
+
+        // XSS reflection — manual-evidence-only heuristic. Deliberately not part of the
+        // always-on background passive scan: any endpoint that legitimately echoes a
+        // search term back would make it noisy there, but it's a useful targeted nudge
+        // when the user is already looking at this specific request/response.
+        String bodyStr = rr.response().bodyToString();
+        for (var param : rr.request().parameters()) {
+            String val = param.value();
+            if (val != null && !val.isBlank() && (val.contains("<") || val.contains(">")) && bodyStr.contains(val)) {
+                String desc = "Unencoded reflection of HTML/script payload detected:\n`" + val + "`";
+                if (!confirmSmartEvidence("XSS_REFLECTION", desc)) return null;
+                return Finding.builder("Manual", "XSS_REFLECTION")
+                        .description(desc)
+                        .severity(Severity.HIGH)
+                        .category(Category.INJECTION)
+                        .path(param.name())
+                        .evidence(rr)
+                        .build();
+            }
+        }
+
+        return null;
+    }
+
+    private boolean confirmSmartEvidence(String type, String description) {
+        int choice = JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(),
+                "ICARUS detected a potential [" + type + "] in this response.\nAuto-populate the evidence title and description?",
+                "Smart Evidence Detection", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+        return choice == JOptionPane.YES_OPTION;
+    }
+
+    private Finding blankManualFinding(HttpRequestResponse rr) {
         Severity manualSeverity = parseSeverity(config.getString("evidence.manual_severity", "INFO"));
-        Finding manualFinding = Finding.builder("Manual", "MANUAL_EVIDENCE")
+        return Finding.builder("Manual", "MANUAL_EVIDENCE")
                 .description("Manual evidence capture triggered by user.")
                 .severity(manualSeverity)
                 .category(Category.MANUAL)
                 .evidence(rr)
                 .build();
-        evidenceCapture.captureInteractive(manualFinding);
     }
 
     public void runScan(HttpRequestResponse target, boolean isManual) {
@@ -179,7 +234,16 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     private void routeFindingsPassive(List<Finding> passiveFindings) {
-        findings.processDeduplication(passiveFindings, true);
+        List<Finding> newFindings = findings.processDeduplication(passiveFindings, true);
+        if (newFindings.isEmpty()) return;
+
+        long errorCount = newFindings.stream()
+                .filter(f -> f.category() == Category.SERVER_ERROR || f.category() == Category.INFORMATION_DISCLOSURE)
+                .count();
+        if (errorCount > 0) {
+            ToastNotification.show(api.userInterface().swingUtils().suiteFrame(),
+                    "ICARUS: Logged " + errorCount + " passive error(s).");
+        }
     }
 
     private void routeFindings(List<Finding> newFindings, boolean isManual) {

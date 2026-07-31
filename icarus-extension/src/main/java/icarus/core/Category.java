@@ -15,5 +15,7 @@ public enum Category {
     HTTP_METHOD,
     EXPORT,
     RATE_LIMIT,
+    SERVER_ERROR,
+    INFORMATION_DISCLOSURE,
     MANUAL
 }

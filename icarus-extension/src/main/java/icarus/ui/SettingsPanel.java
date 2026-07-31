@@ -84,6 +84,8 @@ public class SettingsPanel {
         addCheckbox(pnlGlobal, "export.enabled", "Postman Export");
         addCheckbox(pnlGlobal, "rl.enabled", "Rate Limit Tester");
         addCheckbox(pnlGlobal, "autoauth.enabled", "AutoAuth (background token refresh/injection)");
+        addCheckbox(pnlGlobal, "pem.enabled", "Passive Error Detector (Active)");
+        addCheckbox(pnlGlobal, "pem.passive", "Passive Error Detector (Passive / Background)");
 
         // WAF & Safe Lists
         JPanel pnlWaf = createSection("WAF Evasion & Safe Lists");

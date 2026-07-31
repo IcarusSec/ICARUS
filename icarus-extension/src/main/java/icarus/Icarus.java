@@ -44,7 +44,8 @@ public class Icarus implements BurpExtension {
             new JwtCheckerModule(api),
             new SensitiveHeaderModule(api),
             new PostmanExportModule(api),
-            new RateLimitModule(api)
+            new RateLimitModule(api),
+            new PassiveErrorModule()
         );
 
         var evidenceCapture = new EvidenceCapture(api, config);
@@ -182,6 +183,10 @@ public class Icarus implements BurpExtension {
         config.set("rl.bypass_headers", true);
         config.set("rl.bypass_path", true);
         config.set("rl.bypass_query", true);
+
+        // ── PassiveErrorModule defaults ──
+        config.set("pem.enabled", true);
+        config.set("pem.passive", true);
 
         // ── AutoAuth defaults ──
         config.set("autoauth.enabled", true);

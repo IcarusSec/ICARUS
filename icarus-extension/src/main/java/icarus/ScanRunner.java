@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
+import icarus.modules.PassiveErrorModule;
 import icarus.modules.SensitiveHeaderModule;
 
 import javax.swing.*;
@@ -81,11 +82,14 @@ public final class ScanRunner {
     public void runPassiveScan(HttpResponseReceived response, Consumer<List<Finding>> onPassiveFindings) {
         runAsync(() -> {
             for (var module : modules) {
+                List<Finding> passiveFindings = null;
                 if (module instanceof SensitiveHeaderModule shm) {
-                    var passiveFindings = shm.analyzeResponse(response, config);
-                    if (!passiveFindings.isEmpty()) {
-                        onPassiveFindings.accept(passiveFindings);
-                    }
+                    passiveFindings = shm.analyzeResponse(response, config);
+                } else if (module instanceof PassiveErrorModule pem) {
+                    passiveFindings = pem.analyzeResponse(response, config);
+                }
+                if (passiveFindings != null && !passiveFindings.isEmpty()) {
+                    onPassiveFindings.accept(passiveFindings);
                 }
             }
         });
@@ -239,6 +243,7 @@ public final class ScanRunner {
             case "Sensitive Headers" -> config.getBool("sh.enabled", true);
             case "Postman Export"    -> config.getBool("export.enabled", true);
             case "Rate Limit Tester" -> config.getBool("rl.enabled", true);
+            case "Passive Error Detector" -> config.getBool("pem.enabled", true);
             default -> true;
         };
     }

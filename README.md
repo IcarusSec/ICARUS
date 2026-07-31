@@ -119,6 +119,25 @@ Replaces Burp's Macros with a highlight-and-click workflow for managing authenti
 Runs quietly in the background, flagging HTTP 500+ responses and verbose error/stack-trace leaks (SQL errors, framework tracebacks, etc.) as they cross the proxy — no manual scan required.
 </details>
 
+<details>
+<summary><b>9. Create Evidence (CreateEvidenceModule)</b></summary>
+<br>
+Transforms raw HTTP traffic into professional vulnerability evidence with minimal manual effort.
+<br>
+<br>
+
+<p align="center">
+  <img src="./.images/evidence.gif" alt="Smart Evidence Capture Demo" width="900">
+</p>
+<br>
+Features include:
+
+- **Automatic detection** of verbose error disclosures and unencoded reflections.
+- **Automatic pre-population** of title, description, and severity.
+- **Complete** HTTP request/response logging.
+- **Built-in** image editor (boxes, arrows, highlights, redaction).
+</details>
+
 ---
 
 ## 🚀 Installation & Compilation

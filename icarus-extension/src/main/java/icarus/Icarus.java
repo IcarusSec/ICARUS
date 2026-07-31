@@ -23,7 +23,7 @@ import java.util.List;
 public class Icarus implements BurpExtension {
 
     public static final String NAME = "ICARUS";
-    public static final String VERSION = "1.1.8";
+    public static final String VERSION = "1.2";
 
     @Override
     public void initialize(MontoyaApi api) {

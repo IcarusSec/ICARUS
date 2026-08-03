@@ -186,9 +186,26 @@ public final class AutoAuthModule {
 
     // ── Request interception ─────────────────────────────────────────────
 
-    /** Modules that intentionally tamper with the auth token (e.g. JwtCheckerModule's active
-     * tests) set this header to stop AutoAuth from silently overwriting their crafted value. */
-    public static final String SKIP_HEADER = "X-Icarus-Skip-AutoAuth";
+    /**
+     * Thread-local flag that modules set to {@code true} around their own
+     * {@code api.http().sendRequest()} calls when the request carries a deliberately
+     * tampered auth token that must NOT be overwritten.
+     *
+     * <p>This works because Montoya's {@code sendRequest()} invokes
+     * {@link #processOutgoingRequest} on the <em>calling</em> thread (the same contract
+     * the existing {@link #refreshLock}{@code .isHeldByCurrentThread()} guard relies on).
+     *
+     * <p>Usage in a module:
+     * <pre>{@code
+     *   AutoAuthModule.BYPASS_INJECTION.set(true);
+     *   try {
+     *       var result = api.http().sendRequest(mutatedReq);
+     *   } finally {
+     *       AutoAuthModule.BYPASS_INJECTION.set(false);
+     *   }
+     * }</pre>
+     */
+    public static final ThreadLocal<Boolean> BYPASS_INJECTION = ThreadLocal.withInitial(() -> false);
 
     /** Called from Orchestrator.handleHttpRequestToBeSent for every outgoing request. */
     public HttpRequest processOutgoingRequest(HttpRequestToBeSent request) {
@@ -197,8 +214,10 @@ public final class AutoAuthModule {
             // us on the same thread. Never rewrite the login request itself.
             return request;
         }
-        if (request.hasHeader(SKIP_HEADER)) {
-            return request.withRemovedHeader(SKIP_HEADER);
+        if (Boolean.TRUE.equals(BYPASS_INJECTION.get())) {
+            // A scan module (e.g. JWT Checker) is sending a deliberately tampered request
+            // on this thread — do not overwrite it with a fresh token.
+            return request;
         }
         return injectIfApplicable(request);
     }

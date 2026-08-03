@@ -275,10 +275,15 @@ public class JwtCheckerModule implements IcarusModule {
 
                 if (mutatedReq.httpService() == null) return;
 
-                // Marker so AutoAuth doesn't overwrite our deliberately-tampered token
-                // before it reaches the server (see AutoAuthModule.SKIP_HEADER).
-                mutatedReq = mutatedReq.withUpdatedHeader(icarus.autoauth.AutoAuthModule.SKIP_HEADER, "1");
-                var result = api.http().sendRequest(mutatedReq);
+                // Tell AutoAuth to leave this request alone — we're deliberately sending
+                // a tampered token and need it to arrive at the server as-is.
+                icarus.autoauth.AutoAuthModule.BYPASS_INJECTION.set(true);
+                HttpRequestResponse result;
+                try {
+                    result = api.http().sendRequest(mutatedReq);
+                } finally {
+                    icarus.autoauth.AutoAuthModule.BYPASS_INJECTION.set(false);
+                }
                 if (result.response() == null) return;
 
                 int st = result.response().statusCode();

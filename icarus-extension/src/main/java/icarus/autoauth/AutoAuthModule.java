@@ -184,6 +184,17 @@ public final class AutoAuthModule {
         return sources.size() + " source(s) configured — " + targets.size() + " destination(s) mapped.";
     }
 
+    public boolean isEnabled() {
+        return config.getBool(K_ENABLED, true);
+    }
+
+    public void toggleEnabled() {
+        boolean now = !isEnabled();
+        config.set(K_ENABLED, now);
+        api.persistence().extensionData().setString("config", config.serialize());
+        api.logging().logToOutput("AutoAuth: " + (now ? "enabled" : "disabled"));
+    }
+
     // ── Request interception ─────────────────────────────────────────────
 
     /**

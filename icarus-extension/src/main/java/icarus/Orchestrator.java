@@ -200,6 +200,13 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         // AutoAuth: only shown when the user actually highlighted text in a message editor —
         // these need selection offsets that scan-style modules never receive.
         event.messageEditorRequestResponse().ifPresent(selection -> {
+            // Quick toggle so users can disable AutoAuth for manual JWT manipulation
+            // without digging into Settings.
+            boolean enabled = autoAuth.isEnabled();
+            var toggleAuth = new JMenuItem("ICARUS → " + (enabled ? "✓" : "✗") + " AutoAuth " + (enabled ? "ON" : "OFF"));
+            toggleAuth.addActionListener(e -> autoAuth.toggleEnabled());
+            items.add(toggleAuth);
+
             // Montoya's HttpHandler only controls what goes out on the wire — it has no hook
             // back into an already-open editor pane (e.g. a Repeater tab), so the injected
             // token never appears there on its own. setRequest() is the one API that can push

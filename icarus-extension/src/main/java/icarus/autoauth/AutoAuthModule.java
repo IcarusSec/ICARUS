@@ -186,12 +186,19 @@ public final class AutoAuthModule {
 
     // ── Request interception ─────────────────────────────────────────────
 
+    /** Modules that intentionally tamper with the auth token (e.g. JwtCheckerModule's active
+     * tests) set this header to stop AutoAuth from silently overwriting their crafted value. */
+    public static final String SKIP_HEADER = "X-Icarus-Skip-AutoAuth";
+
     /** Called from Orchestrator.handleHttpRequestToBeSent for every outgoing request. */
     public HttpRequest processOutgoingRequest(HttpRequestToBeSent request) {
         if (refreshLock.isHeldByCurrentThread()) {
             // Reentrant: this IS the token-fetch sendRequest() below, routed back through
             // us on the same thread. Never rewrite the login request itself.
             return request;
+        }
+        if (request.hasHeader(SKIP_HEADER)) {
+            return request.withRemovedHeader(SKIP_HEADER);
         }
         return injectIfApplicable(request);
     }

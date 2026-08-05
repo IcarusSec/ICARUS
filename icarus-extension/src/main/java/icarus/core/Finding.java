@@ -4,8 +4,10 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.http.message.HttpRequestResponse;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -23,6 +25,7 @@ public final class Finding {
     private final String path;
     private final HttpRequestResponse evidence;
     private final Map<String, String> metadata;
+    private final List<String> cweIds;
 
     private Finding(Builder builder) {
         this.module = builder.module;
@@ -33,6 +36,7 @@ public final class Finding {
         this.path = builder.path;
         this.evidence = builder.evidence;
         this.metadata = Collections.unmodifiableMap(new LinkedHashMap<>(builder.metadata));
+        this.cweIds = Collections.unmodifiableList(new ArrayList<>(builder.cweIds));
     }
 
     public String module()        { return module; }
@@ -43,6 +47,7 @@ public final class Finding {
     public String path()          { return path; }
     public HttpRequestResponse evidence() { return evidence; }
     public Map<String, String> metadata() { return metadata; }
+    public List<String> cweIds()  { return cweIds; }
 
     /**
      * Hash used for deduplication.
@@ -101,6 +106,7 @@ public final class Finding {
         private String path = "";
         private HttpRequestResponse evidence;
         private final Map<String, String> metadata = new LinkedHashMap<>();
+        private final List<String> cweIds = new ArrayList<>();
 
         private Builder(String module, String type) {
             this.module = module;
@@ -113,6 +119,7 @@ public final class Finding {
         public Builder path(String v)         { this.path = v;       return this; }
         public Builder evidence(HttpRequestResponse v) { this.evidence = v; return this; }
         public Builder meta(String key, String value)  { this.metadata.put(key, value); return this; }
+        public Builder cwe(String cweId)      { if (!this.cweIds.contains(cweId)) this.cweIds.add(cweId); return this; }
 
         public Finding build() {
             return new Finding(this);

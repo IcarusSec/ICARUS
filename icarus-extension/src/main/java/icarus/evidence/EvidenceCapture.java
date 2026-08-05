@@ -10,6 +10,8 @@ import icarus.core.Severity;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.text.BadLocationException;
 import java.awt.*;
 import java.awt.event.*;
@@ -38,6 +40,7 @@ public final class EvidenceCapture {
     private final MontoyaApi api;
     private final ModuleConfig config;
     private final List<CapturedEvidence> captured = new ArrayList<>();
+    private final CweRepository cweRepository = new CweRepository();
 
     public EvidenceCapture(MontoyaApi api, ModuleConfig config) {
         this.api = api;
@@ -115,13 +118,68 @@ public final class EvidenceCapture {
         cbSev.setSelectedItem(finding.severity());
         cbSev.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
 
+        JLabel lblCwe = new JLabel("CWE:");
+        lblCwe.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        api.userInterface().applyThemeToComponent(lblCwe);
+        JTextField txtCwe = new JTextField(12);
+        txtCwe.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        api.userInterface().applyThemeToComponent(txtCwe);
+
         pnlTop.add(lblTitle);
         pnlTop.add(txtName);
         pnlTop.add(lblDesc);
         pnlTop.add(txtDesc);
         pnlTop.add(lblSev);
         pnlTop.add(cbSev);
+        pnlTop.add(lblCwe);
+        pnlTop.add(txtCwe);
         api.userInterface().applyThemeToComponent(pnlTop);
+
+        // CWE typeahead + tag chips — search-as-you-type against the bundled offline dataset,
+        // free text on Enter falls back to a custom weakness label if nothing matches.
+        JPanel pnlChips = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        pnlChips.setBorder(new EmptyBorder(0, 10, 5, 10));
+        api.userInterface().applyThemeToComponent(pnlChips);
+        List<String> selectedCwe = new ArrayList<>();
+
+        JPopupMenu suggestPopup = new JPopupMenu();
+        Runnable refreshSuggestions = () -> {
+            suggestPopup.removeAll();
+            List<CweRepository.Cwe> matches = cweRepository.search(txtCwe.getText());
+            if (matches.isEmpty()) {
+                suggestPopup.setVisible(false);
+                return;
+            }
+            for (CweRepository.Cwe cwe : matches) {
+                JMenuItem item = new JMenuItem(cwe.label());
+                item.addActionListener(ev -> {
+                    addCweChip(pnlChips, selectedCwe, cwe.id());
+                    txtCwe.setText("");
+                    suggestPopup.setVisible(false);
+                });
+                suggestPopup.add(item);
+            }
+            suggestPopup.show(txtCwe, 0, txtCwe.getHeight());
+        };
+        txtCwe.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { refreshSuggestions.run(); }
+            public void removeUpdate(DocumentEvent e) { refreshSuggestions.run(); }
+            public void changedUpdate(DocumentEvent e) { refreshSuggestions.run(); }
+        });
+        txtCwe.addActionListener(e -> {
+            String text = txtCwe.getText().strip();
+            if (text.isEmpty()) return;
+            List<CweRepository.Cwe> matches = cweRepository.search(text);
+            String id = matches.isEmpty() ? text : matches.get(0).id();
+            addCweChip(pnlChips, selectedCwe, id);
+            txtCwe.setText("");
+            suggestPopup.setVisible(false);
+        });
+
+        JPanel pnlTopWrap = new JPanel(new BorderLayout());
+        pnlTopWrap.add(pnlTop, BorderLayout.NORTH);
+        pnlTopWrap.add(pnlChips, BorderLayout.SOUTH);
+        api.userInterface().applyThemeToComponent(pnlTopWrap);
 
         // Text Areas — include the request line (method + path) and status line
         var rr = finding.evidence();
@@ -209,6 +267,7 @@ public final class EvidenceCapture {
                     .path(finding.path())
                     .evidence(finding.evidence());
             finding.metadata().forEach(builder::meta);
+            selectedCwe.forEach(builder::cwe);
             Finding updatedFinding = builder.build();
 
             BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(), finalTitle, finalDesc, finalSev.name(), chk1080.isSelected());
@@ -220,10 +279,38 @@ public final class EvidenceCapture {
         pnlBottom.add(chk1080);
         pnlBottom.add(btnProceed);
 
-        editor.add(pnlTop, BorderLayout.NORTH);
+        editor.add(pnlTopWrap, BorderLayout.NORTH);
         editor.add(split, BorderLayout.CENTER);
         editor.add(pnlBottom, BorderLayout.SOUTH);
         editor.setVisible(true);
+    }
+
+    private void addCweChip(JPanel pnlChips, List<String> selectedCwe, String cweId) {
+        if (selectedCwe.contains(cweId)) return;
+        selectedCwe.add(cweId);
+
+        JPanel chip = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        chip.setBackground(new Color(60, 60, 60));
+        chip.setBorder(BorderFactory.createLineBorder(SEPARATOR_COLOR));
+
+        JLabel lbl = new JLabel(cweId);
+        lbl.setForeground(TEXT_COLOR);
+
+        JButton remove = new JButton("×");
+        remove.setMargin(new Insets(0, 4, 0, 4));
+        remove.setFocusable(false);
+        remove.addActionListener(e -> {
+            selectedCwe.remove(cweId);
+            pnlChips.remove(chip);
+            pnlChips.revalidate();
+            pnlChips.repaint();
+        });
+
+        chip.add(lbl);
+        chip.add(remove);
+        pnlChips.add(chip);
+        pnlChips.revalidate();
+        pnlChips.repaint();
     }
 
     private JTextArea createStyledTextArea(String text) {

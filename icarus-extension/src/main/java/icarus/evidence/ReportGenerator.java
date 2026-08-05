@@ -24,6 +24,7 @@ import java.util.Map;
 public final class ReportGenerator {
 
     private final MontoyaApi api;
+    private final CweRepository cweRepository = new CweRepository();
 
     public ReportGenerator(MontoyaApi api) {
         this.api = api;
@@ -73,15 +74,32 @@ public final class ReportGenerator {
             if (name != null && !name.isBlank()) projectName = name;
         }
 
-        StringBuilder html = new StringBuilder();
-        appendHeader(html, reportDir.getFileName().toString(), projectName);
-        appendSummary(html, findings);
-        appendFindings(html, findings, evidenceByFinding);
-        appendFooter(html);
+        String html;
+        try {
+            StringBuilder sb = new StringBuilder();
+            appendHeader(sb, reportDir.getFileName().toString(), projectName);
+            appendSummary(sb, findings);
+            appendFindings(sb, findings, evidenceByFinding);
+            appendFooter(sb);
+            html = sb.toString();
+        } catch (RuntimeException e) {
+            api.logging().logToError("Styled report render failed, falling back to raw dump: " + e);
+            html = rawFallback(findings);
+        }
 
-        Files.writeString(outputHtmlFile, html.toString());
+        Files.writeString(outputHtmlFile, html);
         api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
         return true;
+    }
+
+    /** Last-resort export so a render bug never costs the tester their findings data. */
+    private String rawFallback(List<Finding> findings) {
+        StringBuilder sb = new StringBuilder("<!DOCTYPE html><html><body><pre>\n");
+        for (Finding f : findings) {
+            sb.append(escapeHtml(f.toString())).append("\n\n");
+        }
+        sb.append("</pre></body></html>");
+        return sb.toString();
     }
 
     private void appendHeader(StringBuilder html, String reportName, String projectName) {
@@ -164,7 +182,7 @@ public final class ReportGenerator {
 
                     .finding-body { padding: 1.5rem; }
                     .meta-table {
-                        width: 100%;
+                        width: 100%%;
                         border-collapse: collapse;
                         margin-bottom: 1.5rem;
                         font-size: 0.95rem;
@@ -176,7 +194,7 @@ public final class ReportGenerator {
                     }
                     .meta-table th { color: var(--text-muted); width: 120px; font-weight: normal; }
                     .evidence-img {
-                        max-width: 100%;
+                        max-width: 100%%;
                         border: 1px solid var(--border);
                         border-radius: 4px;
                     }
@@ -257,6 +275,18 @@ public final class ReportGenerator {
                 f.module(), f.category().name(),
                 escapeHtml(f.path()), escapeHtml(f.description())
             ));
+
+            if (!f.cweIds().isEmpty()) {
+                String cweLabels = f.cweIds().stream()
+                        .map(id -> {
+                            var cwe = cweRepository.byId(id);
+                            return cwe != null ? cwe.label() : id;
+                        })
+                        .collect(java.util.stream.Collectors.joining(", "));
+                html.append("                        <tr><th>CWE</th><td>")
+                    .append(escapeHtml(cweLabels))
+                    .append("</td></tr>\n");
+            }
 
             if (!f.metadata().isEmpty()) {
                 for (var meta : f.metadata().entrySet()) {

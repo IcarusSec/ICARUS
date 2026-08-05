@@ -1,0 +1,52 @@
+name: False Positive / False Negative
+description: ICARUS is raising a finding it shouldn't, or missing one it should catch
+labels: ["bug", "module:detection"]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      options:
+        - JWT Checker
+        - ParamValidator
+        - HTTP Verb Tester
+        - Rate Limit Tester
+        - Sensitive Headers
+        - Passive Error
+        - AutoAuth
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - False Positive — finding raised incorrectly
+        - False Negative — finding NOT raised when it should be
+    validations:
+      required: true
+
+  - type: input
+    id: finding
+    attributes:
+      label: Finding Name / Type
+      placeholder: "e.g. ACCEPTED_METHOD, ALG_NONE, MISSING_EXP"
+    validations:
+      required: true
+
+  - type: textarea
+    id: request
+    attributes:
+      label: Request / Response
+      description: Paste the HTTP pair that triggered (or failed to trigger) the finding
+      render: http
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+    validations:
+      required: true

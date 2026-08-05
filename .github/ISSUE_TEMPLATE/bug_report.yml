@@ -1,0 +1,74 @@
+name: Bug Report
+description: Something in the ICARUS extension is broken
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Affected Module
+      multiple: true
+      options:
+        - JWT Checker
+        - ParamValidator
+        - HTTP Verb Tester
+        - Rate Limit Tester
+        - Sensitive Headers
+        - Passive Error
+        - AutoAuth
+        - Evidence Capture
+        - Report Generator
+        - Settings / UI
+        - Core / Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Impact
+      options:
+        - Crash / Exception
+        - Wrong finding (false positive)
+        - Missed finding (false negative)
+        - UI / cosmetic
+    validations:
+      required: true
+
+  - type: input
+    id: burp-version
+    attributes:
+      label: Burp Suite Version
+      placeholder: "2024.x.x"
+    validations:
+      required: true
+
+  - type: input
+    id: icarus-version
+    attributes:
+      label: ICARUS Extension Version
+      placeholder: "e.g. icarus-1.4.jar"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Include the request/response that triggered the bug if possible
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behaviour
+      description: Paste any ICARUS log output or stack traces here
+    validations:
+      required: true

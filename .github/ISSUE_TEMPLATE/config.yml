@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: ICARUS Lab (test environment)
+    url: https://github.com/IcarusSec/ICARUS-Lab
+    about: Use this to reproduce findings in a safe, local vulnerable app before filing a bug

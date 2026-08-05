@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "icarus-extension/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "icarus-extension/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build extension jar
+        working-directory: icarus-extension
+        run: bash build.sh
+
+      - name: Verify jar exists
+        run: |
+          JAR=$(ls icarus-extension/build_manual/libs/icarus-*.jar 2>/dev/null | head -1)
+          if [ -z "$JAR" ]; then
+            echo "ERROR: no jar found after build"
+            exit 1
+          fi
+          echo "Built: $JAR ($(du -sh "$JAR" | cut -f1))"
+
+      - name: Upload jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: icarus-extension
+          path: icarus-extension/build_manual/libs/icarus-*.jar
+          retention-days: 30

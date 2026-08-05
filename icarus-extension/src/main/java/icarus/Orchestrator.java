@@ -84,6 +84,63 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     /**
+     * Shared by the "ICARUS Scan Results" dialog and the Results tab's own report button —
+     * both just gather whatever {@link Finding}s they're showing and hand them here.
+     *
+     * @param parent used to anchor the file chooser / confirm dialogs
+     * @param triggerButton disabled while generating and re-enabled after, if not null
+     */
+    public void generateHtmlReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
+        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        fc.setSelectedFile(new java.io.File("report.html"));
+        if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        java.io.File selectedFile = fc.getSelectedFile();
+        if (selectedFile.exists()) {
+            int overwrite = JOptionPane.showConfirmDialog(parent,
+                    selectedFile.getName() + " already exists. Overwrite?",
+                    "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (overwrite != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+
+        java.nio.file.Path outputFile = fc.getSelectedFile().toPath();
+
+        if (triggerButton != null) triggerButton.setEnabled(false);
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() throws Exception {
+                return reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+            }
+
+            @Override
+            protected void done() {
+                if (triggerButton != null) triggerButton.setEnabled(true);
+                Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+                try {
+                    boolean written = get();
+                    if (written) {
+                        if (selectedFile.getParentFile() != null) {
+                            config.set("evidence.output_dir", selectedFile.getParentFile().getAbsolutePath());
+                            api.persistence().extensionData().setString("config", config.serialize());
+                        }
+                        ToastNotification.show(suiteFrame, "HTML Report generated: " + outputFile.toAbsolutePath());
+                    } else {
+                        ToastNotification.show(suiteFrame,
+                                "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
+                    }
+                } catch (Exception ex) {
+                    api.logging().logToError("HTML report generation failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, "Report generation failed: " + ex.getCause());
+                }
+            }
+        }.execute();
+    }
+
+    /**
      * Shared by the "Create Evidence" context-menu item and the Ctrl+P hotkey handler —
      * both entry points get Smart Evidence detection for free by routing through here.
      */
@@ -412,42 +469,11 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
 
         btnReport.addActionListener(e -> {
-            JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
-            fc.setSelectedFile(new java.io.File("report.html"));
-            if (fc.showSaveDialog(dialog) != JFileChooser.APPROVE_OPTION) {
-                return;
+            List<Finding> reportFindings = new ArrayList<>();
+            for (FindingRecord r : records) {
+                reportFindings.add(r.getFinding());
             }
-
-            java.io.File selectedFile = fc.getSelectedFile();
-            if (selectedFile.exists()) {
-                int overwrite = JOptionPane.showConfirmDialog(dialog,
-                        selectedFile.getName() + " already exists. Overwrite?",
-                        "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                if (overwrite != JOptionPane.YES_OPTION) {
-                    return;
-                }
-            }
-
-            try {
-                List<Finding> reportFindings = new ArrayList<>();
-                for (FindingRecord r : records) {
-                    reportFindings.add(r.getFinding());
-                }
-                java.nio.file.Path outputFile = fc.getSelectedFile().toPath();
-                boolean written = reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
-                if (written) {
-                    if (selectedFile.getParentFile() != null) {
-                        config.set("evidence.output_dir", selectedFile.getParentFile().getAbsolutePath());
-                        api.persistence().extensionData().setString("config", config.serialize());
-                    }
-                    JOptionPane.showMessageDialog(dialog, "HTML Report generated: " + outputFile.toAbsolutePath());
-                } else {
-                    JOptionPane.showMessageDialog(dialog,
-                            "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
-                }
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dialog, "Report generation failed: " + ex.getMessage());
-            }
+            generateHtmlReportInteractive(dialog, btnReport, reportFindings);
         });
 
         btnClose.addActionListener(e -> dialog.dispose());

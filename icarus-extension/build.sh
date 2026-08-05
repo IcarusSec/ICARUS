@@ -30,6 +30,11 @@ javac -d build_manual/classes \
       --release 21 \
       @build_manual/sources.txt
 
+# 4b. Copy resources onto the classpath
+if [ -d "src/main/resources" ]; then
+    cp -r src/main/resources/. build_manual/classes/
+fi
+
 # 5. Package into JAR
 echo "[*] Packaging JAR..."
 cd build_manual/classes

@@ -11,6 +11,7 @@ import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import icarus.autoauth.AutoAuthModule;
 import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
+import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ReportGenerator;
 import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
@@ -42,6 +43,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ModuleConfig config;
     private final EvidenceCapture evidenceCapture;
     private final ReportGenerator reportGenerator;
+    private final PdfReportGenerator pdfReportGenerator;
     private final AutoAuthModule autoAuth;
     private final ScanRunner scanRunner;
     private final FindingRegistry findings;
@@ -57,6 +59,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.reportGenerator = reportGenerator;
+        this.pdfReportGenerator = new PdfReportGenerator(api);
         this.autoAuth = autoAuth;
         this.findings = new FindingRegistry(api, config, SwingUtilities::invokeLater);
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
@@ -310,6 +313,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JButton btnGenerate = new JButton("Generate HTML Report");
         btnGenerate.addActionListener(e -> generateHtmlReportInteractive(dialog, btnGenerate, getReportableFindings()));
 
+        JButton btnExportPdf = new JButton("Export PDF");
+        btnExportPdf.addActionListener(e -> exportPdfReportInteractive(dialog, btnExportPdf, getReportableFindings()));
+
         JButton btnClose = new JButton("Close");
         btnClose.addActionListener(e -> {
             // Report Notes are kept up to date in-memory on every keystroke already;
@@ -323,6 +329,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         btnPanel.add(btnRemove);
         btnPanel.add(btnPreview);
         btnPanel.add(btnGenerate);
+        btnPanel.add(btnExportPdf);
         btnPanel.add(btnClose);
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
@@ -393,21 +400,41 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 "Couldn't open a browser automatically. Preview saved at:\n" + file.toAbsolutePath());
     }
 
+    @FunctionalInterface
+    private interface ReportWriter {
+        boolean write(List<Finding> findings, ModuleConfig config, EvidenceCapture capture, Path outputFile) throws Exception;
+    }
+
     /**
-     * Shared by the "ICARUS Scan Results" dialog and the Results tab's own report button —
+     * Shared by the "ICARUS Scan Results" dialog and the Results tab's own report buttons —
      * both just gather whatever {@link Finding}s they're showing and hand them here.
      *
      * @param parent used to anchor the file chooser / confirm dialogs
      * @param triggerButton disabled while generating and re-enabled after, if not null
      */
     public void generateHtmlReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
+        exportReportInteractive(parent, triggerButton, reportFindings, "html", "report.html", "HTML Report",
+                (findings, cfg, capture, out) -> reportGenerator.generate(findings, cfg, capture, out));
+    }
+
+    /** Same shell as {@link #generateHtmlReportInteractive}, writing via {@link PdfReportGenerator} instead. */
+    public void exportPdfReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
+        exportReportInteractive(parent, triggerButton, reportFindings, "pdf", "report.pdf", "PDF Report",
+                (findings, cfg, capture, out) -> pdfReportGenerator.generate(findings, cfg, capture, out));
+    }
+
+    private void exportReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings,
+                                          String extension, String defaultFileName, String formatLabel, ReportWriter writer) {
         JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
-        fc.setSelectedFile(new java.io.File("report.html"));
+        fc.setSelectedFile(new java.io.File(defaultFileName));
         if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return;
         }
 
         java.io.File selectedFile = fc.getSelectedFile();
+        if (!selectedFile.getName().toLowerCase().endsWith("." + extension)) {
+            selectedFile = new java.io.File(selectedFile.getParentFile(), selectedFile.getName() + "." + extension);
+        }
         if (selectedFile.exists()) {
             int overwrite = JOptionPane.showConfirmDialog(parent,
                     selectedFile.getName() + " already exists. Overwrite?",
@@ -417,13 +444,14 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         }
 
-        java.nio.file.Path outputFile = fc.getSelectedFile().toPath();
+        java.io.File finalSelectedFile = selectedFile;
+        Path outputFile = selectedFile.toPath();
 
         if (triggerButton != null) triggerButton.setEnabled(false);
         new SwingWorker<Boolean, Void>() {
             @Override
             protected Boolean doInBackground() throws Exception {
-                return reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+                return writer.write(reportFindings, config, evidenceCapture, outputFile);
             }
 
             @Override
@@ -433,18 +461,18 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 try {
                     boolean written = get();
                     if (written) {
-                        if (selectedFile.getParentFile() != null) {
-                            config.set("evidence.output_dir", selectedFile.getParentFile().getAbsolutePath());
+                        if (finalSelectedFile.getParentFile() != null) {
+                            config.set("evidence.output_dir", finalSelectedFile.getParentFile().getAbsolutePath());
                             api.persistence().extensionData().setString("config", config.serialize());
                         }
-                        ToastNotification.show(suiteFrame, "HTML Report generated: " + outputFile.toAbsolutePath());
+                        ToastNotification.show(suiteFrame, formatLabel + " generated: " + outputFile.toAbsolutePath());
                     } else {
                         ToastNotification.show(suiteFrame,
                                 "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
                     }
                 } catch (Exception ex) {
-                    api.logging().logToError("HTML report generation failed: " + ex.getCause());
-                    JOptionPane.showMessageDialog(parent, "Report generation failed: " + ex.getCause());
+                    api.logging().logToError(formatLabel + " generation failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, formatLabel + " generation failed: " + ex.getCause());
                 }
             }
         }.execute();

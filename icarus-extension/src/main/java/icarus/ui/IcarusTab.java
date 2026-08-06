@@ -257,10 +257,23 @@ public class IcarusTab {
             orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);
         });
 
+        JButton btnExportPdf = new JButton("Export PDF");
+        themeHelper.styleButton(btnExportPdf);
+        btnExportPdf.addActionListener(e -> {
+            List<Finding> reportFindings = orchestrator.getReportableFindings();
+            if (reportFindings.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel,
+                        "No evidence to include in a report yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
+                return;
+            }
+            orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
+        });
+
         bottomBar.add(btnImportProxy);
         bottomBar.add(btnEvidenceManager);
         bottomBar.add(btnPreviewReport);
         bottomBar.add(btnGenerateReport);
+        bottomBar.add(btnExportPdf);
         bottomBar.add(btnPassiveLogs);
         bottomBar.add(btnClearBtn);
         resultsPanel.add(bottomBar, BorderLayout.SOUTH);

@@ -78,6 +78,7 @@ public final class ReportGenerator {
         try {
             StringBuilder sb = new StringBuilder();
             appendHeader(sb, reportDir.getFileName().toString(), projectName);
+            appendExecutiveSummary(sb, config.getString("evidence.executive_summary", ""));
             appendSummary(sb, findings);
             appendFindings(sb, findings, evidenceByFinding);
             appendFooter(sb);
@@ -138,6 +139,16 @@ public final class ReportGenerator {
                         padding-bottom: 1rem;
                         margin-bottom: 2rem;
                     }
+                    .exec-summary {
+                        background: var(--card-bg);
+                        border: 1px solid var(--border);
+                        border-left: 4px solid var(--accent);
+                        border-radius: 6px;
+                        padding: 1rem 1.5rem;
+                        margin-bottom: 2rem;
+                    }
+                    .exec-summary h2 { margin-top: 0; }
+                    .exec-summary p { margin-bottom: 0; }
                     .summary {
                         display: flex;
                         gap: 1rem;
@@ -210,6 +221,17 @@ public final class ReportGenerator {
                 reportName,
                 projectName != null ? " | Project: " + escapeHtml(projectName) : ""
             ));
+    }
+
+    /** Free-text scope/methodology/takeaway a client reads before the finding list. Omitted entirely if blank. */
+    private void appendExecutiveSummary(StringBuilder html, String executiveSummary) {
+        if (executiveSummary == null || executiveSummary.isBlank()) return;
+        html.append("""
+                <div class="exec-summary">
+                    <h2>Executive Summary</h2>
+                    <p>%s</p>
+                </div>
+            """.formatted(escapeHtml(executiveSummary).replace("\n", "<br>")));
     }
 
     private void appendSummary(StringBuilder html, List<Finding> findings) {

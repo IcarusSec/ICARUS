@@ -135,22 +135,27 @@ public final class EvidenceCapture {
         cbSev.setSelectedItem(finding.severity());
         cbSev.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
 
-        JLabel lblCwe = new JLabel("CWE:");
-        lblCwe.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
-        api.userInterface().applyThemeToComponent(lblCwe);
-        JTextField txtCwe = new JTextField(12);
-        txtCwe.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
-        api.userInterface().applyThemeToComponent(txtCwe);
-
         pnlTop.add(lblTitle);
         pnlTop.add(txtName);
         pnlTop.add(lblDesc);
         pnlTop.add(txtDesc);
         pnlTop.add(lblSev);
         pnlTop.add(cbSev);
-        pnlTop.add(lblCwe);
-        pnlTop.add(txtCwe);
         api.userInterface().applyThemeToComponent(pnlTop);
+
+        // CWE gets its own row — cramming it onto the title/description/severity row let
+        // FlowLayout wrap it out of sight on anything less than a very wide dialog.
+        JPanel pnlCweRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 4));
+        pnlCweRow.setBorder(new EmptyBorder(0, 10, 0, 10));
+        JLabel lblCwe = new JLabel("CWE:");
+        lblCwe.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        api.userInterface().applyThemeToComponent(lblCwe);
+        JTextField txtCwe = new JTextField(20);
+        txtCwe.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        api.userInterface().applyThemeToComponent(txtCwe);
+        pnlCweRow.add(lblCwe);
+        pnlCweRow.add(txtCwe);
+        api.userInterface().applyThemeToComponent(pnlCweRow);
 
         // CWE typeahead + tag chips — search-as-you-type against the bundled offline dataset,
         // free text on Enter falls back to a custom weakness label if nothing matches.
@@ -198,9 +203,11 @@ public final class EvidenceCapture {
             suggestPopup.setVisible(false);
         });
 
-        JPanel pnlTopWrap = new JPanel(new BorderLayout());
-        pnlTopWrap.add(pnlTop, BorderLayout.NORTH);
-        pnlTopWrap.add(pnlChips, BorderLayout.SOUTH);
+        JPanel pnlTopWrap = new JPanel();
+        pnlTopWrap.setLayout(new BoxLayout(pnlTopWrap, BoxLayout.Y_AXIS));
+        pnlTopWrap.add(pnlTop);
+        pnlTopWrap.add(pnlCweRow);
+        pnlTopWrap.add(pnlChips);
         api.userInterface().applyThemeToComponent(pnlTopWrap);
 
         // Text Areas — include the request line (method + path) and status line
@@ -1236,6 +1243,14 @@ public final class EvidenceCapture {
             }
         });
 
+        JButton sendToReportBtn = createModernButton("Send annotation to Report Generator", ACCENT_COLOR);
+        sendToReportBtn.setFocusable(false);
+        sendToReportBtn.addActionListener(a -> {
+            BufferedImage out = renderFinalImage(snap, shapes, kinds, cols);
+            saveAndRegisterEvidence(finding, out);
+            frame.dispose();
+        });
+
         bar.add(panBtn);
         bar.add(new JSeparator());
         bar.add(colourBtn);
@@ -1245,6 +1260,7 @@ public final class EvidenceCapture {
         bar.add(redactBtn);
         bar.add(undoBtn);
         bar.add(new JSeparator());
+        bar.add(sendToReportBtn);
         bar.add(saveBtn);
         bar.add(copyBtn);
         root.add(bar, BorderLayout.EAST);

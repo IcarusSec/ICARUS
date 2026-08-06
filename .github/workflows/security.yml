@@ -44,6 +44,11 @@ jobs:
       - name: Build project
         run: ./build.sh
 
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
       - name: Upload Burp Extension Artifact
         uses: actions/upload-artifact@v4
         with:

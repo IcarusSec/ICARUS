@@ -5,7 +5,6 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.proxy.ProxyHttpRequestResponse;
 import icarus.Orchestrator;
 import icarus.core.Finding;
-import icarus.core.FindingRecord;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
 
@@ -245,12 +244,10 @@ public class IcarusTab {
         JButton btnGenerateReport = new JButton("Generate HTML Report");
         themeHelper.styleButton(btnGenerateReport);
         btnGenerateReport.addActionListener(e -> {
-            List<Finding> reportFindings = new java.util.ArrayList<>();
-            for (FindingRecord r : orchestrator.getAllFindingRecords()) {
-                if (!r.isSuppressed()) reportFindings.add(r.getFinding());
-            }
+            List<Finding> reportFindings = orchestrator.getReportableFindings();
             if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel, "No findings to include in a report.");
+                JOptionPane.showMessageDialog(mainPanel,
+                        "No evidence to include in a report yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
                 return;
             }
             orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);

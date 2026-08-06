@@ -37,3 +37,6 @@ jobs:
 
       - name: Build project
         run: ./build.sh
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2

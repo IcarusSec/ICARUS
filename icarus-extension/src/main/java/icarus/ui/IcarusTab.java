@@ -241,6 +241,10 @@ public class IcarusTab {
         themeHelper.styleButton(btnEvidenceManager);
         btnEvidenceManager.addActionListener(e -> orchestrator.showEvidenceManager());
 
+        JButton btnPreviewReport = new JButton("Preview");
+        themeHelper.styleButton(btnPreviewReport);
+        btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
+
         JButton btnGenerateReport = new JButton("Generate HTML Report");
         themeHelper.styleButton(btnGenerateReport);
         btnGenerateReport.addActionListener(e -> {
@@ -255,6 +259,7 @@ public class IcarusTab {
 
         bottomBar.add(btnImportProxy);
         bottomBar.add(btnEvidenceManager);
+        bottomBar.add(btnPreviewReport);
         bottomBar.add(btnGenerateReport);
         bottomBar.add(btnPassiveLogs);
         bottomBar.add(btnClearBtn);

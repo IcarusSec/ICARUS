@@ -22,6 +22,8 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -262,6 +264,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             refreshTable.run();
         });
 
+        JButton btnPreview = new JButton("Preview");
+        btnPreview.addActionListener(e -> previewReport(dialog, btnPreview));
+
         JButton btnGenerate = new JButton("Generate HTML Report");
         btnGenerate.addActionListener(e -> generateHtmlReportInteractive(dialog, btnGenerate, getReportableFindings()));
 
@@ -271,11 +276,76 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         btnPanel.add(btnEdit);
         btnPanel.add(btnRemove);
+        btnPanel.add(btnPreview);
         btnPanel.add(btnGenerate);
         btnPanel.add(btnClose);
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
         dialog.setVisible(true);
+    }
+
+    /**
+     * Renders the report to a temp file and opens it in the system browser — a real look at
+     * the actual CSS (flex summary boxes, badges) instead of a half-working JEditorPane, and
+     * no new dependency since {@link Desktop} is stdlib. Writes nothing to the user's chosen
+     * report location and never touches FindingRegistry — purely a look.
+     */
+    public void previewReport(Component parent, JButton triggerButton) {
+        List<Finding> reportFindings = getReportableFindings();
+        if (reportFindings.isEmpty()) {
+            JOptionPane.showMessageDialog(parent,
+                    "No evidence to preview yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
+            return;
+        }
+
+        Path tempFile;
+        try {
+            tempFile = Files.createTempFile("icarus-report-preview-", ".html");
+        } catch (IOException e) {
+            api.logging().logToError("Failed to create preview temp file: " + e);
+            JOptionPane.showMessageDialog(parent, "Failed to create a temp file for the preview: " + e.getMessage());
+            return;
+        }
+
+        if (triggerButton != null) triggerButton.setEnabled(false);
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() throws Exception {
+                return reportGenerator.generate(reportFindings, config, evidenceCapture, tempFile);
+            }
+
+            @Override
+            protected void done() {
+                if (triggerButton != null) triggerButton.setEnabled(true);
+                Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+                try {
+                    boolean written = get();
+                    if (!written) {
+                        ToastNotification.show(suiteFrame,
+                                "No preview generated — HTML reports may be disabled in Settings.");
+                        return;
+                    }
+                    openInBrowser(tempFile, parent);
+                } catch (Exception ex) {
+                    api.logging().logToError("Report preview failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, "Report preview failed: " + ex.getCause());
+                }
+            }
+        }.execute();
+    }
+
+    private void openInBrowser(Path file, Component parent) {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            try {
+                Desktop.getDesktop().browse(file.toUri());
+                return;
+            } catch (IOException ex) {
+                api.logging().logToError("Failed to open preview in browser: " + ex);
+                // fall through to the manual-path message below
+            }
+        }
+        JOptionPane.showMessageDialog(parent,
+                "Couldn't open a browser automatically. Preview saved at:\n" + file.toAbsolutePath());
     }
 
     /**

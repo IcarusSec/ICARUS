@@ -82,7 +82,13 @@ public final class PdfReportGenerator {
         // doc.close() flushing to an already-closed stream ("Stream Closed" IOException).
         Document doc = new Document(PageSize.A4, 40, 40, 50, 40);
         try {
-            PdfWriter.getInstance(doc, new FileOutputStream(outputPdfFile.toFile()));
+            PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(outputPdfFile.toFile()));
+            // Without this, OpenPDF defers image placement to better fill a page — which is
+            // exactly what breaks finding-card order when a page break lands near a
+            // description+image pair: several descriptions get flushed first, then their
+            // images "catch up" out of sequence once the writer finally places them. Forces
+            // images to render in add() order, matching the meta tables around them.
+            writer.setStrictImageSequence(true);
             doc.open();
 
             appendHeader(doc, reportDir.getFileName().toString(), projectName);
@@ -176,60 +182,70 @@ public final class PdfReportGenerator {
     }
 
     private void appendFindingCard(Document doc, int index, Finding f, CapturedEvidence evidence) throws DocumentException {
-        // Title row: index + title on the left, severity badge on the right.
-        PdfPTable titleRow = new PdfPTable(new float[]{4, 1});
-        titleRow.setWidthPercentage(100);
-        titleRow.setSpacingBefore(8f);
+        // Everything about this finding — title/badge, meta rows, and the screenshot — is
+        // built as rows of ONE PdfPTable, not separate doc.add() calls. A PdfPTable's own
+        // rows always render in the order added, even when the table splits across a page
+        // break; a standalone Image added via doc.add() after the table, by contrast, goes
+        // through OpenPDF's separate "float" placement path, which can defer it to make
+        // better use of leftover page space — that's what let a page break decouple a
+        // description from its own image and land it out of order relative to other
+        // findings. One table eliminates that path entirely instead of just discouraging it.
+        PdfPTable card = new PdfPTable(new float[]{1, 4});
+        card.setWidthPercentage(100);
+        card.setSpacingBefore(8f);
 
         PdfPCell titleCell = new PdfPCell(new Phrase("#" + index + ". " + f.type(), FINDING_TITLE_FONT));
-        titleCell.setBorder(Rectangle.NO_BORDER);
-        titleCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
-        titleRow.addCell(titleCell);
+        titleCell.setColspan(2);
+        titleCell.setBorder(Rectangle.BOTTOM);
+        titleCell.setBorderColor(BORDER);
+        titleCell.setPaddingBottom(6f);
+        card.addCell(titleCell);
+
+        PdfPCell badgeLabelCell = new PdfPCell(new Phrase("Severity", LABEL_FONT));
+        badgeLabelCell.setBorderColor(BORDER);
+        badgeLabelCell.setPadding(5f);
+        card.addCell(badgeLabelCell);
 
         PdfPCell badgeCell = new PdfPCell(new Phrase(f.severity().name(), BADGE_FONT));
         badgeCell.setBackgroundColor(severityColor(f.severity().name()));
-        badgeCell.setBorder(Rectangle.NO_BORDER);
-        badgeCell.setHorizontalAlignment(Element.ALIGN_CENTER);
-        badgeCell.setVerticalAlignment(Element.ALIGN_MIDDLE);
-        badgeCell.setPadding(4f);
-        titleRow.addCell(badgeCell);
-        doc.add(titleRow);
+        badgeCell.setBorderColor(BORDER);
+        badgeCell.setPadding(5f);
+        card.addCell(badgeCell);
 
-        // Meta table: label/value rows, same fields as the HTML report's meta-table.
-        PdfPTable meta = new PdfPTable(new float[]{1, 3});
-        meta.setWidthPercentage(100);
-        meta.setSpacingBefore(4f);
-        addMetaRow(meta, "Module", f.module());
-        addMetaRow(meta, "Category", f.category().name());
-        addMetaRow(meta, "Target Path", f.path());
-        addMetaRow(meta, "Description", f.description());
+        addMetaRow(card, "Module", f.module());
+        addMetaRow(card, "Category", f.category().name());
+        addMetaRow(card, "Target Path", f.path());
+        addMetaRow(card, "Description", f.description());
         if (!f.cweIds().isEmpty()) {
-            addMetaRow(meta, "CWE", String.join(", ", f.cweIds()));
+            addMetaRow(card, "CWE", String.join(", ", f.cweIds()));
         }
         for (var entry : f.metadata().entrySet()) {
-            addMetaRow(meta, entry.getKey(), entry.getValue());
+            addMetaRow(card, entry.getKey(), entry.getValue());
         }
-        doc.add(meta);
 
+        PdfPCell contentCell = new PdfPCell();
+        contentCell.setColspan(2);
+        contentCell.setBorder(Rectangle.NO_BORDER);
+        contentCell.setPaddingTop(6f);
         if (evidence != null) {
             try {
                 ByteArrayOutputStream png = new ByteArrayOutputStream();
                 javax.imageio.ImageIO.write(evidence.image(), "png", png);
                 Image img = Image.getInstance(png.toByteArray());
-                float maxWidth = doc.getPageSize().getWidth() - doc.leftMargin() - doc.rightMargin();
+                float maxWidth = doc.getPageSize().getWidth() - doc.leftMargin() - doc.rightMargin() - 20f;
                 img.scaleToFit(maxWidth, 700f);
-                img.setSpacingBefore(6f);
-                img.setSpacingAfter(12f);
-                doc.add(img);
+                contentCell.addElement(img);
             } catch (IOException e) {
                 api.logging().logToError("Failed to embed evidence image in PDF for finding '" + f.type() + "': " + e);
-                doc.add(new Paragraph("(screenshot could not be embedded)", BODY_FONT));
+                contentCell.addElement(new Paragraph("(screenshot could not be embedded)", BODY_FONT));
             }
         } else {
-            Paragraph none = new Paragraph("No screenshot captured for this finding.", BODY_FONT);
-            none.setSpacingAfter(12f);
-            doc.add(none);
+            contentCell.addElement(new Paragraph("No screenshot captured for this finding.", BODY_FONT));
         }
+        card.addCell(contentCell);
+
+        card.setSpacingAfter(12f);
+        doc.add(card);
     }
 
     private void addMetaRow(PdfPTable table, String label, String value) {

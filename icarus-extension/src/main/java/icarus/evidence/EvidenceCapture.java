@@ -6,10 +6,13 @@ import icarus.core.Finding;
 import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
+import icarus.ui.ToastNotification;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.text.BadLocationException;
 import java.awt.*;
 import java.awt.event.*;
@@ -18,10 +21,15 @@ import java.awt.image.BufferedImage;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 public final class EvidenceCapture {
 
@@ -38,10 +46,51 @@ public final class EvidenceCapture {
     private final MontoyaApi api;
     private final ModuleConfig config;
     private final List<CapturedEvidence> captured = new ArrayList<>();
+    private final CweRepository cweRepository = new CweRepository();
+
+    // Lets a piece of evidence be left out of the *next* report without discarding it —
+    // "Remove Evidence" is destructive (the screenshot is gone), this is a reversible toggle.
+    private final Set<CapturedEvidence> excludedFromReport = new HashSet<>();
+
+    // Notified with the final, identity-stable Finding once evidence is saved — lets the
+    // caller (Orchestrator) fold it into the same registry the Results tab and report
+    // button read from, without EvidenceCapture needing to know about FindingRegistry.
+    private Consumer<Finding> onApplied = f -> {};
 
     public EvidenceCapture(MontoyaApi api, ModuleConfig config) {
         this.api = api;
         this.config = config;
+    }
+
+    public void setOnApplied(Consumer<Finding> onApplied) {
+        this.onApplied = onApplied;
+    }
+
+    public void removeCaptured(CapturedEvidence evidence) {
+        captured.remove(evidence);
+        excludedFromReport.remove(evidence);
+    }
+
+    public void setIncluded(CapturedEvidence evidence, boolean included) {
+        if (included) {
+            excludedFromReport.remove(evidence);
+        } else {
+            excludedFromReport.add(evidence);
+        }
+    }
+
+    public boolean isIncluded(CapturedEvidence evidence) {
+        return !excludedFromReport.contains(evidence);
+    }
+
+    /**
+     * Report order follows this list's order. The Evidence Manager drags rows around its own
+     * copy of {@link #getCaptured()} and then calls this once with the full new order to sync
+     * it back — simpler than translating individual drag gestures into swap operations here.
+     */
+    public void reorderCaptured(List<CapturedEvidence> newOrder) {
+        captured.clear();
+        captured.addAll(newOrder);
     }
 
     public List<CapturedEvidence> getCaptured() {
@@ -123,6 +172,98 @@ public final class EvidenceCapture {
         pnlTop.add(cbSev);
         api.userInterface().applyThemeToComponent(pnlTop);
 
+        // CWE gets its own row — cramming it onto the title/description/severity row let
+        // FlowLayout wrap it out of sight on anything less than a very wide dialog.
+        JPanel pnlCweRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 4));
+        pnlCweRow.setBorder(new EmptyBorder(0, 10, 0, 10));
+        JLabel lblCwe = new JLabel("CWE:");
+        lblCwe.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
+        api.userInterface().applyThemeToComponent(lblCwe);
+        JTextField txtCwe = new JTextField(20);
+        txtCwe.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        api.userInterface().applyThemeToComponent(txtCwe);
+        pnlCweRow.add(lblCwe);
+        pnlCweRow.add(txtCwe);
+        api.userInterface().applyThemeToComponent(pnlCweRow);
+
+        // CWE typeahead + tag chips — search-as-you-type against the bundled offline dataset,
+        // free text on Enter falls back to a custom weakness label if nothing matches.
+        JPanel pnlChips = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+        pnlChips.setBorder(new EmptyBorder(0, 10, 5, 10));
+        api.userInterface().applyThemeToComponent(pnlChips);
+        List<String> selectedCwe = new ArrayList<>();
+        // Re-editing an already-tagged finding (e.g. from the Evidence Manager) should show
+        // its existing CWE tags as chips, not lose them until the user retypes.
+        for (String existingCwe : finding.cweIds()) {
+            addCweChip(pnlChips, selectedCwe, existingCwe);
+        }
+
+        // A JPopupMenu grabs keyboard focus for its own arrow-key navigation the moment
+        // show() is called, which yanks focus out of txtCwe after every keystroke — the
+        // user has to click back into the field to keep typing. A non-focusable JWindow
+        // (same trick ToastNotification uses) never takes focus at all, so txtCwe keeps it
+        // continuously while still being clickable.
+        JWindow suggestWindow = new JWindow(editor);
+        suggestWindow.setFocusableWindowState(false);
+        DefaultListModel<CweRepository.Cwe> suggestModel = new DefaultListModel<>();
+        JList<CweRepository.Cwe> suggestList = new JList<>(suggestModel);
+        suggestList.setCellRenderer((list, value, index, isSelected, cellHasFocus) ->
+                new JLabel(" " + value.label()) {{ setOpaque(true); setBackground(isSelected ? new Color(80, 80, 80) : BG_COLOR); setForeground(TEXT_COLOR); }});
+        suggestWindow.add(new JScrollPane(suggestList));
+        suggestWindow.setSize(360, 160);
+
+        Runnable hideSuggestions = () -> suggestWindow.setVisible(false);
+
+        suggestList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int idx = suggestList.locationToIndex(e.getPoint());
+                if (idx >= 0) {
+                    addCweChip(pnlChips, selectedCwe, suggestModel.get(idx).id());
+                    txtCwe.setText("");
+                    hideSuggestions.run();
+                }
+            }
+        });
+
+        Runnable refreshSuggestions = () -> {
+            List<CweRepository.Cwe> matches = cweRepository.search(txtCwe.getText());
+            if (matches.isEmpty()) {
+                hideSuggestions.run();
+                return;
+            }
+            suggestModel.clear();
+            matches.forEach(suggestModel::addElement);
+            Point loc = txtCwe.getLocationOnScreen();
+            suggestWindow.setLocation(loc.x, loc.y + txtCwe.getHeight());
+            suggestWindow.setVisible(true);
+        };
+        txtCwe.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { refreshSuggestions.run(); }
+            public void removeUpdate(DocumentEvent e) { refreshSuggestions.run(); }
+            public void changedUpdate(DocumentEvent e) { refreshSuggestions.run(); }
+        });
+        txtCwe.addActionListener(e -> {
+            String text = txtCwe.getText().strip();
+            if (text.isEmpty()) return;
+            List<CweRepository.Cwe> matches = cweRepository.search(text);
+            String id = matches.isEmpty() ? text : matches.get(0).id();
+            addCweChip(pnlChips, selectedCwe, id);
+            txtCwe.setText("");
+            hideSuggestions.run();
+        });
+        txtCwe.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) { hideSuggestions.run(); }
+        });
+
+        JPanel pnlTopWrap = new JPanel();
+        pnlTopWrap.setLayout(new BoxLayout(pnlTopWrap, BoxLayout.Y_AXIS));
+        pnlTopWrap.add(pnlTop);
+        pnlTopWrap.add(pnlCweRow);
+        pnlTopWrap.add(pnlChips);
+        api.userInterface().applyThemeToComponent(pnlTopWrap);
+
         // Text Areas — include the request line (method + path) and status line
         var rr = finding.evidence();
         String reqContentType = rr.request().headerValue("Content-Type");
@@ -190,40 +331,109 @@ public final class EvidenceCapture {
             }
         });
 
-        JButton btnProceed = createModernButton("Proceed to Annotation ➔", ACCENT_COLOR);
+        JButton btnAnnotate = createModernButton("Annotate First…", new Color(70, 70, 70));
+        JButton btnApply = createModernButton("Apply ➔ Add to Report", ACCENT_COLOR);
 
         btnCleanNoise.addActionListener(e -> {
             reqArea.setText(cleanNoise(reqArea.getText()));
             resArea.setText(cleanNoise(resArea.getText()));
         });
 
-        btnProceed.addActionListener(e -> {
-            String finalTitle = txtName.getText();
-            String finalDesc = txtDesc.getText();
-            Severity finalSev = (Severity) cbSev.getSelectedItem();
-
-            Finding.Builder builder = Finding.builder(finding.module(), finalTitle)
-                    .description(finalDesc)
-                    .severity(finalSev)
+        // Shared by both buttons below — builds the edited Finding once, from whatever's
+        // currently in the title/description/severity/CWE fields.
+        java.util.function.Supplier<Finding> buildUpdatedFinding = () -> {
+            Finding.Builder builder = Finding.builder(finding.module(), txtName.getText())
+                    .description(txtDesc.getText())
+                    .severity((Severity) cbSev.getSelectedItem())
                     .category(finding.category())
                     .path(finding.path())
                     .evidence(finding.evidence());
             finding.metadata().forEach(builder::meta);
-            Finding updatedFinding = builder.build();
+            selectedCwe.forEach(builder::cwe);
+            return builder.build();
+        };
 
-            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(), finalTitle, finalDesc, finalSev.name(), chk1080.isSelected());
-            showPhase2(editor, updatedFinding, renderedText, finalTitle);
+        btnApply.addActionListener(e -> {
+            Finding updatedFinding = buildUpdatedFinding.get();
+            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
+                    updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            saveAndRegisterEvidence(updatedFinding, renderedText);
+            editor.dispose();
+        });
+
+        btnAnnotate.addActionListener(e -> {
+            Finding updatedFinding = buildUpdatedFinding.get();
+            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
+                    updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            showPhase2(editor, updatedFinding, renderedText, updatedFinding.type());
         });
 
         pnlBottom.add(btnCleanNoise);
         pnlBottom.add(new JSeparator(SwingConstants.VERTICAL));
         pnlBottom.add(chk1080);
-        pnlBottom.add(btnProceed);
+        pnlBottom.add(btnAnnotate);
+        pnlBottom.add(btnApply);
 
-        editor.add(pnlTop, BorderLayout.NORTH);
+        editor.add(pnlTopWrap, BorderLayout.NORTH);
         editor.add(split, BorderLayout.CENTER);
         editor.add(pnlBottom, BorderLayout.SOUTH);
         editor.setVisible(true);
+    }
+
+    /**
+     * Writes the rendered evidence image to the configured output directory (no save
+     * dialog — this is the one-click path) and hands the finished {@code finding} to
+     * {@link #onApplied}, which folds it into the same registry the Results tab and
+     * "Generate HTML Report" read from. Using this exact finding object as both the
+     * {@link CapturedEvidence} key and the registered finding is what makes the
+     * screenshot actually show up in the report — a mismatch there was silently
+     * dropping evidence images before.
+     */
+    private void saveAndRegisterEvidence(Finding finding, BufferedImage image) {
+        try {
+            Path dir = Path.of(config.getString("evidence.output_dir", System.getProperty("user.home")));
+            Files.createDirectories(dir);
+            String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_") + "-" + System.currentTimeMillis() + ".png";
+            Path out = dir.resolve(filename);
+            ImageIO.write(image, "png", out.toFile());
+
+            captured.add(new CapturedEvidence(finding, out, image));
+            onApplied.accept(finding);
+            ToastNotification.show(api.userInterface().swingUtils().suiteFrame(),
+                    "Evidence added to report: " + finding.type());
+        } catch (IOException e) {
+            api.logging().logToError("Failed to save evidence screenshot: " + e);
+            JOptionPane.showMessageDialog(api.userInterface().swingUtils().suiteFrame(),
+                    "Failed to save evidence screenshot: " + e.getMessage());
+        }
+    }
+
+    private void addCweChip(JPanel pnlChips, List<String> selectedCwe, String cweId) {
+        if (selectedCwe.contains(cweId)) return;
+        selectedCwe.add(cweId);
+
+        JPanel chip = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        chip.setBackground(new Color(60, 60, 60));
+        chip.setBorder(BorderFactory.createLineBorder(SEPARATOR_COLOR));
+
+        JLabel lbl = new JLabel(cweId);
+        lbl.setForeground(TEXT_COLOR);
+
+        JButton remove = new JButton("×");
+        remove.setMargin(new Insets(0, 4, 0, 4));
+        remove.setFocusable(false);
+        remove.addActionListener(e -> {
+            selectedCwe.remove(cweId);
+            pnlChips.remove(chip);
+            pnlChips.revalidate();
+            pnlChips.repaint();
+        });
+
+        chip.add(lbl);
+        chip.add(remove);
+        pnlChips.add(chip);
+        pnlChips.revalidate();
+        pnlChips.repaint();
     }
 
     private JTextArea createStyledTextArea(String text) {
@@ -1057,6 +1267,7 @@ public final class EvidenceCapture {
                     File f = fc.getSelectedFile();
                     ImageIO.write(out, "png", f);
                     captured.add(new CapturedEvidence(finding, f.toPath(), out));
+                    onApplied.accept(finding);
                     if (f.getParentFile() != null) {
                         config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
                         api.persistence().extensionData().setString("config", config.serialize());
@@ -1086,6 +1297,14 @@ public final class EvidenceCapture {
             }
         });
 
+        JButton sendToReportBtn = createModernButton("Send annotation to Report Generator", ACCENT_COLOR);
+        sendToReportBtn.setFocusable(false);
+        sendToReportBtn.addActionListener(a -> {
+            BufferedImage out = renderFinalImage(snap, shapes, kinds, cols);
+            saveAndRegisterEvidence(finding, out);
+            frame.dispose();
+        });
+
         bar.add(panBtn);
         bar.add(new JSeparator());
         bar.add(colourBtn);
@@ -1095,6 +1314,7 @@ public final class EvidenceCapture {
         bar.add(redactBtn);
         bar.add(undoBtn);
         bar.add(new JSeparator());
+        bar.add(sendToReportBtn);
         bar.add(saveBtn);
         bar.add(copyBtn);
         root.add(bar, BorderLayout.EAST);

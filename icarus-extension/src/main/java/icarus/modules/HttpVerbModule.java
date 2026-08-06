@@ -52,6 +52,10 @@ public class HttpVerbModule implements IcarusModule {
         List<VerbResult> results = new ArrayList<>();
 
         for (int i = 0; i < methodsToTest.size(); i++) {
+            if (Thread.currentThread().isInterrupted()) {
+                logger.accept("Stopped by user — " + (methodsToTest.size() - i) + " verb(s) skipped.");
+                break;
+            }
             String method = methodsToTest.get(i);
             HttpRequest mutated = applyBodyStrategy(originalRequest, method, config);
 

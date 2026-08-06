@@ -1,0 +1,73 @@
+name: Security Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+
+  push:
+    branches:
+      - security-pipeline-test
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: icarus-extension
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java
+
+      - name: Make build script executable
+        run: chmod +x build.sh
+
+      - name: Build project
+        run: ./build.sh
+
+      - name: Upload Burp Extension Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: icarus-extension
+          path: icarus-extension/build_manual/libs/*.jar
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/java
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4

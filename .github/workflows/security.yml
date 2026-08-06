@@ -18,6 +18,10 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: icarus-extension
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

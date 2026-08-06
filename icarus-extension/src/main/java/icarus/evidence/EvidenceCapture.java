@@ -26,7 +26,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public final class EvidenceCapture {
@@ -46,6 +48,10 @@ public final class EvidenceCapture {
     private final List<CapturedEvidence> captured = new ArrayList<>();
     private final CweRepository cweRepository = new CweRepository();
 
+    // Lets a piece of evidence be left out of the *next* report without discarding it —
+    // "Remove Evidence" is destructive (the screenshot is gone), this is a reversible toggle.
+    private final Set<CapturedEvidence> excludedFromReport = new HashSet<>();
+
     // Notified with the final, identity-stable Finding once evidence is saved — lets the
     // caller (Orchestrator) fold it into the same registry the Results tab and report
     // button read from, without EvidenceCapture needing to know about FindingRegistry.
@@ -62,6 +68,19 @@ public final class EvidenceCapture {
 
     public void removeCaptured(CapturedEvidence evidence) {
         captured.remove(evidence);
+        excludedFromReport.remove(evidence);
+    }
+
+    public void setIncluded(CapturedEvidence evidence, boolean included) {
+        if (included) {
+            excludedFromReport.remove(evidence);
+        } else {
+            excludedFromReport.add(evidence);
+        }
+    }
+
+    public boolean isIncluded(CapturedEvidence evidence) {
+        return !excludedFromReport.contains(evidence);
     }
 
     /**

@@ -64,15 +64,14 @@ public final class EvidenceCapture {
         captured.remove(evidence);
     }
 
-    /** Report order follows this list's order — these back the Evidence Manager's reorder buttons. */
-    public void moveCapturedUp(CapturedEvidence evidence) {
-        int idx = captured.indexOf(evidence);
-        if (idx > 0) java.util.Collections.swap(captured, idx, idx - 1);
-    }
-
-    public void moveCapturedDown(CapturedEvidence evidence) {
-        int idx = captured.indexOf(evidence);
-        if (idx >= 0 && idx < captured.size() - 1) java.util.Collections.swap(captured, idx, idx + 1);
+    /**
+     * Report order follows this list's order. The Evidence Manager drags rows around its own
+     * copy of {@link #getCaptured()} and then calls this once with the full new order to sync
+     * it back — simpler than translating individual drag gestures into swap operations here.
+     */
+    public void reorderCaptured(List<CapturedEvidence> newOrder) {
+        captured.clear();
+        captured.addAll(newOrder);
     }
 
     public List<CapturedEvidence> getCaptured() {

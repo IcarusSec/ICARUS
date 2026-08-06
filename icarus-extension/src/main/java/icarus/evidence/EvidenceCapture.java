@@ -60,6 +60,10 @@ public final class EvidenceCapture {
         this.onApplied = onApplied;
     }
 
+    public void removeCaptured(CapturedEvidence evidence) {
+        captured.remove(evidence);
+    }
+
     public List<CapturedEvidence> getCaptured() {
         return List.copyOf(captured);
     }
@@ -154,6 +158,11 @@ public final class EvidenceCapture {
         pnlChips.setBorder(new EmptyBorder(0, 10, 5, 10));
         api.userInterface().applyThemeToComponent(pnlChips);
         List<String> selectedCwe = new ArrayList<>();
+        // Re-editing an already-tagged finding (e.g. from the Evidence Manager) should show
+        // its existing CWE tags as chips, not lose them until the user retypes.
+        for (String existingCwe : finding.cweIds()) {
+            addCweChip(pnlChips, selectedCwe, existingCwe);
+        }
 
         JPopupMenu suggestPopup = new JPopupMenu();
         Runnable refreshSuggestions = () -> {

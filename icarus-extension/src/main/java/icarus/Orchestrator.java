@@ -16,6 +16,7 @@ import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -93,6 +94,103 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     public void showEvidenceInteractive(Finding finding) {
         evidenceCapture.captureInteractive(finding);
+    }
+
+    /**
+     * Window for managing the screenshots that will actually go into the HTML report —
+     * separate from the Results tab, which lists every finding whether or not it has
+     * evidence attached. Reachable from the "ICARUS → Manage Report Evidence" context-menu
+     * item and the Results tab's own button.
+     */
+    public void showEvidenceManager() {
+        JDialog dialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS — Evidence Manager", false);
+        dialog.setSize(1100, 700);
+        dialog.setLocationRelativeTo(null);
+        dialog.setLayout(new BorderLayout());
+
+        List<EvidenceCapture.CapturedEvidence> entries = new ArrayList<>(evidenceCapture.getCaptured());
+
+        DefaultTableModel model = new DefaultTableModel(new String[]{"Title", "Severity", "Path", "CWE", "Image File"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return false; }
+        };
+        for (var ce : entries) {
+            Finding f = ce.finding();
+            model.addRow(new Object[]{
+                f.type(), f.severity().name(), f.path(),
+                String.join(", ", f.cweIds()), ce.imagePath().getFileName().toString()
+            });
+        }
+
+        JTable table = new JTable(model);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setRowHeight(22);
+        table.setAutoCreateRowSorter(true);
+        JScrollPane tableScroll = new JScrollPane(table);
+
+        JLabel preview = new JLabel("Select a row to preview its screenshot", SwingConstants.CENTER);
+        JScrollPane previewScroll = new JScrollPane(preview);
+        previewScroll.setPreferredSize(new Dimension(420, 0));
+
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            int row = table.getSelectedRow();
+            if (row < 0) {
+                preview.setIcon(null);
+                preview.setText("Select a row to preview its screenshot");
+                return;
+            }
+            var ce = entries.get(table.convertRowIndexToModel(row));
+            Image scaled = ce.image().getScaledInstance(380, -1, Image.SCALE_SMOOTH);
+            preview.setIcon(new ImageIcon(scaled));
+            preview.setText(null);
+        });
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, previewScroll);
+        split.setResizeWeight(0.6);
+        dialog.add(split, BorderLayout.CENTER);
+
+        JButton btnEdit = new JButton("Edit…");
+        btnEdit.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            evidenceCapture.captureInteractive(entries.get(table.convertRowIndexToModel(row)).finding());
+        });
+
+        JButton btnRemove = new JButton("Remove Evidence");
+        btnRemove.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int modelRow = table.convertRowIndexToModel(row);
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                    "Remove this screenshot from the report? The finding itself stays in the Results tab.",
+                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+            evidenceCapture.removeCaptured(entries.get(modelRow));
+            entries.remove(modelRow);
+            model.removeRow(modelRow);
+        });
+
+        JButton btnGenerate = new JButton("Generate HTML Report");
+        btnGenerate.addActionListener(e -> {
+            List<Finding> reportFindings = new ArrayList<>();
+            for (var r : findings.getAllFindingRecords()) {
+                if (!r.isSuppressed()) reportFindings.add(r.getFinding());
+            }
+            generateHtmlReportInteractive(dialog, btnGenerate, reportFindings);
+        });
+
+        JButton btnClose = new JButton("Close");
+        btnClose.addActionListener(e -> dialog.dispose());
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(btnEdit);
+        btnPanel.add(btnRemove);
+        btnPanel.add(btnGenerate);
+        btnPanel.add(btnClose);
+        dialog.add(btnPanel, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
     }
 
     /**
@@ -311,6 +409,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             });
             items.add(item);
         }
+
+        var evidenceManager = new JMenuItem("ICARUS → Manage Report Evidence");
+        evidenceManager.addActionListener(e -> showEvidenceManager());
+        items.add(evidenceManager);
 
         return items;
     }

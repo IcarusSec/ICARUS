@@ -238,6 +238,10 @@ public class IcarusTab {
         themeHelper.styleButton(btnImportProxy);
         btnImportProxy.addActionListener(e -> showProxyHistoryImportDialog());
 
+        JButton btnEvidenceManager = new JButton("Manage Report Evidence");
+        themeHelper.styleButton(btnEvidenceManager);
+        btnEvidenceManager.addActionListener(e -> orchestrator.showEvidenceManager());
+
         JButton btnGenerateReport = new JButton("Generate HTML Report");
         themeHelper.styleButton(btnGenerateReport);
         btnGenerateReport.addActionListener(e -> {
@@ -253,6 +257,7 @@ public class IcarusTab {
         });
 
         bottomBar.add(btnImportProxy);
+        bottomBar.add(btnEvidenceManager);
         bottomBar.add(btnGenerateReport);
         bottomBar.add(btnPassiveLogs);
         bottomBar.add(btnClearBtn);

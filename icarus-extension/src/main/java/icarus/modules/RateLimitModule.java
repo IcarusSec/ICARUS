@@ -194,22 +194,25 @@ public class RateLimitModule implements IcarusModule {
         String blockType = describeBlockType(detection);
         StringBuilder bypassLog = new StringBuilder();
 
-        // ── Phase 3: Bypass Attempts (skipped in detect-only mode) ──
-        if (!detectOnly) {
+        // ── Phase 3: Bypass Attempts (skipped in detect-only mode, or if stopped mid-Phase-1) ──
+        if (!detectOnly && !Thread.currentThread().isInterrupted()) {
             // Wait for cooldown before bypass attempts
-            try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) {}
+            try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
-            if (config.getBool("rl.bypass_headers", true)) {
+            if (config.getBool("rl.bypass_headers", true) && !Thread.currentThread().isInterrupted()) {
                 tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, maxRps, bypassLog, path, logger);
             }
 
-            if (config.getBool("rl.bypass_path", true)) {
+            if (config.getBool("rl.bypass_path", true) && !Thread.currentThread().isInterrupted()) {
                 tryPathBypass(baseRequest, detection, totalRequests, concurrency, maxRps, bypassLog, path, cooldownMs, logger);
             }
 
-            if (config.getBool("rl.bypass_query", true)) {
+            if (config.getBool("rl.bypass_query", true) && !Thread.currentThread().isInterrupted()) {
                 tryQueryBypass(baseRequest, detection, totalRequests, concurrency, maxRps, bypassLog, path, cooldownMs, logger);
             }
+        }
+        if (Thread.currentThread().isInterrupted()) {
+            logger.accept("Rate Limit Tester stopped by user — reporting on partial results.");
         }
 
         endTime = LocalDateTime.now().format(dtf);
@@ -300,8 +303,10 @@ public class RateLimitModule implements IcarusModule {
                 // Once the block is confirmed (3+ block responses observed), stop actually
                 // sending — the threshold is already known and further requests just add load.
                 // Same debounce for a crashing server (3+ 0/500/502/504 responses) so a downed
-                // target doesn't get hammered with the rest of `count` requests.
-                if (blockCount.get() >= 3 || crashCount.get() >= 3) {
+                // target doesn't get hammered with the rest of `count` requests. Same skip on
+                // a user-requested stop: pool.shutdownNow() interrupts in-progress tasks, but a
+                // still-queued task starting after that needs its own check too.
+                if (blockCount.get() >= 3 || crashCount.get() >= 3 || Thread.currentThread().isInterrupted()) {
                     return new SingleResult(idx, SKIPPED_STATUS, 0, 0, 0, null);
                 }
                 // Counted before sendRequest() so a mid-request exception still counts as sent.
@@ -316,6 +321,9 @@ public class RateLimitModule implements IcarusModule {
                     if (waitMs > 0) {
                         try { Thread.sleep(waitMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                     }
+                }
+                if (Thread.currentThread().isInterrupted()) {
+                    return new SingleResult(idx, SKIPPED_STATUS, 0, 0, 0, null);
                 }
 
                 HttpRequest mutated = mutator.apply(idx);
@@ -335,14 +343,28 @@ public class RateLimitModule implements IcarusModule {
 
         List<SingleResult> results = new ArrayList<>();
         for (var f : futures) {
+            if (Thread.currentThread().isInterrupted()) {
+                // Stop joining immediately rather than working through the rest of `futures`
+                // one by one — pool.shutdownNow() below interrupts whatever's still running.
+                f.cancel(true);
+                continue;
+            }
             try {
                 SingleResult r = f.get(30, TimeUnit.SECONDS);
                 if (r.status != SKIPPED_STATUS) results.add(r);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt(); // restore status; loop above will catch it next iteration
             } catch (Exception e) {
                 results.add(new SingleResult(results.size(), 0, 0, -1, System.currentTimeMillis(), null));
             }
         }
-        pool.shutdown();
+        if (Thread.currentThread().isInterrupted()) {
+            logger.accept("Rate limit blast stopped by user.");
+        }
+        // shutdownNow(), not shutdown(): this pool is internal to blastWithMutator and never
+        // reused, so interrupting anything still executing (whether we were cancelled or not)
+        // is strictly faster cleanup, not a behavior change on the normal-completion path.
+        pool.shutdownNow();
 
         // Sort by index to preserve order
         results.sort((a, b) -> Integer.compare(a.index, b.index));
@@ -477,7 +499,7 @@ public class RateLimitModule implements IcarusModule {
         for (String variant : pathVariants) {
             if (variant.equals(path)) continue;
 
-            try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
+            try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
             HttpRequest mutated = base.withPath(variant);
             BlastResult bypassResult = blast(mutated, count, concurrency, maxRps, logger);
@@ -497,7 +519,7 @@ public class RateLimitModule implements IcarusModule {
 
     private void tryQueryBypass(HttpRequest base, BlastResult detection, int count, int concurrency, int maxRps,
                                  StringBuilder bypassLog, String path, int cooldownMs, Consumer<String> logger) {
-        try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) {}
+        try { Thread.sleep(Math.min(cooldownMs, 3000)); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
         // Each request gets a unique query parameter
         BlastResult bypassResult = blastWithMutator(count, concurrency, maxRps, idx -> {

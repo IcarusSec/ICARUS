@@ -268,6 +268,7 @@ public class JwtCheckerModule implements IcarusModule {
 
         // Active Tests
         BiConsumer<String, String> testToken = (label, tokenToSend) -> {
+            if (Thread.currentThread().isInterrupted()) return;
             logger.accept("Testing " + humanizeLabel(label) + "...");
             try {
                 String newHeaderValue = candidate.headerValue.replace(candidate.token, tokenToSend);

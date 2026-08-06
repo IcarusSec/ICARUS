@@ -43,6 +43,14 @@ jobs:
       - name: Build project
         run: ./build.sh
 
+      - name: Upload Burp Extension Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: icarus-extension
+          path: icarus-extension/build_manual/libs/*.jar
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Run Semgrep
         uses: returntocorp/semgrep-action@v1
         with:

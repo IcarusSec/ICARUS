@@ -67,21 +67,45 @@ public final class ParamValidatorModule implements IcarusModule {
 
         int maxMutations = config.getInt("pv.max_mutations", 60);
         List<Mutation> mutations = new ArrayList<>();
-        
-        outer:
+
+        // Round-robin across fields (one spec per field per pass) instead of exhausting one
+        // field's full spec list before moving to the next. A single string field can generate
+        // ~25 specs (multi-line injection payloads); depth-first order meant maxMutations was
+        // often spent entirely on the first field or two, so later fields — often where numeric
+        // params live — silently got zero boundary specs (e.g. NUMBER_NEGATIVE) generated at all.
+        List<String> fieldPathStrings = new ArrayList<>();
+        List<List<Object>> fieldPaths = new ArrayList<>();
+        List<List<MutationSpec>> fieldSpecs = new ArrayList<>();
         for (List<Object> path : eligiblePaths) {
             String pathString = JsonPaths.pathToString(path);
             Object leafValue = JsonPaths.getAt(JsonParser.parse(originalBody), path);
-            
+
+            List<MutationSpec> specs = new ArrayList<>();
             for (MutationSpec spec : SpecsFactory.specsFor(leafValue, config)) {
                 if (pathRules.isException(pathString, spec)) continue;
-                if (mutations.size() >= maxMutations) break outer;
-                
+                specs.add(spec);
+            }
+            if (!specs.isEmpty()) {
+                fieldPathStrings.add(pathString);
+                fieldPaths.add(path);
+                fieldSpecs.add(specs);
+            }
+        }
+
+        for (int round = 0; mutations.size() < maxMutations; round++) {
+            boolean anyFieldHadSpecAtThisRound = false;
+            for (int f = 0; f < fieldSpecs.size(); f++) {
+                if (mutations.size() >= maxMutations) break;
+                List<MutationSpec> specs = fieldSpecs.get(f);
+                if (round >= specs.size()) continue;
+                anyFieldHadSpecAtThisRound = true;
+
+                MutationSpec spec = specs.get(round);
                 Object clonedRoot = JsonParser.parse(originalBody);
-                boolean applied = JsonPaths.applyAt(clonedRoot, path, spec.value(), spec.remove());
+                boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
                 if (applied) {
                     mutations.add(new Mutation(
-                            pathString,
+                            fieldPathStrings.get(f),
                             spec.type(),
                             spec.description(),
                             spec.category(),
@@ -90,6 +114,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     ));
                 }
             }
+            if (!anyFieldHadSpecAtThisRound) break; // every field's spec list is exhausted
         }
 
         if (mutations.isEmpty()) {
@@ -137,7 +162,10 @@ public final class ParamValidatorModule implements IcarusModule {
         boolean promptedThrottle = false;
         int delayMs = 0;
 
+        int blockStreak = 0;
+
         for (int i = 0; i < mutatedRequests.size(); i++) {
+            icarus.ScanRunner.waitIfPaused();
             if (Thread.currentThread().isInterrupted()) {
                 logger.accept("Stopped by user — " + (mutatedRequests.size() - i) + " mutation(s) skipped.");
                 break;
@@ -155,7 +183,18 @@ public final class ParamValidatorModule implements IcarusModule {
                 responses.add(result);
                 if (result != null && result.response() != null) {
                     int st = result.response().statusCode();
-                    if (st == 401 || st == 403) {
+                    if (st == 429) {
+                        // Unlike 401/403 (could just be an app-level auth failure), 429 is an
+                        // unambiguous rate-limit signal — throttle automatically, no prompt.
+                        blockStreak++;
+                        long retryAfterMs = parseRetryAfterMs(result.response().headerValue("Retry-After"));
+                        long wanted = retryAfterMs > 0 ? retryAfterMs : 2000;
+                        if (wanted > delayMs) {
+                            delayMs = (int) Math.min(wanted, 30_000);
+                            logger.accept("tool is returning 429 (rate limited) — throttling to " + delayMs + "ms between requests.");
+                        }
+                    } else if (st == 401 || st == 403) {
+                        blockStreak++;
                         logger.accept("tool is returning " + st);
                         if (!promptedThrottle) {
                             promptedThrottle = true;
@@ -174,6 +213,19 @@ public final class ParamValidatorModule implements IcarusModule {
                             if (choiceHolder[0] == javax.swing.JOptionPane.YES_OPTION) {
                                 delayMs = 2000;
                             }
+                        }
+                    } else {
+                        blockStreak = 0;
+                    }
+
+                    // A flat delay that never adapts leaves the scan stuck failing indefinitely
+                    // once a CDN/WAF keeps blocking through it. Escalate every 3 consecutive
+                    // blocked requests, capped so a persistent block can't stall the scan forever.
+                    if (delayMs > 0 && blockStreak > 0 && blockStreak % 3 == 0) {
+                        int escalated = (int) Math.min(delayMs * 2L, 30_000);
+                        if (escalated > delayMs) {
+                            delayMs = escalated;
+                            logger.accept("Still being blocked after " + blockStreak + " attempts — increasing delay to " + delayMs + "ms.");
                         }
                     }
                 }
@@ -393,6 +445,22 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         return findings;
+    }
+
+    /** Parses a Retry-After header (either delay-seconds or an HTTP-date) into milliseconds, or -1 if absent/unparseable. */
+    private static long parseRetryAfterMs(String headerValue) {
+        if (headerValue == null || headerValue.isBlank()) return -1;
+        String trimmed = headerValue.trim();
+        try {
+            return Long.parseLong(trimmed) * 1000L;
+        } catch (NumberFormatException notSeconds) {
+            try {
+                var when = java.time.ZonedDateTime.parse(trimmed, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME);
+                return Math.max(0, when.toInstant().toEpochMilli() - System.currentTimeMillis());
+            } catch (Exception notADate) {
+                return -1;
+            }
+        }
     }
 
     private static String shortPath(String path) {

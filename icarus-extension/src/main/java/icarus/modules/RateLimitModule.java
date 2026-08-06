@@ -195,6 +195,7 @@ public class RateLimitModule implements IcarusModule {
         StringBuilder bypassLog = new StringBuilder();
 
         // ── Phase 3: Bypass Attempts (skipped in detect-only mode, or if stopped mid-Phase-1) ──
+        icarus.ScanRunner.waitIfPaused();
         if (!detectOnly && !Thread.currentThread().isInterrupted()) {
             // Wait for cooldown before bypass attempts
             try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }

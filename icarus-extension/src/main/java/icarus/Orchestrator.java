@@ -11,12 +11,20 @@ import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import icarus.autoauth.AutoAuthModule;
 import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
+import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ReportGenerator;
 import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -35,6 +43,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ModuleConfig config;
     private final EvidenceCapture evidenceCapture;
     private final ReportGenerator reportGenerator;
+    private final PdfReportGenerator pdfReportGenerator;
     private final AutoAuthModule autoAuth;
     private final ScanRunner scanRunner;
     private final FindingRegistry findings;
@@ -50,9 +59,22 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.reportGenerator = reportGenerator;
+        this.pdfReportGenerator = new PdfReportGenerator(api);
         this.autoAuth = autoAuth;
         this.findings = new FindingRegistry(api, config, SwingUtilities::invokeLater);
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
+
+        evidenceCapture.setOnApplied(this::registerManualFinding);
+    }
+
+    /**
+     * Called by EvidenceCapture once a finding's evidence is applied — folds it into the
+     * same registry manual/passive/scan findings share, so it shows up in the Results tab
+     * and "Generate HTML Report" immediately, and re-editing + re-applying later updates
+     * the same entry (matched by {@link Finding#similarityHash()}) instead of duplicating it.
+     */
+    private void registerManualFinding(Finding finding) {
+        findings.processDeduplication(List.of(finding), false);
     }
 
     public AutoAuthModule autoAuth() {
@@ -81,6 +103,379 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     public void showEvidenceInteractive(Finding finding) {
         evidenceCapture.captureInteractive(finding);
+    }
+
+    /**
+     * Findings that actually belong in a report: ones the user explicitly sent through
+     * Evidence Capture (Apply / Send annotation), not every passively-detected finding
+     * (e.g. SensitiveHeaderModule's header checks, PassiveErrorModule) that only ever
+     * landed in the Results tab for awareness. Order follows EvidenceCapture's captured
+     * list, which the Evidence Manager's drag-and-drop reordering controls directly —
+     * report order was previously undefined HashMap iteration order via getAllFindingRecords().
+     * Also drops orphaned entries left behind when a finding was re-edited (the old,
+     * pre-edit CapturedEvidence stays in the list, but the registry only tracks the latest),
+     * and entries the user unchecked in the Evidence Manager's Include column.
+     */
+    public List<Finding> getReportableFindings() {
+        List<Finding> result = new ArrayList<>();
+        Set<Finding> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (var ce : evidenceCapture.getCaptured()) {
+            if (!evidenceCapture.isIncluded(ce)) continue;
+            Finding f = ce.finding();
+            if (!seen.add(f)) continue;
+            var record = findings.getRecordByHash(f.similarityHash());
+            if (record == null || record.isSuppressed() || record.getFinding() != f) continue;
+            result.add(f);
+        }
+        return result;
+    }
+
+    /**
+     * Window for managing the screenshots that will actually go into the HTML report —
+     * separate from the Results tab, which lists every finding whether or not it has
+     * evidence attached. Reachable from the "ICARUS → Manage Report Evidence" context-menu
+     * item and the Results tab's own button.
+     */
+    public void showEvidenceManager() {
+        JDialog dialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS — Evidence Manager", false);
+        dialog.setSize(1100, 700);
+        dialog.setLocationRelativeTo(null);
+        dialog.setLayout(new BorderLayout());
+
+        List<EvidenceCapture.CapturedEvidence> entries = new ArrayList<>(evidenceCapture.getCaptured());
+
+        DefaultTableModel model = new DefaultTableModel(new String[]{"Include", "#", "Title", "Severity", "Path", "CWE", "Image File"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) { return column == 0; }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                // Without this, an empty table (0 rows) can't infer Boolean from row data and
+                // renders column 0 as the text "true"/"false" instead of an actual checkbox.
+                return columnIndex == 0 ? Boolean.class : Object.class;
+            }
+        };
+
+        JTable table = new JTable(model);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setRowHeight(22);
+        table.getColumnModel().getColumn(0).setMaxWidth(60);
+        // No row sorter: this table's order IS the report's order, driven entirely by
+        // drag-and-drop below — clicking a column header to sort would silently desync
+        // what the user sees from what dragging actually reorders.
+        JScrollPane tableScroll = new JScrollPane(table);
+
+        // Rebuilds the table from `entries` in place, keeping the same row selected —
+        // called after every reorder/remove so the "#" column always matches report order.
+        Runnable refreshTable = () -> {
+            int selected = table.getSelectedRow();
+            model.setRowCount(0);
+            for (int i = 0; i < entries.size(); i++) {
+                var ce = entries.get(i);
+                Finding f = ce.finding();
+                model.addRow(new Object[]{
+                    evidenceCapture.isIncluded(ce), i + 1, f.type(), f.severity().name(), f.path(),
+                    String.join(", ", f.cweIds()), ce.imagePath().getFileName().toString()
+                });
+            }
+            if (selected >= 0 && selected < table.getRowCount()) {
+                table.setRowSelectionInterval(selected, selected);
+            }
+        };
+        refreshTable.run();
+
+        // Unchecking "Include" leaves the screenshot in place (unlike Remove) but drops it
+        // from the next Preview/Generate/Export — reversible, unlike deleting it.
+        model.addTableModelListener(e -> {
+            if (e.getColumn() != 0 || e.getType() != javax.swing.event.TableModelEvent.UPDATE) return;
+            int row = e.getFirstRow();
+            if (row < 0 || row >= entries.size()) return;
+            evidenceCapture.setIncluded(entries.get(row), (Boolean) model.getValueAt(row, 0));
+        });
+
+        // Drag-and-drop row reordering: drag a row to a new position to reorder the report.
+        // JTable's built-in row-move TransferHandler support, not a hand-rolled mouse listener.
+        table.setDragEnabled(true);
+        table.setDropMode(DropMode.INSERT_ROWS);
+        DataFlavor rowFlavor = new DataFlavor(Integer.class, "Evidence Manager row index");
+        table.setTransferHandler(new TransferHandler() {
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                int row = table.getSelectedRow();
+                return new Transferable() {
+                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{rowFlavor}; }
+                    public boolean isDataFlavorSupported(DataFlavor flavor) { return rowFlavor.equals(flavor); }
+                    public Object getTransferData(DataFlavor flavor) { return row; }
+                };
+            }
+
+            @Override
+            public int getSourceActions(JComponent c) { return MOVE; }
+
+            @Override
+            public boolean canImport(TransferSupport support) {
+                return support.isDrop() && support.isDataFlavorSupported(rowFlavor);
+            }
+
+            @Override
+            public boolean importData(TransferSupport support) {
+                if (!canImport(support)) return false;
+                try {
+                    int from = (int) support.getTransferable().getTransferData(rowFlavor);
+                    int to = ((JTable.DropLocation) support.getDropLocation()).getRow();
+                    if (to > from) to--; // dropping below the dragged row's old slot shifts by one
+                    if (from < 0 || from >= entries.size() || to < 0 || to >= entries.size() || from == to) {
+                        return false;
+                    }
+
+                    var moved = entries.remove(from);
+                    entries.add(to, moved);
+                    evidenceCapture.reorderCaptured(entries);
+
+                    refreshTable.run();
+                    table.setRowSelectionInterval(to, to);
+                    return true;
+                } catch (UnsupportedFlavorException | IOException ex) {
+                    return false;
+                }
+            }
+        });
+
+        JLabel preview = new JLabel("Select a row to preview its screenshot", SwingConstants.CENTER);
+        JScrollPane previewScroll = new JScrollPane(preview);
+        previewScroll.setPreferredSize(new Dimension(420, 0));
+
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) return;
+            int row = table.getSelectedRow();
+            if (row < 0 || row >= entries.size()) {
+                preview.setIcon(null);
+                preview.setText("Select a row to preview its screenshot");
+                return;
+            }
+            var ce = entries.get(row);
+            Image scaled = ce.image().getScaledInstance(380, -1, Image.SCALE_SMOOTH);
+            preview.setIcon(new ImageIcon(scaled));
+            preview.setText(null);
+        });
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, previewScroll);
+        split.setResizeWeight(0.6);
+        // Report-level free text (scope/methodology/takeaway), not tied to any one finding —
+        // persisted in config so it survives across Evidence Manager sessions. Read directly
+        // by ReportGenerator/PdfReportGenerator at generate time, no plumbing needed elsewhere.
+        JTextArea txtSummary = new JTextArea(config.getString("evidence.executive_summary", ""), 3, 0);
+        txtSummary.setLineWrap(true);
+        txtSummary.setWrapStyleWord(true);
+        txtSummary.setBorder(BorderFactory.createTitledBorder("Report Notes (optional executive summary, shown at the top of the report)"));
+        txtSummary.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() { config.set("evidence.executive_summary", txtSummary.getText()); }
+        });
+        JScrollPane summaryScroll = new JScrollPane(txtSummary);
+        summaryScroll.setPreferredSize(new Dimension(0, 80));
+
+        JLabel dragHint = new JLabel("  Drag rows to reorder the report.");
+        dragHint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(summaryScroll, BorderLayout.CENTER);
+        topPanel.add(dragHint, BorderLayout.SOUTH);
+
+        dialog.add(topPanel, BorderLayout.NORTH);
+        dialog.add(split, BorderLayout.CENTER);
+
+        JButton btnEdit = new JButton("Edit…");
+        btnEdit.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            evidenceCapture.captureInteractive(entries.get(row).finding());
+        });
+
+        JButton btnRemove = new JButton("Remove Evidence");
+        btnRemove.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0) return;
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                    "Remove this screenshot from the report? The finding itself stays in the Results tab.",
+                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+            evidenceCapture.removeCaptured(entries.get(row));
+            entries.remove(row);
+            refreshTable.run();
+        });
+
+        JButton btnPreview = new JButton("Preview");
+        btnPreview.addActionListener(e -> previewReport(dialog, btnPreview));
+
+        JButton btnGenerate = new JButton("Generate HTML Report");
+        btnGenerate.addActionListener(e -> generateHtmlReportInteractive(dialog, btnGenerate, getReportableFindings()));
+
+        JButton btnExportPdf = new JButton("Export PDF");
+        btnExportPdf.addActionListener(e -> exportPdfReportInteractive(dialog, btnExportPdf, getReportableFindings()));
+
+        JButton btnClose = new JButton("Close");
+        btnClose.addActionListener(e -> {
+            // Report Notes are kept up to date in-memory on every keystroke already;
+            // flush to persistent storage once here rather than on every keystroke.
+            api.persistence().extensionData().setString("config", config.serialize());
+            dialog.dispose();
+        });
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(btnEdit);
+        btnPanel.add(btnRemove);
+        btnPanel.add(btnPreview);
+        btnPanel.add(btnGenerate);
+        btnPanel.add(btnExportPdf);
+        btnPanel.add(btnClose);
+        dialog.add(btnPanel, BorderLayout.SOUTH);
+
+        dialog.setVisible(true);
+    }
+
+    /**
+     * Renders the report to a temp file and opens it in the system browser — a real look at
+     * the actual CSS (flex summary boxes, badges) instead of a half-working JEditorPane, and
+     * no new dependency since {@link Desktop} is stdlib. Writes nothing to the user's chosen
+     * report location and never touches FindingRegistry — purely a look.
+     */
+    public void previewReport(Component parent, JButton triggerButton) {
+        List<Finding> reportFindings = getReportableFindings();
+        if (reportFindings.isEmpty()) {
+            JOptionPane.showMessageDialog(parent,
+                    "No evidence to preview yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
+            return;
+        }
+
+        Path tempFile;
+        try {
+            tempFile = Files.createTempFile("icarus-report-preview-", ".html");
+        } catch (IOException e) {
+            api.logging().logToError("Failed to create preview temp file: " + e);
+            JOptionPane.showMessageDialog(parent, "Failed to create a temp file for the preview: " + e.getMessage());
+            return;
+        }
+
+        if (triggerButton != null) triggerButton.setEnabled(false);
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() throws Exception {
+                return reportGenerator.generate(reportFindings, config, evidenceCapture, tempFile);
+            }
+
+            @Override
+            protected void done() {
+                if (triggerButton != null) triggerButton.setEnabled(true);
+                Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+                try {
+                    boolean written = get();
+                    if (!written) {
+                        ToastNotification.show(suiteFrame,
+                                "No preview generated — HTML reports may be disabled in Settings.");
+                        return;
+                    }
+                    openInBrowser(tempFile, parent);
+                } catch (Exception ex) {
+                    api.logging().logToError("Report preview failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, "Report preview failed: " + ex.getCause());
+                }
+            }
+        }.execute();
+    }
+
+    private void openInBrowser(Path file, Component parent) {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            try {
+                Desktop.getDesktop().browse(file.toUri());
+                return;
+            } catch (IOException ex) {
+                api.logging().logToError("Failed to open preview in browser: " + ex);
+                // fall through to the manual-path message below
+            }
+        }
+        JOptionPane.showMessageDialog(parent,
+                "Couldn't open a browser automatically. Preview saved at:\n" + file.toAbsolutePath());
+    }
+
+    @FunctionalInterface
+    private interface ReportWriter {
+        boolean write(List<Finding> findings, ModuleConfig config, EvidenceCapture capture, Path outputFile) throws Exception;
+    }
+
+    /**
+     * Shared by the "ICARUS Scan Results" dialog and the Results tab's own report buttons —
+     * both just gather whatever {@link Finding}s they're showing and hand them here.
+     *
+     * @param parent used to anchor the file chooser / confirm dialogs
+     * @param triggerButton disabled while generating and re-enabled after, if not null
+     */
+    public void generateHtmlReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
+        exportReportInteractive(parent, triggerButton, reportFindings, "html", "report.html", "HTML Report",
+                (findings, cfg, capture, out) -> reportGenerator.generate(findings, cfg, capture, out));
+    }
+
+    /** Same shell as {@link #generateHtmlReportInteractive}, writing via {@link PdfReportGenerator} instead. */
+    public void exportPdfReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
+        exportReportInteractive(parent, triggerButton, reportFindings, "pdf", "report.pdf", "PDF Report",
+                (findings, cfg, capture, out) -> pdfReportGenerator.generate(findings, cfg, capture, out));
+    }
+
+    private void exportReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings,
+                                          String extension, String defaultFileName, String formatLabel, ReportWriter writer) {
+        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        fc.setSelectedFile(new java.io.File(defaultFileName));
+        if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        java.io.File selectedFile = fc.getSelectedFile();
+        if (!selectedFile.getName().toLowerCase().endsWith("." + extension)) {
+            selectedFile = new java.io.File(selectedFile.getParentFile(), selectedFile.getName() + "." + extension);
+        }
+        if (selectedFile.exists()) {
+            int overwrite = JOptionPane.showConfirmDialog(parent,
+                    selectedFile.getName() + " already exists. Overwrite?",
+                    "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (overwrite != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+
+        java.io.File finalSelectedFile = selectedFile;
+        Path outputFile = selectedFile.toPath();
+
+        if (triggerButton != null) triggerButton.setEnabled(false);
+        new SwingWorker<Boolean, Void>() {
+            @Override
+            protected Boolean doInBackground() throws Exception {
+                return writer.write(reportFindings, config, evidenceCapture, outputFile);
+            }
+
+            @Override
+            protected void done() {
+                if (triggerButton != null) triggerButton.setEnabled(true);
+                Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+                try {
+                    boolean written = get();
+                    if (written) {
+                        if (finalSelectedFile.getParentFile() != null) {
+                            config.set("evidence.output_dir", finalSelectedFile.getParentFile().getAbsolutePath());
+                            api.persistence().extensionData().setString("config", config.serialize());
+                        }
+                        ToastNotification.show(suiteFrame, formatLabel + " generated: " + outputFile.toAbsolutePath());
+                    } else {
+                        ToastNotification.show(suiteFrame,
+                                "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
+                    }
+                } catch (Exception ex) {
+                    api.logging().logToError(formatLabel + " generation failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, formatLabel + " generation failed: " + ex.getCause());
+                }
+            }
+        }.execute();
     }
 
     /**
@@ -189,7 +584,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(runAll);
 
-        var createEvidence = new JMenuItem("ICARUS → Create Evidence");
+        var createEvidence = new JMenuItem("ICARUS → Send to Reporter Creation");
         createEvidence.addActionListener(e -> {
             for (var rr : requestResponses) {
                 createManualEvidence(rr);
@@ -242,6 +637,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             });
             items.add(item);
         }
+
+        var evidenceManager = new JMenuItem("ICARUS → Manage Report Evidence");
+        evidenceManager.addActionListener(e -> showEvidenceManager());
+        items.add(evidenceManager);
 
         return items;
     }
@@ -411,44 +810,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         });
 
-        btnReport.addActionListener(e -> {
-            JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
-            fc.setSelectedFile(new java.io.File("report.html"));
-            if (fc.showSaveDialog(dialog) != JFileChooser.APPROVE_OPTION) {
-                return;
-            }
-
-            java.io.File selectedFile = fc.getSelectedFile();
-            if (selectedFile.exists()) {
-                int overwrite = JOptionPane.showConfirmDialog(dialog,
-                        selectedFile.getName() + " already exists. Overwrite?",
-                        "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                if (overwrite != JOptionPane.YES_OPTION) {
-                    return;
-                }
-            }
-
-            try {
-                List<Finding> reportFindings = new ArrayList<>();
-                for (FindingRecord r : records) {
-                    reportFindings.add(r.getFinding());
-                }
-                java.nio.file.Path outputFile = fc.getSelectedFile().toPath();
-                boolean written = reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
-                if (written) {
-                    if (selectedFile.getParentFile() != null) {
-                        config.set("evidence.output_dir", selectedFile.getParentFile().getAbsolutePath());
-                        api.persistence().extensionData().setString("config", config.serialize());
-                    }
-                    JOptionPane.showMessageDialog(dialog, "HTML Report generated: " + outputFile.toAbsolutePath());
-                } else {
-                    JOptionPane.showMessageDialog(dialog,
-                            "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
-                }
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(dialog, "Report generation failed: " + ex.getMessage());
-            }
-        });
+        btnReport.addActionListener(e -> generateHtmlReportInteractive(dialog, btnReport, getReportableFindings()));
 
         btnClose.addActionListener(e -> dialog.dispose());
 

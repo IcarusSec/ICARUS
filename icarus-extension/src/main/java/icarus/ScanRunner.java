@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -34,6 +35,10 @@ public final class ScanRunner {
     private final ExecutorService executor;
     private final BiConsumer<List<Finding>, Boolean> onFindings;
 
+    // The single-thread executor means only one of these ever runs at a time — this just
+    // needs to track it so a Stop click has something to cancel.
+    private volatile Future<?> currentTask;
+
     public ScanRunner(MontoyaApi api, List<IcarusModule> modules, ModuleConfig config,
                        BiConsumer<List<Finding>, Boolean> onFindings) {
         this.api = api;
@@ -47,8 +52,24 @@ public final class ScanRunner {
         });
     }
 
+    /**
+     * Interrupts whatever's currently running. Modules poll {@code Thread.currentThread()
+     * .isInterrupted()} in their per-request loops rather than relying on the interrupt to
+     * abort an in-flight {@code sendRequest()} call (Montoya's HTTP call isn't guaranteed to
+     * be interrupt-aware) — so this stops promptly between requests, not necessarily
+     * mid-request. {@link RateLimitModule} additionally shuts down its own internal thread
+     * pool, since that runs on separate threads this interrupt wouldn't otherwise reach.
+     */
+    public void stopCurrent() {
+        Future<?> task = currentTask;
+        if (task != null && !task.isDone()) {
+            task.cancel(true);
+        }
+    }
+
     public void runScan(HttpRequestResponse target, boolean isManual) {
-        executor.submit(() -> {
+        currentTask = executor.submit(() -> {
+            Thread.interrupted(); // clear any stale flag left by a previous cancellation
             try {
                 doScan(target, isManual);
             } catch (Exception e) {
@@ -58,7 +79,8 @@ public final class ScanRunner {
     }
 
     public void runModule(IcarusModule module, HttpRequestResponse target, boolean isManual) {
-        executor.submit(() -> {
+        currentTask = executor.submit(() -> {
+            Thread.interrupted();
             try {
                 runSingleModule(module, target, isManual);
             } catch (Exception e) {
@@ -69,7 +91,8 @@ public final class ScanRunner {
 
     /** Runs an arbitrary task on the same background executor used for scans. */
     public void runAsync(Runnable task) {
-        executor.submit(() -> {
+        currentTask = executor.submit(() -> {
+            Thread.interrupted();
             try {
                 task.run();
             } catch (Exception e) {
@@ -142,6 +165,10 @@ public final class ScanRunner {
         }
 
         for (var module : modules) {
+            if (Thread.currentThread().isInterrupted()) {
+                log.accept("ICARUS scan stopped by user.");
+                break;
+            }
             if (!isModuleEnabled(module) || !module.includeInBulkScan()) continue;
 
             log.accept("──── Running: " + module.name() + " ────");
@@ -170,7 +197,8 @@ public final class ScanRunner {
         logger.accept("ICARUS → Running " + module.name());
         var findings = module.run(target, config, verboseLogger(logger, config));
         onFindings.accept(findings, isManual);
-        logger.accept("ICARUS → " + module.name() + " complete — " + findings.size() + " findings.");
+        String status = Thread.currentThread().isInterrupted() ? "stopped by user" : "complete";
+        logger.accept("ICARUS → " + module.name() + " " + status + " — " + findings.size() + " findings.");
     }
 
     /**
@@ -199,6 +227,17 @@ public final class ScanRunner {
             JScrollPane scrollPane = new JScrollPane(textArea);
             scrollPane.setBorder(BorderFactory.createEmptyBorder());
             frame.add(scrollPane, BorderLayout.CENTER);
+
+            JButton btnStop = new JButton("Stop");
+            btnStop.addActionListener(e -> {
+                textArea.append("Stopping — cancelling current test...\n");
+                textArea.setCaretPosition(textArea.getDocument().getLength());
+                btnStop.setEnabled(false);
+                stopCurrent();
+            });
+            JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            bottomBar.add(btnStop);
+            frame.add(bottomBar, BorderLayout.SOUTH);
 
             api.userInterface().applyThemeToComponent(frame);
             frame.setVisible(true);

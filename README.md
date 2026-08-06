@@ -34,7 +34,7 @@
 
 - **Unified Command Interface:** A centralized control panel (`ICARUS` tab) for configuring all modules, tracking active tasks, and managing vulnerability findings in real-time.
 - **AutoAuth:** Replaces clunky Burp Macros with a highlight-and-click workflow — mark a token in a response as the source, mark where it needs to go in a request, and ICARUS silently keeps it fresh and injected in the background from then on.
-- **Smart Evidence Capture:** An advanced reporting workflow that generates clean, actionable evidence. Hitting Ctrl+P or "Create Evidence" now quietly checks the response first and offers to auto-populate the title, description, and severity if it spots something (a verbose error leak, an unencoded reflection). Features full HTTP payload logging, a built-in interactive image editor (box, arrow, highlight, redact, plus copy-to-clipboard), and automated HTML report generation.
+- **Evidence Manager & Reporting:** One-click Apply renders a screenshot and registers the finding straight into the report — no save dialog. Offline CWE tagging with typeahead, a drag-and-drop Evidence Manager to curate and reorder findings, and a browser preview step before exporting a polished HTML or PDF report.
 - **Passive Threat Detection:** Background monitoring that flags server errors and verbose error/stack-trace leaks as they cross the proxy, with a lightweight toast notification so you know to check the Results tab.
 - **Automated Rapid Scanning:** Execute comprehensive security checks against selected HTTP requests with a single click directly from the Burp context menu.
 
@@ -134,9 +134,9 @@ Runs quietly in the background, flagging HTTP 500+ responses and verbose error/s
 </details>
 
 <details>
-<summary><b>9. Create Evidence (CreateEvidenceModule)</b></summary>
+<summary><b>9. Evidence Manager & Reporting</b></summary>
 <br>
-Transforms raw HTTP traffic into professional vulnerability evidence with minimal manual effort.
+Turns raw HTTP traffic into a client-ready report with minimal manual effort — from capture to a polished HTML or PDF deliverable.
 <br>
 <br>
 
@@ -144,12 +144,13 @@ Transforms raw HTTP traffic into professional vulnerability evidence with minima
   <img src="./.images/evidence.gif" alt="Smart Evidence Capture Demo" width="900">
 </p>
 <br>
-Features include:
 
-- **Automatic detection** of verbose error disclosures and unencoded reflections.
-- **Automatic pre-population** of title, description, and severity.
-- **Complete** HTTP request/response logging.
-- **Built-in** image editor (boxes, arrows, highlights, redaction).
+- **Send to Reporter Creation:** right-click any request/response — Repeater, Proxy, Logger, anywhere Burp shows one — or hit Ctrl+P. Automatic detection of verbose error disclosures and unencoded reflections pre-populates the title, description, and severity.
+- **One-Click Apply:** renders the evidence screenshot, saves it, and registers the finding straight into the report — no save dialog, no separate step. A secondary "Annotate First…" option still offers the full image editor (box, arrow, highlight, redact, copy-to-clipboard) for findings that need manual markup.
+- **Offline CWE Tagging:** instant typeahead against a bundled CWE dataset, zero network calls, rendered as a tagged row in the final report.
+- **Import from Proxy History:** pull any past request into the evidence flow without needing to run a scan on it first.
+- **Evidence Manager window** (right-click → "Manage Report Evidence", or the Results tab): live preview of every captured screenshot, drag-and-drop reordering, an include/exclude toggle to leave a finding out of the *next* report without deleting its evidence, and an optional executive summary field.
+- **Preview & Export:** preview the actual rendered report in your browser before committing to a save location, then export as HTML or PDF (via OpenPDF, fully offline) — both share one consistent, readable theme.
 </details>
 
 ---

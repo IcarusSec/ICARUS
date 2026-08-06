@@ -24,6 +24,7 @@ import java.util.Map;
 public final class ReportGenerator {
 
     private final MontoyaApi api;
+    private final CweRepository cweRepository = new CweRepository();
 
     public ReportGenerator(MontoyaApi api) {
         this.api = api;
@@ -73,15 +74,33 @@ public final class ReportGenerator {
             if (name != null && !name.isBlank()) projectName = name;
         }
 
-        StringBuilder html = new StringBuilder();
-        appendHeader(html, reportDir.getFileName().toString(), projectName);
-        appendSummary(html, findings);
-        appendFindings(html, findings, evidenceByFinding);
-        appendFooter(html);
+        String html;
+        try {
+            StringBuilder sb = new StringBuilder();
+            appendHeader(sb, reportDir.getFileName().toString(), projectName);
+            appendExecutiveSummary(sb, config.getString("evidence.executive_summary", ""));
+            appendSummary(sb, findings);
+            appendFindings(sb, findings, evidenceByFinding);
+            appendFooter(sb);
+            html = sb.toString();
+        } catch (RuntimeException e) {
+            api.logging().logToError("Styled report render failed, falling back to raw dump: " + e);
+            html = rawFallback(findings);
+        }
 
-        Files.writeString(outputHtmlFile, html.toString());
+        Files.writeString(outputHtmlFile, html);
         api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
         return true;
+    }
+
+    /** Last-resort export so a render bug never costs the tester their findings data. */
+    private String rawFallback(List<Finding> findings) {
+        StringBuilder sb = new StringBuilder("<!DOCTYPE html><html><body><pre>\n");
+        for (Finding f : findings) {
+            sb.append(escapeHtml(f.toString())).append("\n\n");
+        }
+        sb.append("</pre></body></html>");
+        return sb.toString();
     }
 
     private void appendHeader(StringBuilder html, String reportName, String projectName) {
@@ -94,17 +113,17 @@ public final class ReportGenerator {
                 <title>ICARUS Security Report</title>
                 <style>
                     :root {
-                        --bg: #1e1e1e;
-                        --card-bg: #2d2d2d;
-                        --text: #e0e0e0;
-                        --text-muted: #aaaaaa;
-                        --border: #444444;
-                        --accent: #5e9dd9;
-                        --critical: #ff4d4d;
-                        --high: #ff8c42;
-                        --medium: #f9c74f;
-                        --low: #4d908e;
-                        --info: #858585;
+                        --bg: #ffffff;
+                        --card-bg: #f7f7f7;
+                        --text: #1a1a1a;
+                        --text-muted: #666666;
+                        --border: #dddddd;
+                        --accent: #3e7bb8;
+                        --critical: #cc2e2e;
+                        --high: #d9711f;
+                        --medium: #b38f00;
+                        --low: #2f7a77;
+                        --info: #6e6e6e;
                     }
                     body {
                         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -114,12 +133,22 @@ public final class ReportGenerator {
                         margin: 0;
                         padding: 2rem;
                     }
-                    h1, h2, h3 { color: #ffffff; }
+                    h1, h2, h3 { color: var(--text); }
                     .header {
                         border-bottom: 2px solid var(--border);
                         padding-bottom: 1rem;
                         margin-bottom: 2rem;
                     }
+                    .exec-summary {
+                        background: var(--card-bg);
+                        border: 1px solid var(--border);
+                        border-left: 4px solid var(--accent);
+                        border-radius: 6px;
+                        padding: 1rem 1.5rem;
+                        margin-bottom: 2rem;
+                    }
+                    .exec-summary h2 { margin-top: 0; }
+                    .exec-summary p { margin-bottom: 0; }
                     .summary {
                         display: flex;
                         gap: 1rem;
@@ -154,17 +183,17 @@ public final class ReportGenerator {
                         border-radius: 20px;
                         font-size: 0.85rem;
                         font-weight: 600;
-                        color: #1a1a1a;
+                        color: #ffffff;
                     }
                     .badge.CRITICAL { background-color: var(--critical); }
                     .badge.HIGH { background-color: var(--high); }
                     .badge.MEDIUM { background-color: var(--medium); }
                     .badge.LOW { background-color: var(--low); }
-                    .badge.INFO { background-color: var(--info); color: white; }
+                    .badge.INFO { background-color: var(--info); }
 
                     .finding-body { padding: 1.5rem; }
                     .meta-table {
-                        width: 100%;
+                        width: 100%%;
                         border-collapse: collapse;
                         margin-bottom: 1.5rem;
                         font-size: 0.95rem;
@@ -176,7 +205,7 @@ public final class ReportGenerator {
                     }
                     .meta-table th { color: var(--text-muted); width: 120px; font-weight: normal; }
                     .evidence-img {
-                        max-width: 100%;
+                        max-width: 100%%;
                         border: 1px solid var(--border);
                         border-radius: 4px;
                     }
@@ -192,6 +221,17 @@ public final class ReportGenerator {
                 reportName,
                 projectName != null ? " | Project: " + escapeHtml(projectName) : ""
             ));
+    }
+
+    /** Free-text scope/methodology/takeaway a client reads before the finding list. Omitted entirely if blank. */
+    private void appendExecutiveSummary(StringBuilder html, String executiveSummary) {
+        if (executiveSummary == null || executiveSummary.isBlank()) return;
+        html.append("""
+                <div class="exec-summary">
+                    <h2>Executive Summary</h2>
+                    <p>%s</p>
+                </div>
+            """.formatted(escapeHtml(executiveSummary).replace("\n", "<br>")));
     }
 
     private void appendSummary(StringBuilder html, List<Finding> findings) {
@@ -227,7 +267,8 @@ public final class ReportGenerator {
             """.formatted(critical, high, medium, low, findings.size()));
     }
 
-    private long countBySeverity(List<Finding> findings, String severity) {
+    /** Shared with {@link PdfReportGenerator} so both formats count severities identically. */
+    static long countBySeverity(List<Finding> findings, String severity) {
         if (severity.equals("LOW")) {
             return findings.stream().filter(f ->
                 f.severity().name().equals("LOW") ||
@@ -257,6 +298,18 @@ public final class ReportGenerator {
                 f.module(), f.category().name(),
                 escapeHtml(f.path()), escapeHtml(f.description())
             ));
+
+            if (!f.cweIds().isEmpty()) {
+                String cweLabels = f.cweIds().stream()
+                        .map(id -> {
+                            var cwe = cweRepository.byId(id);
+                            return cwe != null ? cwe.label() : id;
+                        })
+                        .collect(java.util.stream.Collectors.joining(", "));
+                html.append("                        <tr><th>CWE</th><td>")
+                    .append(escapeHtml(cweLabels))
+                    .append("</td></tr>\n");
+            }
 
             if (!f.metadata().isEmpty()) {
                 for (var meta : f.metadata().entrySet()) {

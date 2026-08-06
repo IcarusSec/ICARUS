@@ -97,6 +97,29 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     /**
+     * Findings that actually belong in a report: ones the user explicitly sent through
+     * Evidence Capture (Apply / Send annotation), not every passively-detected finding
+     * (e.g. SensitiveHeaderModule's header checks, PassiveErrorModule) that only ever
+     * landed in the Results tab for awareness. Order follows EvidenceCapture's captured
+     * list, which the Evidence Manager's Move Up/Down buttons control directly — report
+     * order was previously undefined HashMap iteration order via getAllFindingRecords().
+     * Also drops orphaned entries left behind when a finding was re-edited (the old,
+     * pre-edit CapturedEvidence stays in the list, but the registry only tracks the latest).
+     */
+    public List<Finding> getReportableFindings() {
+        List<Finding> result = new ArrayList<>();
+        Set<Finding> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (var ce : evidenceCapture.getCaptured()) {
+            Finding f = ce.finding();
+            if (!seen.add(f)) continue;
+            var record = findings.getRecordByHash(f.similarityHash());
+            if (record == null || record.isSuppressed() || record.getFinding() != f) continue;
+            result.add(f);
+        }
+        return result;
+    }
+
+    /**
      * Window for managing the screenshots that will actually go into the HTML report —
      * separate from the Results tab, which lists every finding whether or not it has
      * evidence attached. Reachable from the "ICARUS → Manage Report Evidence" context-menu
@@ -110,23 +133,37 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         List<EvidenceCapture.CapturedEvidence> entries = new ArrayList<>(evidenceCapture.getCaptured());
 
-        DefaultTableModel model = new DefaultTableModel(new String[]{"Title", "Severity", "Path", "CWE", "Image File"}, 0) {
+        DefaultTableModel model = new DefaultTableModel(new String[]{"#", "Title", "Severity", "Path", "CWE", "Image File"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
         };
-        for (var ce : entries) {
-            Finding f = ce.finding();
-            model.addRow(new Object[]{
-                f.type(), f.severity().name(), f.path(),
-                String.join(", ", f.cweIds()), ce.imagePath().getFileName().toString()
-            });
-        }
 
         JTable table = new JTable(model);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(22);
-        table.setAutoCreateRowSorter(true);
+        // No row sorter: this table's order IS the report's order, driven entirely by the
+        // Move Up/Down buttons below — clicking a column header to sort would silently
+        // desync what the user sees from what Move Up/Down actually reorders.
         JScrollPane tableScroll = new JScrollPane(table);
+
+        // Rebuilds the table from `entries` in place, keeping the same row selected —
+        // called after every reorder/remove so the "#" column always matches report order.
+        Runnable refreshTable = () -> {
+            int selected = table.getSelectedRow();
+            model.setRowCount(0);
+            for (int i = 0; i < entries.size(); i++) {
+                var ce = entries.get(i);
+                Finding f = ce.finding();
+                model.addRow(new Object[]{
+                    i + 1, f.type(), f.severity().name(), f.path(),
+                    String.join(", ", f.cweIds()), ce.imagePath().getFileName().toString()
+                });
+            }
+            if (selected >= 0 && selected < table.getRowCount()) {
+                table.setRowSelectionInterval(selected, selected);
+            }
+        };
+        refreshTable.run();
 
         JLabel preview = new JLabel("Select a row to preview its screenshot", SwingConstants.CENTER);
         JScrollPane previewScroll = new JScrollPane(preview);
@@ -135,12 +172,12 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         table.getSelectionModel().addListSelectionListener(e -> {
             if (e.getValueIsAdjusting()) return;
             int row = table.getSelectedRow();
-            if (row < 0) {
+            if (row < 0 || row >= entries.size()) {
                 preview.setIcon(null);
                 preview.setText("Select a row to preview its screenshot");
                 return;
             }
-            var ce = entries.get(table.convertRowIndexToModel(row));
+            var ce = entries.get(row);
             Image scaled = ce.image().getScaledInstance(380, -1, Image.SCALE_SMOOTH);
             preview.setIcon(new ImageIcon(scaled));
             preview.setText(null);
@@ -150,40 +187,55 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         split.setResizeWeight(0.6);
         dialog.add(split, BorderLayout.CENTER);
 
+        JButton btnMoveUp = new JButton("Move Up");
+        btnMoveUp.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row <= 0) return;
+            evidenceCapture.moveCapturedUp(entries.get(row));
+            java.util.Collections.swap(entries, row, row - 1);
+            refreshTable.run();
+            table.setRowSelectionInterval(row - 1, row - 1);
+        });
+
+        JButton btnMoveDown = new JButton("Move Down");
+        btnMoveDown.addActionListener(e -> {
+            int row = table.getSelectedRow();
+            if (row < 0 || row >= entries.size() - 1) return;
+            evidenceCapture.moveCapturedDown(entries.get(row));
+            java.util.Collections.swap(entries, row, row + 1);
+            refreshTable.run();
+            table.setRowSelectionInterval(row + 1, row + 1);
+        });
+
         JButton btnEdit = new JButton("Edit…");
         btnEdit.addActionListener(e -> {
             int row = table.getSelectedRow();
             if (row < 0) return;
-            evidenceCapture.captureInteractive(entries.get(table.convertRowIndexToModel(row)).finding());
+            evidenceCapture.captureInteractive(entries.get(row).finding());
         });
 
         JButton btnRemove = new JButton("Remove Evidence");
         btnRemove.addActionListener(e -> {
             int row = table.getSelectedRow();
             if (row < 0) return;
-            int modelRow = table.convertRowIndexToModel(row);
             int confirm = JOptionPane.showConfirmDialog(dialog,
                     "Remove this screenshot from the report? The finding itself stays in the Results tab.",
                     "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             if (confirm != JOptionPane.YES_OPTION) return;
-            evidenceCapture.removeCaptured(entries.get(modelRow));
-            entries.remove(modelRow);
-            model.removeRow(modelRow);
+            evidenceCapture.removeCaptured(entries.get(row));
+            entries.remove(row);
+            refreshTable.run();
         });
 
         JButton btnGenerate = new JButton("Generate HTML Report");
-        btnGenerate.addActionListener(e -> {
-            List<Finding> reportFindings = new ArrayList<>();
-            for (var r : findings.getAllFindingRecords()) {
-                if (!r.isSuppressed()) reportFindings.add(r.getFinding());
-            }
-            generateHtmlReportInteractive(dialog, btnGenerate, reportFindings);
-        });
+        btnGenerate.addActionListener(e -> generateHtmlReportInteractive(dialog, btnGenerate, getReportableFindings()));
 
         JButton btnClose = new JButton("Close");
         btnClose.addActionListener(e -> dialog.dispose());
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(btnMoveUp);
+        btnPanel.add(btnMoveDown);
         btnPanel.add(btnEdit);
         btnPanel.add(btnRemove);
         btnPanel.add(btnGenerate);
@@ -582,13 +634,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         });
 
-        btnReport.addActionListener(e -> {
-            List<Finding> reportFindings = new ArrayList<>();
-            for (FindingRecord r : records) {
-                reportFindings.add(r.getFinding());
-            }
-            generateHtmlReportInteractive(dialog, btnReport, reportFindings);
-        });
+        btnReport.addActionListener(e -> generateHtmlReportInteractive(dialog, btnReport, getReportableFindings()));
 
         btnClose.addActionListener(e -> dialog.dispose());
 

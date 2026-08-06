@@ -22,6 +22,14 @@ repositories {
 
 dependencies {
     compileOnly 'net.portswigger.burp.extensions:montoya-api:2025.6'
+
+    // shadowJar bundles this into the shipped jar (Burp doesn't provide it, unlike Montoya).
+    // icu4j excluded: a mandatory transitive dependency of OpenPDF used for RTL/complex-script
+    // text layout, which this extension's reports never need -- confirmed Document/Paragraph/
+    // PdfPTable/Image all work without it. Saves ~15MB in the shaded jar for a ~2MB library.
+    implementation('com.github.librepdf:openpdf:3.0.5') {
+        exclude group: 'com.ibm.icu', module: 'icu4j'
+    }
 }
 
 shadowJar {

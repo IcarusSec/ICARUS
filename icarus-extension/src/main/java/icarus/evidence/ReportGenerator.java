@@ -267,7 +267,8 @@ public final class ReportGenerator {
             """.formatted(critical, high, medium, low, findings.size()));
     }
 
-    private long countBySeverity(List<Finding> findings, String severity) {
+    /** Shared with {@link PdfReportGenerator} so both formats count severities identically. */
+    static long countBySeverity(List<Finding> findings, String severity) {
         if (severity.equals("LOW")) {
             return findings.stream().filter(f ->
                 f.severity().name().equals("LOW") ||

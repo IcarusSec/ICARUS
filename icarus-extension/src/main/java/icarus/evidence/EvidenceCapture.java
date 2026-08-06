@@ -169,24 +169,45 @@ public final class EvidenceCapture {
             addCweChip(pnlChips, selectedCwe, existingCwe);
         }
 
-        JPopupMenu suggestPopup = new JPopupMenu();
+        // A JPopupMenu grabs keyboard focus for its own arrow-key navigation the moment
+        // show() is called, which yanks focus out of txtCwe after every keystroke — the
+        // user has to click back into the field to keep typing. A non-focusable JWindow
+        // (same trick ToastNotification uses) never takes focus at all, so txtCwe keeps it
+        // continuously while still being clickable.
+        JWindow suggestWindow = new JWindow(editor);
+        suggestWindow.setFocusableWindowState(false);
+        DefaultListModel<CweRepository.Cwe> suggestModel = new DefaultListModel<>();
+        JList<CweRepository.Cwe> suggestList = new JList<>(suggestModel);
+        suggestList.setCellRenderer((list, value, index, isSelected, cellHasFocus) ->
+                new JLabel(" " + value.label()) {{ setOpaque(true); setBackground(isSelected ? new Color(80, 80, 80) : BG_COLOR); setForeground(TEXT_COLOR); }});
+        suggestWindow.add(new JScrollPane(suggestList));
+        suggestWindow.setSize(360, 160);
+
+        Runnable hideSuggestions = () -> suggestWindow.setVisible(false);
+
+        suggestList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                int idx = suggestList.locationToIndex(e.getPoint());
+                if (idx >= 0) {
+                    addCweChip(pnlChips, selectedCwe, suggestModel.get(idx).id());
+                    txtCwe.setText("");
+                    hideSuggestions.run();
+                }
+            }
+        });
+
         Runnable refreshSuggestions = () -> {
-            suggestPopup.removeAll();
             List<CweRepository.Cwe> matches = cweRepository.search(txtCwe.getText());
             if (matches.isEmpty()) {
-                suggestPopup.setVisible(false);
+                hideSuggestions.run();
                 return;
             }
-            for (CweRepository.Cwe cwe : matches) {
-                JMenuItem item = new JMenuItem(cwe.label());
-                item.addActionListener(ev -> {
-                    addCweChip(pnlChips, selectedCwe, cwe.id());
-                    txtCwe.setText("");
-                    suggestPopup.setVisible(false);
-                });
-                suggestPopup.add(item);
-            }
-            suggestPopup.show(txtCwe, 0, txtCwe.getHeight());
+            suggestModel.clear();
+            matches.forEach(suggestModel::addElement);
+            Point loc = txtCwe.getLocationOnScreen();
+            suggestWindow.setLocation(loc.x, loc.y + txtCwe.getHeight());
+            suggestWindow.setVisible(true);
         };
         txtCwe.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { refreshSuggestions.run(); }
@@ -200,7 +221,11 @@ public final class EvidenceCapture {
             String id = matches.isEmpty() ? text : matches.get(0).id();
             addCweChip(pnlChips, selectedCwe, id);
             txtCwe.setText("");
-            suggestPopup.setVisible(false);
+            hideSuggestions.run();
+        });
+        txtCwe.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) { hideSuggestions.run(); }
         });
 
         JPanel pnlTopWrap = new JPanel();

@@ -138,6 +138,10 @@ public final class ParamValidatorModule implements IcarusModule {
         int delayMs = 0;
 
         for (int i = 0; i < mutatedRequests.size(); i++) {
+            if (Thread.currentThread().isInterrupted()) {
+                logger.accept("Stopped by user — " + (mutatedRequests.size() - i) + " mutation(s) skipped.");
+                break;
+            }
             Mutation m = mutations.get(i);
             logger.accept("testing " + shortPath(m.path()) + " with " + m.description().toLowerCase() + "...");
 

@@ -258,9 +258,30 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, previewScroll);
         split.setResizeWeight(0.6);
+        // Report-level free text (scope/methodology/takeaway), not tied to any one finding —
+        // persisted in config so it survives across Evidence Manager sessions. Read directly
+        // by ReportGenerator/PdfReportGenerator at generate time, no plumbing needed elsewhere.
+        JTextArea txtSummary = new JTextArea(config.getString("evidence.executive_summary", ""), 3, 0);
+        txtSummary.setLineWrap(true);
+        txtSummary.setWrapStyleWord(true);
+        txtSummary.setBorder(BorderFactory.createTitledBorder("Report Notes (optional executive summary, shown at the top of the report)"));
+        txtSummary.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() { config.set("evidence.executive_summary", txtSummary.getText()); }
+        });
+        JScrollPane summaryScroll = new JScrollPane(txtSummary);
+        summaryScroll.setPreferredSize(new Dimension(0, 80));
+
         JLabel dragHint = new JLabel("  Drag rows to reorder the report.");
         dragHint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-        dialog.add(dragHint, BorderLayout.NORTH);
+
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(summaryScroll, BorderLayout.CENTER);
+        topPanel.add(dragHint, BorderLayout.SOUTH);
+
+        dialog.add(topPanel, BorderLayout.NORTH);
         dialog.add(split, BorderLayout.CENTER);
 
         JButton btnEdit = new JButton("Edit…");
@@ -290,7 +311,12 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         btnGenerate.addActionListener(e -> generateHtmlReportInteractive(dialog, btnGenerate, getReportableFindings()));
 
         JButton btnClose = new JButton("Close");
-        btnClose.addActionListener(e -> dialog.dispose());
+        btnClose.addActionListener(e -> {
+            // Report Notes are kept up to date in-memory on every keystroke already;
+            // flush to persistent storage once here rather than on every keystroke.
+            api.persistence().extensionData().setString("config", config.serialize());
+            dialog.dispose();
+        });
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         btnPanel.add(btnEdit);

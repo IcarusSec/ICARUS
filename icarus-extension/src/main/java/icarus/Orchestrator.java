@@ -107,15 +107,17 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
      * Evidence Capture (Apply / Send annotation), not every passively-detected finding
      * (e.g. SensitiveHeaderModule's header checks, PassiveErrorModule) that only ever
      * landed in the Results tab for awareness. Order follows EvidenceCapture's captured
-     * list, which the Evidence Manager's Move Up/Down buttons control directly — report
-     * order was previously undefined HashMap iteration order via getAllFindingRecords().
+     * list, which the Evidence Manager's drag-and-drop reordering controls directly —
+     * report order was previously undefined HashMap iteration order via getAllFindingRecords().
      * Also drops orphaned entries left behind when a finding was re-edited (the old,
-     * pre-edit CapturedEvidence stays in the list, but the registry only tracks the latest).
+     * pre-edit CapturedEvidence stays in the list, but the registry only tracks the latest),
+     * and entries the user unchecked in the Evidence Manager's Include column.
      */
     public List<Finding> getReportableFindings() {
         List<Finding> result = new ArrayList<>();
         Set<Finding> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (var ce : evidenceCapture.getCaptured()) {
+            if (!evidenceCapture.isIncluded(ce)) continue;
             Finding f = ce.finding();
             if (!seen.add(f)) continue;
             var record = findings.getRecordByHash(f.similarityHash());
@@ -139,17 +141,25 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         List<EvidenceCapture.CapturedEvidence> entries = new ArrayList<>(evidenceCapture.getCaptured());
 
-        DefaultTableModel model = new DefaultTableModel(new String[]{"#", "Title", "Severity", "Path", "CWE", "Image File"}, 0) {
+        DefaultTableModel model = new DefaultTableModel(new String[]{"Include", "#", "Title", "Severity", "Path", "CWE", "Image File"}, 0) {
             @Override
-            public boolean isCellEditable(int row, int column) { return false; }
+            public boolean isCellEditable(int row, int column) { return column == 0; }
+
+            @Override
+            public Class<?> getColumnClass(int columnIndex) {
+                // Without this, an empty table (0 rows) can't infer Boolean from row data and
+                // renders column 0 as the text "true"/"false" instead of an actual checkbox.
+                return columnIndex == 0 ? Boolean.class : Object.class;
+            }
         };
 
         JTable table = new JTable(model);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         table.setRowHeight(22);
-        // No row sorter: this table's order IS the report's order, driven entirely by the
-        // Move Up/Down buttons below — clicking a column header to sort would silently
-        // desync what the user sees from what Move Up/Down actually reorders.
+        table.getColumnModel().getColumn(0).setMaxWidth(60);
+        // No row sorter: this table's order IS the report's order, driven entirely by
+        // drag-and-drop below — clicking a column header to sort would silently desync
+        // what the user sees from what dragging actually reorders.
         JScrollPane tableScroll = new JScrollPane(table);
 
         // Rebuilds the table from `entries` in place, keeping the same row selected —
@@ -161,7 +171,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 var ce = entries.get(i);
                 Finding f = ce.finding();
                 model.addRow(new Object[]{
-                    i + 1, f.type(), f.severity().name(), f.path(),
+                    evidenceCapture.isIncluded(ce), i + 1, f.type(), f.severity().name(), f.path(),
                     String.join(", ", f.cweIds()), ce.imagePath().getFileName().toString()
                 });
             }
@@ -170,6 +180,15 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         };
         refreshTable.run();
+
+        // Unchecking "Include" leaves the screenshot in place (unlike Remove) but drops it
+        // from the next Preview/Generate/Export — reversible, unlike deleting it.
+        model.addTableModelListener(e -> {
+            if (e.getColumn() != 0 || e.getType() != javax.swing.event.TableModelEvent.UPDATE) return;
+            int row = e.getFirstRow();
+            if (row < 0 || row >= entries.size()) return;
+            evidenceCapture.setIncluded(entries.get(row), (Boolean) model.getValueAt(row, 0));
+        });
 
         // Drag-and-drop row reordering: drag a row to a new position to reorder the report.
         // JTable's built-in row-move TransferHandler support, not a hand-rolled mouse listener.

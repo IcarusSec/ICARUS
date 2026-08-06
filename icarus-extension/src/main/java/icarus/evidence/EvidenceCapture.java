@@ -6,6 +6,7 @@ import icarus.core.Finding;
 import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
+import icarus.ui.ToastNotification;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -20,10 +21,13 @@ import java.awt.image.BufferedImage;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Consumer;
 
 public final class EvidenceCapture {
 
@@ -42,9 +46,18 @@ public final class EvidenceCapture {
     private final List<CapturedEvidence> captured = new ArrayList<>();
     private final CweRepository cweRepository = new CweRepository();
 
+    // Notified with the final, identity-stable Finding once evidence is saved — lets the
+    // caller (Orchestrator) fold it into the same registry the Results tab and report
+    // button read from, without EvidenceCapture needing to know about FindingRegistry.
+    private Consumer<Finding> onApplied = f -> {};
+
     public EvidenceCapture(MontoyaApi api, ModuleConfig config) {
         this.api = api;
         this.config = config;
+    }
+
+    public void setOnApplied(Consumer<Finding> onApplied) {
+        this.onApplied = onApplied;
     }
 
     public List<CapturedEvidence> getCaptured() {
@@ -248,41 +261,81 @@ public final class EvidenceCapture {
             }
         });
 
-        JButton btnProceed = createModernButton("Proceed to Annotation ➔", ACCENT_COLOR);
+        JButton btnAnnotate = createModernButton("Annotate First…", new Color(70, 70, 70));
+        JButton btnApply = createModernButton("Apply ➔ Add to Report", ACCENT_COLOR);
 
         btnCleanNoise.addActionListener(e -> {
             reqArea.setText(cleanNoise(reqArea.getText()));
             resArea.setText(cleanNoise(resArea.getText()));
         });
 
-        btnProceed.addActionListener(e -> {
-            String finalTitle = txtName.getText();
-            String finalDesc = txtDesc.getText();
-            Severity finalSev = (Severity) cbSev.getSelectedItem();
-
-            Finding.Builder builder = Finding.builder(finding.module(), finalTitle)
-                    .description(finalDesc)
-                    .severity(finalSev)
+        // Shared by both buttons below — builds the edited Finding once, from whatever's
+        // currently in the title/description/severity/CWE fields.
+        java.util.function.Supplier<Finding> buildUpdatedFinding = () -> {
+            Finding.Builder builder = Finding.builder(finding.module(), txtName.getText())
+                    .description(txtDesc.getText())
+                    .severity((Severity) cbSev.getSelectedItem())
                     .category(finding.category())
                     .path(finding.path())
                     .evidence(finding.evidence());
             finding.metadata().forEach(builder::meta);
             selectedCwe.forEach(builder::cwe);
-            Finding updatedFinding = builder.build();
+            return builder.build();
+        };
 
-            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(), finalTitle, finalDesc, finalSev.name(), chk1080.isSelected());
-            showPhase2(editor, updatedFinding, renderedText, finalTitle);
+        btnApply.addActionListener(e -> {
+            Finding updatedFinding = buildUpdatedFinding.get();
+            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
+                    updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            saveAndRegisterEvidence(updatedFinding, renderedText);
+            editor.dispose();
+        });
+
+        btnAnnotate.addActionListener(e -> {
+            Finding updatedFinding = buildUpdatedFinding.get();
+            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
+                    updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            showPhase2(editor, updatedFinding, renderedText, updatedFinding.type());
         });
 
         pnlBottom.add(btnCleanNoise);
         pnlBottom.add(new JSeparator(SwingConstants.VERTICAL));
         pnlBottom.add(chk1080);
-        pnlBottom.add(btnProceed);
+        pnlBottom.add(btnAnnotate);
+        pnlBottom.add(btnApply);
 
         editor.add(pnlTopWrap, BorderLayout.NORTH);
         editor.add(split, BorderLayout.CENTER);
         editor.add(pnlBottom, BorderLayout.SOUTH);
         editor.setVisible(true);
+    }
+
+    /**
+     * Writes the rendered evidence image to the configured output directory (no save
+     * dialog — this is the one-click path) and hands the finished {@code finding} to
+     * {@link #onApplied}, which folds it into the same registry the Results tab and
+     * "Generate HTML Report" read from. Using this exact finding object as both the
+     * {@link CapturedEvidence} key and the registered finding is what makes the
+     * screenshot actually show up in the report — a mismatch there was silently
+     * dropping evidence images before.
+     */
+    private void saveAndRegisterEvidence(Finding finding, BufferedImage image) {
+        try {
+            Path dir = Path.of(config.getString("evidence.output_dir", System.getProperty("user.home")));
+            Files.createDirectories(dir);
+            String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_") + "-" + System.currentTimeMillis() + ".png";
+            Path out = dir.resolve(filename);
+            ImageIO.write(image, "png", out.toFile());
+
+            captured.add(new CapturedEvidence(finding, out, image));
+            onApplied.accept(finding);
+            ToastNotification.show(api.userInterface().swingUtils().suiteFrame(),
+                    "Evidence added to report: " + finding.type());
+        } catch (IOException e) {
+            api.logging().logToError("Failed to save evidence screenshot: " + e);
+            JOptionPane.showMessageDialog(api.userInterface().swingUtils().suiteFrame(),
+                    "Failed to save evidence screenshot: " + e.getMessage());
+        }
     }
 
     private void addCweChip(JPanel pnlChips, List<String> selectedCwe, String cweId) {
@@ -1144,6 +1197,7 @@ public final class EvidenceCapture {
                     File f = fc.getSelectedFile();
                     ImageIO.write(out, "png", f);
                     captured.add(new CapturedEvidence(finding, f.toPath(), out));
+                    onApplied.accept(finding);
                     if (f.getParentFile() != null) {
                         config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
                         api.persistence().extensionData().setString("config", config.serialize());

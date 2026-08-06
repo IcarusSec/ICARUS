@@ -53,6 +53,18 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.autoAuth = autoAuth;
         this.findings = new FindingRegistry(api, config, SwingUtilities::invokeLater);
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
+
+        evidenceCapture.setOnApplied(this::registerManualFinding);
+    }
+
+    /**
+     * Called by EvidenceCapture once a finding's evidence is applied — folds it into the
+     * same registry manual/passive/scan findings share, so it shows up in the Results tab
+     * and "Generate HTML Report" immediately, and re-editing + re-applying later updates
+     * the same entry (matched by {@link Finding#similarityHash()}) instead of duplicating it.
+     */
+    private void registerManualFinding(Finding finding) {
+        findings.processDeduplication(List.of(finding), false);
     }
 
     public AutoAuthModule autoAuth() {
@@ -246,7 +258,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
         items.add(runAll);
 
-        var createEvidence = new JMenuItem("ICARUS → Create Evidence");
+        var createEvidence = new JMenuItem("ICARUS → Send to Reporter Creation");
         createEvidence.addActionListener(e -> {
             for (var rr : requestResponses) {
                 createManualEvidence(rr);

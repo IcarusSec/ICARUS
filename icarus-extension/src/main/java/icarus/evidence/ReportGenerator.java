@@ -113,17 +113,17 @@ public final class ReportGenerator {
                 <title>ICARUS Security Report</title>
                 <style>
                     :root {
-                        --bg: #1e1e1e;
-                        --card-bg: #2d2d2d;
-                        --text: #e0e0e0;
-                        --text-muted: #aaaaaa;
-                        --border: #444444;
-                        --accent: #5e9dd9;
-                        --critical: #ff4d4d;
-                        --high: #ff8c42;
-                        --medium: #f9c74f;
-                        --low: #4d908e;
-                        --info: #858585;
+                        --bg: #ffffff;
+                        --card-bg: #f7f7f7;
+                        --text: #1a1a1a;
+                        --text-muted: #666666;
+                        --border: #dddddd;
+                        --accent: #3e7bb8;
+                        --critical: #cc2e2e;
+                        --high: #d9711f;
+                        --medium: #b38f00;
+                        --low: #2f7a77;
+                        --info: #6e6e6e;
                     }
                     body {
                         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -133,7 +133,7 @@ public final class ReportGenerator {
                         margin: 0;
                         padding: 2rem;
                     }
-                    h1, h2, h3 { color: #ffffff; }
+                    h1, h2, h3 { color: var(--text); }
                     .header {
                         border-bottom: 2px solid var(--border);
                         padding-bottom: 1rem;
@@ -183,13 +183,13 @@ public final class ReportGenerator {
                         border-radius: 20px;
                         font-size: 0.85rem;
                         font-weight: 600;
-                        color: #1a1a1a;
+                        color: #ffffff;
                     }
                     .badge.CRITICAL { background-color: var(--critical); }
                     .badge.HIGH { background-color: var(--high); }
                     .badge.MEDIUM { background-color: var(--medium); }
                     .badge.LOW { background-color: var(--low); }
-                    .badge.INFO { background-color: var(--info); color: white; }
+                    .badge.INFO { background-color: var(--info); }
 
                     .finding-body { padding: 1.5rem; }
                     .meta-table {

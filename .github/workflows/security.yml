@@ -38,5 +38,7 @@ jobs:
       - name: Build project
         run: ./build.sh
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/java

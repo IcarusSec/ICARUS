@@ -39,6 +39,43 @@ public final class ScanRunner {
     // needs to track it so a Stop click has something to cancel.
     private volatile Future<?> currentTask;
 
+    // Static because ScanRunner is a singleton (one instance per Orchestrator) and modules
+    // (icarus.modules.*) need to poll this without each one being handed a ScanRunner reference.
+    private static volatile boolean paused = false;
+    private static final Object PAUSE_LOCK = new Object();
+
+    public static boolean isPaused() {
+        return paused;
+    }
+
+    /** Toggled by the live log window's Pause button. */
+    public static void togglePause() {
+        synchronized (PAUSE_LOCK) {
+            paused = !paused;
+            PAUSE_LOCK.notifyAll();
+        }
+    }
+
+    /**
+     * Blocks the calling thread while paused. Modules call this at the same per-request-loop
+     * points that already check {@code Thread.currentThread().isInterrupted()} for Stop, so
+     * pausing has the same "between requests, not mid-request" granularity Stop has.
+     * A Stop click's {@code Future.cancel(true)} interrupts this wait immediately, same as it
+     * would a plain {@code Thread.sleep}.
+     */
+    public static void waitIfPaused() {
+        synchronized (PAUSE_LOCK) {
+            while (paused) {
+                try {
+                    PAUSE_LOCK.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
     public ScanRunner(MontoyaApi api, List<IcarusModule> modules, ModuleConfig config,
                        BiConsumer<List<Finding>, Boolean> onFindings) {
         this.api = api;
@@ -65,6 +102,8 @@ public final class ScanRunner {
         if (task != null && !task.isDone()) {
             task.cancel(true);
         }
+        // Don't leave the next run starting out paused because this one was stopped mid-pause.
+        if (paused) togglePause();
     }
 
     public void runScan(HttpRequestResponse target, boolean isManual) {
@@ -165,6 +204,7 @@ public final class ScanRunner {
         }
 
         for (var module : modules) {
+            waitIfPaused();
             if (Thread.currentThread().isInterrupted()) {
                 log.accept("ICARUS scan stopped by user.");
                 break;
@@ -228,14 +268,24 @@ public final class ScanRunner {
             scrollPane.setBorder(BorderFactory.createEmptyBorder());
             frame.add(scrollPane, BorderLayout.CENTER);
 
+            JButton btnPause = new JButton(isPaused() ? "Resume" : "Pause");
+            btnPause.addActionListener(e -> {
+                togglePause();
+                btnPause.setText(isPaused() ? "Resume" : "Pause");
+                textArea.append(isPaused() ? "Paused — will resume before the next request.\n" : "Resumed.\n");
+                textArea.setCaretPosition(textArea.getDocument().getLength());
+            });
+
             JButton btnStop = new JButton("Stop");
             btnStop.addActionListener(e -> {
                 textArea.append("Stopping — cancelling current test...\n");
                 textArea.setCaretPosition(textArea.getDocument().getLength());
                 btnStop.setEnabled(false);
+                btnPause.setEnabled(false);
                 stopCurrent();
             });
             JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+            bottomBar.add(btnPause);
             bottomBar.add(btnStop);
             frame.add(bottomBar, BorderLayout.SOUTH);
 

@@ -35,10 +35,15 @@ public final class AutoAuthModule {
 
     private record InjectionTarget(String host, TargetKind kind, String headerName, String headerPrefix, List<Object> bodyPath, int sourceIndex) {}
 
-    /** One "Set as Auth Token Source" capture. Multiple can coexist; destinations pick which one feeds them. */
+    /**
+     * One "Set as Auth Token Source" capture. Multiple can coexist; destinations pick which one
+     * feeds them. Each source refreshes under its own lock so independent sources (e.g. two
+     * different login endpoints) refresh concurrently instead of queuing behind one another.
+     */
     private static final class Source {
         final HttpRequest sourceRequest;
         final List<Object> extractionPath;
+        final ReentrantLock lock = new ReentrantLock();
         volatile String cachedToken;
         volatile long expiresAt;
 
@@ -56,12 +61,17 @@ public final class AutoAuthModule {
     private final MontoyaApi api;
     private final ModuleConfig config;
 
-    // Guards both the check-then-refresh sequence (prevents concurrent threads from each
-    // firing their own refresh request under load) and re-entrancy: the refresh's own
-    // sendRequest() call routes back through the same HttpHandler on the same thread, and
-    // isHeldByCurrentThread() lets processOutgoingRequest recognize and skip that nested call
-    // instead of recursively refreshing forever or rewriting the login request itself.
-    private final ReentrantLock refreshLock = new ReentrantLock();
+    // Guards mutation of the sources/targets lists themselves (add/clear). Refresh serialization
+    // is per-Source (see Source.lock) so unrelated sources refresh concurrently instead of
+    // queuing behind one global lock.
+    private final ReentrantLock collectionsLock = new ReentrantLock();
+
+    // The refresh's own sendRequest() call routes back through the same HttpHandler on the same
+    // thread; this lets processOutgoingRequest recognize and skip that nested call instead of
+    // recursively refreshing forever or rewriting the login request itself. A ThreadLocal instead
+    // of a lock check because refreshes for different sources can now be in flight concurrently
+    // on different threads, each needing to recognize only its own nested call.
+    private static final ThreadLocal<Boolean> REFRESHING = ThreadLocal.withInitial(() -> false);
 
     private final List<Source> sources = new ArrayList<>();
     private final List<InjectionTarget> targets = new ArrayList<>();
@@ -100,12 +110,12 @@ public final class AutoAuthModule {
         if (chosen == null) return; // user cancelled the picker
 
         int index;
-        refreshLock.lock();
+        collectionsLock.lock();
         try {
             sources.add(new Source(rr.request(), chosen));
             index = sources.size();
         } finally {
-            refreshLock.unlock();
+            collectionsLock.unlock();
         }
         persistSession();
 
@@ -155,11 +165,11 @@ public final class AutoAuthModule {
             target = new InjectionTarget(host, TargetKind.BODY, null, null, chosen, sourceIndex);
         }
 
-        refreshLock.lock();
+        collectionsLock.lock();
         try {
             targets.add(target);
         } finally {
-            refreshLock.unlock();
+            collectionsLock.unlock();
         }
         persistSession();
 
@@ -169,12 +179,12 @@ public final class AutoAuthModule {
     }
 
     public void clearSession() {
-        refreshLock.lock();
+        collectionsLock.lock();
         try {
             sources.clear();
             targets.clear();
         } finally {
-            refreshLock.unlock();
+            collectionsLock.unlock();
         }
         persistSession();
     }
@@ -204,7 +214,7 @@ public final class AutoAuthModule {
      *
      * <p>This works because Montoya's {@code sendRequest()} invokes
      * {@link #processOutgoingRequest} on the <em>calling</em> thread (the same contract
-     * the existing {@link #refreshLock}{@code .isHeldByCurrentThread()} guard relies on).
+     * the {@code REFRESHING} thread-local guard in {@link #ensureFreshToken} relies on).
      *
      * <p>Usage in a module:
      * <pre>{@code
@@ -220,7 +230,7 @@ public final class AutoAuthModule {
 
     /** Called from Orchestrator.handleHttpRequestToBeSent for every outgoing request. */
     public HttpRequest processOutgoingRequest(HttpRequestToBeSent request) {
-        if (refreshLock.isHeldByCurrentThread()) {
+        if (REFRESHING.get()) {
             // Reentrant: this IS the token-fetch sendRequest() below, routed back through
             // us on the same thread. Never rewrite the login request itself.
             return request;
@@ -254,13 +264,10 @@ public final class AutoAuthModule {
         }
         if (applicable.isEmpty()) return request;
 
-        refreshLock.lock();
-        try {
-            for (InjectionTarget t : applicable) {
-                ensureFreshToken(sources.get(t.sourceIndex()));
-            }
-        } finally {
-            refreshLock.unlock();
+        // Each call locks only that target's own Source (see ensureFreshToken), so refreshing
+        // two unrelated sources for two concurrent requests no longer queues behind each other.
+        for (InjectionTarget t : applicable) {
+            ensureFreshToken(sources.get(t.sourceIndex()));
         }
 
         HttpRequest updated = request;
@@ -272,43 +279,55 @@ public final class AutoAuthModule {
         return updated;
     }
 
+    /**
+     * Locks only {@code s} — refreshing one source no longer blocks a concurrent request that
+     * needs a different source's token.
+     */
     private void ensureFreshToken(Source s) {
-        if (s.cachedToken != null && System.currentTimeMillis() < s.expiresAt) return; // refreshed while we waited for the lock
-
-        HttpRequestResponse result;
+        s.lock.lock();
         try {
-            result = api.http().sendRequest(s.sourceRequest);
-        } catch (Exception e) {
-            api.logging().logToError("AutoAuth: token refresh request failed: " + e);
-            s.cachedToken = null;
-            return;
-        }
-        if (result == null || result.response() == null) {
-            api.logging().logToError("AutoAuth: token refresh got no response.");
-            s.cachedToken = null;
-            return;
-        }
+            if (s.cachedToken != null && System.currentTimeMillis() < s.expiresAt) return; // refreshed while we waited for this source's lock
 
-        Object root;
-        try {
-            root = JsonParser.parse(result.response().bodyToString());
-        } catch (Exception e) {
-            api.logging().logToError("AutoAuth: token refresh response wasn't valid JSON.");
-            s.cachedToken = null;
-            return;
-        }
+            HttpRequestResponse result;
+            REFRESHING.set(true);
+            try {
+                result = api.http().sendRequest(s.sourceRequest);
+            } catch (Exception e) {
+                api.logging().logToError("AutoAuth: token refresh request failed: " + e);
+                s.cachedToken = null;
+                return;
+            } finally {
+                REFRESHING.set(false);
+            }
+            if (result == null || result.response() == null) {
+                api.logging().logToError("AutoAuth: token refresh got no response.");
+                s.cachedToken = null;
+                return;
+            }
 
-        Object value = JsonPaths.getAt(root, s.extractionPath);
-        if (!(value instanceof String tokenValue) || tokenValue.isBlank()) {
-            api.logging().logToError("AutoAuth: no token found at " + JsonPaths.pathToString(s.extractionPath) + " in the refresh response.");
-            s.cachedToken = null;
-            return;
-        }
+            Object root;
+            try {
+                root = JsonParser.parse(result.response().bodyToString());
+            } catch (Exception e) {
+                api.logging().logToError("AutoAuth: token refresh response wasn't valid JSON.");
+                s.cachedToken = null;
+                return;
+            }
 
-        s.cachedToken = tokenValue;
-        int refreshMinutes = Math.max(1, config.getInt(K_REFRESH_MINUTES, 15));
-        s.expiresAt = System.currentTimeMillis() + refreshMinutes * 60_000L;
-        api.logging().logToOutput("AutoAuth: token refreshed, valid for " + refreshMinutes + " minutes.");
+            Object value = JsonPaths.getAt(root, s.extractionPath);
+            if (!(value instanceof String tokenValue) || tokenValue.isBlank()) {
+                api.logging().logToError("AutoAuth: no token found at " + JsonPaths.pathToString(s.extractionPath) + " in the refresh response.");
+                s.cachedToken = null;
+                return;
+            }
+
+            s.cachedToken = tokenValue;
+            int refreshMinutes = Math.max(1, config.getInt(K_REFRESH_MINUTES, 15));
+            s.expiresAt = System.currentTimeMillis() + refreshMinutes * 60_000L;
+            api.logging().logToOutput("AutoAuth: token refreshed, valid for " + refreshMinutes + " minutes.");
+        } finally {
+            s.lock.unlock();
+        }
     }
 
     private boolean targetPresent(HttpRequest request, InjectionTarget t) {

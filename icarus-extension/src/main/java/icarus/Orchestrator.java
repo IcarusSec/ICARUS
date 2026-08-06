@@ -18,6 +18,10 @@ import icarus.ui.ToastNotification;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -165,6 +169,54 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         };
         refreshTable.run();
 
+        // Drag-and-drop row reordering: drag a row to a new position to reorder the report.
+        // JTable's built-in row-move TransferHandler support, not a hand-rolled mouse listener.
+        table.setDragEnabled(true);
+        table.setDropMode(DropMode.INSERT_ROWS);
+        DataFlavor rowFlavor = new DataFlavor(Integer.class, "Evidence Manager row index");
+        table.setTransferHandler(new TransferHandler() {
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                int row = table.getSelectedRow();
+                return new Transferable() {
+                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{rowFlavor}; }
+                    public boolean isDataFlavorSupported(DataFlavor flavor) { return rowFlavor.equals(flavor); }
+                    public Object getTransferData(DataFlavor flavor) { return row; }
+                };
+            }
+
+            @Override
+            public int getSourceActions(JComponent c) { return MOVE; }
+
+            @Override
+            public boolean canImport(TransferSupport support) {
+                return support.isDrop() && support.isDataFlavorSupported(rowFlavor);
+            }
+
+            @Override
+            public boolean importData(TransferSupport support) {
+                if (!canImport(support)) return false;
+                try {
+                    int from = (int) support.getTransferable().getTransferData(rowFlavor);
+                    int to = ((JTable.DropLocation) support.getDropLocation()).getRow();
+                    if (to > from) to--; // dropping below the dragged row's old slot shifts by one
+                    if (from < 0 || from >= entries.size() || to < 0 || to >= entries.size() || from == to) {
+                        return false;
+                    }
+
+                    var moved = entries.remove(from);
+                    entries.add(to, moved);
+                    evidenceCapture.reorderCaptured(entries);
+
+                    refreshTable.run();
+                    table.setRowSelectionInterval(to, to);
+                    return true;
+                } catch (UnsupportedFlavorException | IOException ex) {
+                    return false;
+                }
+            }
+        });
+
         JLabel preview = new JLabel("Select a row to preview its screenshot", SwingConstants.CENTER);
         JScrollPane previewScroll = new JScrollPane(preview);
         previewScroll.setPreferredSize(new Dimension(420, 0));
@@ -185,27 +237,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, previewScroll);
         split.setResizeWeight(0.6);
+        JLabel dragHint = new JLabel("  Drag rows to reorder the report.");
+        dragHint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        dialog.add(dragHint, BorderLayout.NORTH);
         dialog.add(split, BorderLayout.CENTER);
-
-        JButton btnMoveUp = new JButton("Move Up");
-        btnMoveUp.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row <= 0) return;
-            evidenceCapture.moveCapturedUp(entries.get(row));
-            java.util.Collections.swap(entries, row, row - 1);
-            refreshTable.run();
-            table.setRowSelectionInterval(row - 1, row - 1);
-        });
-
-        JButton btnMoveDown = new JButton("Move Down");
-        btnMoveDown.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0 || row >= entries.size() - 1) return;
-            evidenceCapture.moveCapturedDown(entries.get(row));
-            java.util.Collections.swap(entries, row, row + 1);
-            refreshTable.run();
-            table.setRowSelectionInterval(row + 1, row + 1);
-        });
 
         JButton btnEdit = new JButton("Edit…");
         btnEdit.addActionListener(e -> {
@@ -234,8 +269,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         btnClose.addActionListener(e -> dialog.dispose());
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnPanel.add(btnMoveUp);
-        btnPanel.add(btnMoveDown);
         btnPanel.add(btnEdit);
         btnPanel.add(btnRemove);
         btnPanel.add(btnGenerate);

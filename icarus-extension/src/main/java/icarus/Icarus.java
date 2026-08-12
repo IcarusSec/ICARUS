@@ -74,10 +74,18 @@ public class Icarus implements BurpExtension {
         // Burp's Settings"), confirmed against the bundled Montoya API sources/tutorial in
         // /usr/share/burpsuite/burpsuite.jar. Registering via a HotKey object (rather than
         // the deprecated raw-String overload) also surfaces this in Burp's Command Palette.
-        HotKey createEvidenceHotKey = HotKey.hotKey("ICARUS: Send to Reporter Creation", "Ctrl+P");
-        api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, createEvidenceHotKey,
-                event -> event.messageEditorRequestResponse()
-                        .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
+        // Wrapped in catch(Throwable): on Burp builds/environments missing the HotKey API,
+        // the reference triggers a ClassNotFoundException at the classloader level (not a
+        // regular Exception) — left unguarded, that aborts initialize() before the passive
+        // HTTP handler below gets registered, silently breaking every module that depends on it.
+        try {
+            HotKey createEvidenceHotKey = HotKey.hotKey("ICARUS: Send to Reporter Creation", "Ctrl+P");
+            api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, createEvidenceHotKey,
+                    event -> event.messageEditorRequestResponse()
+                            .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
+        } catch (Throwable t) {
+            api.logging().logToError("HotKey registration failed (incompatible Burp API version): " + t.getMessage());
+        }
 
         // Register passive HTTP handler for SensitiveHeaderModule
         api.http().registerHttpHandler(orchestrator);

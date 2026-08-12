@@ -93,7 +93,7 @@ public class Icarus implements BurpExtension {
         api.logging().logToOutput(NAME + " v" + VERSION + " loaded — " + modules.size() + " modules ready.");
     }
 
-    private void applyDefaults(ModuleConfig config) {
+    public static void applyDefaults(ModuleConfig config) {
         // ── ParamValidator defaults ──
         config.set("pv.enabled", true);
         config.set("pv.structural", true);

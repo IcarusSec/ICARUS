@@ -83,6 +83,11 @@ public final class ModuleConfig {
         return Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
 
+    /** Removes all entries. Used by "Reset to Default" before re-applying defaults. */
+    public void clear() {
+        values.clear();
+    }
+
     // ── Persistence (round-trips through a single string, e.g. Burp's extensionData) ──
 
     /** Serializes all entries as Java {@link Properties} text. */

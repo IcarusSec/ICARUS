@@ -1,6 +1,7 @@
 package icarus.ui;
 
 import burp.api.montoya.MontoyaApi;
+import icarus.Icarus;
 import icarus.autoauth.AutoAuthModule;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
@@ -66,6 +67,12 @@ public class SettingsPanel {
         themeHelper.styleButton(btnSave);
         btnSave.addActionListener(e -> saveAll());
         pnlTop.add(btnSave);
+
+        JButton btnReset = new JButton("Reset to Default");
+        themeHelper.styleButton(btnReset);
+        btnReset.addActionListener(e -> resetToDefault());
+        pnlTop.add(btnReset);
+
         mainPanel.add(pnlTop, BorderLayout.NORTH);
 
         JTabbedPane settingsTabs = new JTabbedPane();
@@ -312,5 +319,25 @@ public class SettingsPanel {
         }
         api.persistence().extensionData().setString("config", config.serialize());
         api.logging().logToOutput("Settings saved.");
+    }
+
+    private void resetToDefault() {
+        int confirm = JOptionPane.showConfirmDialog(mainPanel,
+                "Reset all settings to their default values? This cannot be undone.",
+                "Reset to Default", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) return;
+
+        config.clear();
+        Icarus.applyDefaults(config);
+        api.persistence().extensionData().setString("config", config.serialize());
+
+        saveHooks.clear();
+        expandableLists.clear();
+        mainPanel.removeAll();
+        buildUI();
+        mainPanel.revalidate();
+        mainPanel.repaint();
+
+        api.logging().logToOutput("Settings reset to default.");
     }
 }

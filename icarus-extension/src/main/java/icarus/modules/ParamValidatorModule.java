@@ -2,6 +2,9 @@ package icarus.modules;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.params.HttpParameter;
+import burp.api.montoya.http.message.params.HttpParameterType;
+import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import icarus.core.Category;
@@ -31,7 +34,7 @@ public final class ParamValidatorModule implements IcarusModule {
     }
 
     record MutationSpec(String type, String description, Object value, boolean remove, Category category) {}
-    record Mutation(String path, String type, String description, Category category, String body, Object value) {}
+    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value) {}
 
     @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
@@ -41,13 +44,18 @@ public final class ParamValidatorModule implements IcarusModule {
 
         boolean looksLikeJson = (contentType != null && contentType.toLowerCase().contains("json"))
                 || (originalBody != null && (originalBody.trim().startsWith("{") || originalBody.trim().startsWith("[")));
+        boolean hasJsonBody = originalBody != null && !originalBody.isBlank() && looksLikeJson;
 
-        if (originalBody == null || originalBody.isBlank() || !looksLikeJson) {
+        List<ParsedHttpParameter> urlParams = request.parameters().stream()
+                .filter(p -> p.type() == HttpParameterType.URL)
+                .toList();
+
+        if (!hasJsonBody && urlParams.isEmpty()) {
             return List.of();
         }
 
-        Object originalRoot = JsonParser.parse(originalBody);
-        List<List<Object>> allPaths = JsonPaths.collect(originalRoot);
+        Object originalRoot = hasJsonBody ? JsonParser.parse(originalBody) : null;
+        List<List<Object>> allPaths = hasJsonBody ? JsonPaths.collect(originalRoot) : List.of();
 
         PathRules pathRules = new PathRules(
                 config.getStringList("pv.include_paths"),
@@ -63,7 +71,7 @@ public final class ParamValidatorModule implements IcarusModule {
             eligiblePaths.add(path);
         }
 
-        logger.accept("Detected " + eligiblePaths.size() + " inputs on body.");
+        logger.accept("Detected " + (eligiblePaths.size() + urlParams.size()) + " inputs (" + eligiblePaths.size() + " body, " + urlParams.size() + " URL).");
 
         int maxMutations = config.getInt("pv.max_mutations", 60);
         List<Mutation> mutations = new ArrayList<>();
@@ -73,12 +81,15 @@ public final class ParamValidatorModule implements IcarusModule {
         // ~25 specs (multi-line injection payloads); depth-first order meant maxMutations was
         // often spent entirely on the first field or two, so later fields — often where numeric
         // params live — silently got zero boundary specs (e.g. NUMBER_NEGATIVE) generated at all.
+        // Each field is either a JSON body path (fieldPaths set, fieldUrlParam null) or a URL
+        // query parameter (fieldUrlParam set, fieldPaths null) — mutually exclusive per index.
         List<String> fieldPathStrings = new ArrayList<>();
         List<List<Object>> fieldPaths = new ArrayList<>();
+        List<ParsedHttpParameter> fieldUrlParam = new ArrayList<>();
         List<List<MutationSpec>> fieldSpecs = new ArrayList<>();
         for (List<Object> path : eligiblePaths) {
             String pathString = JsonPaths.pathToString(path);
-            Object leafValue = JsonPaths.getAt(JsonParser.parse(originalBody), path);
+            Object leafValue = JsonPaths.getAt(originalRoot, path);
 
             List<MutationSpec> specs = new ArrayList<>();
             for (MutationSpec spec : SpecsFactory.specsFor(leafValue, config)) {
@@ -88,6 +99,24 @@ public final class ParamValidatorModule implements IcarusModule {
             if (!specs.isEmpty()) {
                 fieldPathStrings.add(pathString);
                 fieldPaths.add(path);
+                fieldUrlParam.add(null);
+                fieldSpecs.add(specs);
+            }
+        }
+        for (ParsedHttpParameter param : urlParams) {
+            String pathString = "url:" + param.name();
+            if (!pathRules.isIncluded(pathString)) continue;
+            if (pathRules.isExcluded(pathString)) continue;
+
+            List<MutationSpec> specs = new ArrayList<>();
+            for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config)) {
+                if (pathRules.isException(pathString, spec)) continue;
+                specs.add(spec);
+            }
+            if (!specs.isEmpty()) {
+                fieldPathStrings.add(pathString);
+                fieldPaths.add(null);
+                fieldUrlParam.add(param);
                 fieldSpecs.add(specs);
             }
         }
@@ -101,17 +130,32 @@ public final class ParamValidatorModule implements IcarusModule {
                 anyFieldHadSpecAtThisRound = true;
 
                 MutationSpec spec = specs.get(round);
-                Object clonedRoot = JsonParser.parse(originalBody);
-                boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
-                if (applied) {
+                ParsedHttpParameter urlParam = fieldUrlParam.get(f);
+                if (urlParam != null) {
+                    HttpRequest mutatedRequest = spec.remove()
+                            ? request.withRemovedParameters(HttpParameter.urlParameter(urlParam.name(), urlParam.value()))
+                            : request.withUpdatedParameters(HttpParameter.urlParameter(urlParam.name(), spec.value() != null ? spec.value().toString() : ""));
                     mutations.add(new Mutation(
                             fieldPathStrings.get(f),
                             spec.type(),
                             spec.description(),
                             spec.category(),
-                            JsonParser.write(clonedRoot),
+                            mutatedRequest,
                             spec.value()
                     ));
+                } else {
+                    Object clonedRoot = JsonParser.parse(originalBody);
+                    boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
+                    if (applied) {
+                        mutations.add(new Mutation(
+                                fieldPathStrings.get(f),
+                                spec.type(),
+                                spec.description(),
+                                spec.category(),
+                                request.withBody(JsonParser.write(clonedRoot)),
+                                spec.value()
+                        ));
+                    }
                 }
             }
             if (!anyFieldHadSpecAtThisRound) break; // every field's spec list is exhausted
@@ -153,7 +197,7 @@ public final class ParamValidatorModule implements IcarusModule {
 
         List<HttpRequest> mutatedRequests = new ArrayList<>();
         for (Mutation m : mutations) {
-            mutatedRequests.add(request.withBody(m.body()));
+            mutatedRequests.add(m.request());
         }
 
         long[] requestTimes = new long[mutatedRequests.size()];

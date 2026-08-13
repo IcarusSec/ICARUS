@@ -562,7 +562,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     private void exportReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings,
                                           String extension, String defaultFileName, String formatLabel, ReportWriter writer) {
-        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));
         fc.setSelectedFile(new java.io.File(defaultFileName));
         if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return;
@@ -629,7 +629,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             return;
         }
 
-        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));
         fc.setSelectedFile(new java.io.File("project.icarus"));
         if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return;
@@ -683,7 +683,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
      * and reportable, not just sitting in {@link EvidenceCapture} orphaned from the registry.
      */
     public void importProjectStateInteractive(Component parent, JButton triggerButton, Runnable onImported) {
-        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));
         if (fc.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return;
         }
@@ -710,7 +710,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
                 try {
                     ProjectStateCodec.ImportResult result = get();
-                    Path dir = Path.of(config.getString("evidence.output_dir", System.getProperty("user.home")));
+                    Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
                     Files.createDirectories(dir);
 
                     evidenceCapture.clearAll();

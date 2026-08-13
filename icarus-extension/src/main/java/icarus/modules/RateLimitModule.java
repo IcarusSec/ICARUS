@@ -578,7 +578,7 @@ public class RateLimitModule implements IcarusModule {
     // check + remembered "evidence.output_dir") instead of silently dumping to the home dir.
     private void promptSaveAuditLog(String contents, String requestPath, ModuleConfig config) {
         Runnable showDialog = () -> {
-            String lastDir = config.getString("evidence.output_dir", System.getProperty("user.home"));
+            String lastDir = EvidencePaths.defaultOutputDir(api, config);
             JFileChooser fc = new JFileChooser(new File(lastDir));
             String suggested = "icarus_ratelimit_audit_" + requestPath.replaceAll("[^a-zA-Z0-9]+", "_") + "_" + System.currentTimeMillis() + ".txt";
             fc.setSelectedFile(new File(suggested));

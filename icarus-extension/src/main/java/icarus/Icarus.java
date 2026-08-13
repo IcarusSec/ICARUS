@@ -209,7 +209,9 @@ public class Icarus implements BurpExtension {
         // ── Evidence defaults ──
         config.set("evidence.enabled", true);
         config.set("evidence.auto_capture", true);
-        config.set("evidence.output_dir", System.getProperty("user.home") + "/icarus-reports");
+        // No default set here: EvidencePaths.defaultOutputDir() resolves this dynamically
+        // (project directory, falling back to ~/icarus-reports) until the user explicitly
+        // picks a folder via a save dialog, which then pins it via config.set().
         config.set("evidence.html_report", true);
         config.set("evidence.colorscheme", "Minimal Dark");
         config.set("evidence.include_project_name", true);

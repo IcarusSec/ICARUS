@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import icarus.core.Category;
+import icarus.core.EvidencePaths;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.JsonParser;
@@ -198,7 +199,7 @@ public class PostmanExportModule implements IcarusModule {
         String[] savedPath = { null };
 
         Runnable showDialog = () -> {
-            String lastDir = config.getString("evidence.output_dir", System.getProperty("user.home"));
+            String lastDir = EvidencePaths.defaultOutputDir(api, config);
             JFileChooser fc = new JFileChooser(new File(lastDir));
             fc.setSelectedFile(new File(suggestedFileName(requestPath)));
             java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();

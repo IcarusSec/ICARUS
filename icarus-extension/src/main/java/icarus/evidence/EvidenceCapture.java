@@ -2,6 +2,7 @@ package icarus.evidence;
 
 import burp.api.montoya.MontoyaApi;
 import icarus.core.Category;
+import icarus.core.EvidencePaths;
 import icarus.core.Finding;
 import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
@@ -440,7 +441,7 @@ public final class EvidenceCapture {
      */
     private void saveAndRegisterEvidence(Finding finding, BufferedImage image) {
         try {
-            Path dir = Path.of(config.getString("evidence.output_dir", System.getProperty("user.home")));
+            Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
             Files.createDirectories(dir);
             String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_") + "-" + System.currentTimeMillis() + ".png";
             Path out = dir.resolve(filename);
@@ -1309,7 +1310,7 @@ public final class EvidenceCapture {
             try {
                 BufferedImage out = renderFinalImage(snap, shapes, kinds, cols);
 
-                String lastDir = config.getString("evidence.output_dir", System.getProperty("user.home"));
+                String lastDir = EvidencePaths.defaultOutputDir(api, config);
                 JFileChooser fc = new JFileChooser(new File(lastDir));
                 fc.setSelectedFile(new File("evidence-" + finalTitle.replaceAll("[^a-zA-Z0-9.-]", "_") + ".png"));
                 if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {

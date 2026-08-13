@@ -3,6 +3,7 @@ package icarus.ui;
 import burp.api.montoya.MontoyaApi;
 import icarus.Icarus;
 import icarus.autoauth.AutoAuthModule;
+import icarus.core.EvidencePaths;
 import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
@@ -181,6 +182,7 @@ public class SettingsPanel {
 
         // Evidence
         JPanel pnlEvidence = createSection("Evidence Capture");
+        addOutputDirField(pnlEvidence);
         addComboBox(pnlEvidence, "evidence.colorscheme", "Screenshot Color Scheme:", EvidenceColorScheme.names());
         addCheckbox(pnlEvidence, "evidence.include_project_name", "Include Project Name in Evidence/Report");
         addComboBox(pnlEvidence, "evidence.manual_severity", "Manual \"Create Evidence\" Severity:",
@@ -539,6 +541,56 @@ public class SettingsPanel {
         inner.add(p);
 
         saveHooks.add(() -> config.set(key, tf.getText()));
+    }
+
+    /**
+     * "evidence.output_dir" gets its own field instead of {@link #addField}: it needs a
+     * folder-picker button, and shows {@link EvidencePaths#defaultOutputDir} — the folder
+     * actually in effect right now, whether the user pinned one explicitly or it's still
+     * auto-resolved from the open project — not just whatever raw string (possibly blank)
+     * happens to be in config.
+     */
+    private void addOutputDirField(JPanel parent) {
+        JPanel row = new JPanel(new BorderLayout(4, 0));
+        themeHelper.applyTheme(row);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel lbl = new JLabel("Evidence Output Folder:");
+        themeHelper.applyTheme(lbl);
+        row.add(lbl, BorderLayout.WEST);
+
+        JTextField tf = new JTextField(EvidencePaths.defaultOutputDir(api, config));
+        themeHelper.applyTheme(tf);
+        row.add(tf, BorderLayout.CENTER);
+
+        JButton btnBrowse = new JButton("Browse…");
+        themeHelper.styleButton(btnBrowse);
+        btnBrowse.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser(tf.getText());
+            fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            if (fc.showOpenDialog(mainPanel) == JFileChooser.APPROVE_OPTION) {
+                tf.setText(fc.getSelectedFile().getAbsolutePath());
+            }
+        });
+
+        JButton btnAuto = new JButton("Auto");
+        themeHelper.styleButton(btnAuto);
+        btnAuto.setToolTipText("Clear to auto-detect from the open project folder each time");
+        btnAuto.addActionListener(e -> tf.setText(""));
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        themeHelper.applyTheme(buttons);
+        buttons.add(btnBrowse);
+        buttons.add(btnAuto);
+        row.add(buttons, BorderLayout.EAST);
+
+        JPanel inner = (JPanel) parent.getComponent(0);
+        inner.add(row);
+        inner.add(Box.createRigidArea(new Dimension(0, 5)));
+
+        // Blank persists as blank (not this call's resolved default) — EvidencePaths treats a
+        // blank/unset value as "keep auto-resolving," which is exactly what "Auto" means here.
+        saveHooks.add(() -> config.set("evidence.output_dir", tf.getText()));
     }
 
     private void addComboBox(JPanel parent, String key, String label, String[] options) {

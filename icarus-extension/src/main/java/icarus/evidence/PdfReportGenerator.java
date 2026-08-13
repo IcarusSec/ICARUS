@@ -4,9 +4,14 @@ import burp.api.montoya.MontoyaApi;
 
 import icarus.core.Finding;
 import icarus.core.ModuleConfig;
+import icarus.core.ReportTemplateConfig;
 import icarus.evidence.EvidenceCapture.CapturedEvidence;
 
+import org.commonmark.parser.Parser;
+
 import org.openpdf.text.*;
+import org.openpdf.text.pdf.PdfAction;
+import org.openpdf.text.pdf.PdfOutline;
 import org.openpdf.text.pdf.PdfPCell;
 import org.openpdf.text.pdf.PdfPTable;
 import org.openpdf.text.pdf.PdfWriter;
@@ -51,9 +56,20 @@ public final class PdfReportGenerator {
     private static final Color CARD_BG  = new Color(0xf7, 0xf7, 0xf7);
 
     private final MontoyaApi api;
+    private final Parser markdownParser = Parser.builder().build();
 
     public PdfReportGenerator(MontoyaApi api) {
         this.api = api;
+    }
+
+    /** Parses a Settings-supplied "#rrggbb" hex string, falling back to {@code fallback} if unset/invalid. */
+    private static Color themeColor(String hex, Color fallback) {
+        if (hex == null || hex.isBlank()) return fallback;
+        try {
+            return Color.decode(hex);
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
     }
 
     /** Mirrors {@link ReportGenerator#generate}'s contract: same gating, same return meaning. */
@@ -74,6 +90,10 @@ public final class PdfReportGenerator {
             if (name != null && !name.isBlank()) projectName = name;
         }
 
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        Color accent = themeColor(rtc.primaryColor(), ACCENT);
+        boolean addBookmarks = rtc.tocEnabled();
+
         // Not try-with-resources: doc.close() below already closes the underlying
         // FileOutputStream via PdfWriter/DocWriter, and closing it again first would leave
         // doc.close() flushing to an already-closed stream ("Stream Closed" IOException).
@@ -89,9 +109,9 @@ public final class PdfReportGenerator {
             doc.open();
 
             appendHeader(doc, reportDir.getFileName().toString(), projectName);
-            appendExecutiveSummary(doc, config.getString("evidence.executive_summary", ""));
-            appendSummary(doc, findings);
-            appendFindings(doc, findings, evidenceByHash);
+            appendSections(doc, rtc, accent, writer, addBookmarks);
+            appendSummary(doc, findings, accent);
+            appendFindings(doc, findings, evidenceByHash, writer, addBookmarks);
         } catch (DocumentException e) {
             throw new IOException("PDF generation failed", e);
         } finally {
@@ -113,26 +133,42 @@ public final class PdfReportGenerator {
         doc.add(sub);
     }
 
-    private void appendExecutiveSummary(Document doc, String executiveSummary) throws DocumentException {
-        if (executiveSummary == null || executiveSummary.isBlank()) return;
+    /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,
+     *  with {{variable}} interpolation — one bordered card per section, matching the old
+     *  single "Executive Summary" card's look. Bookmarks added when {@code addBookmarks}. */
+    private void appendSections(Document doc, ReportTemplateConfig rtc, Color accent, PdfWriter writer, boolean addBookmarks) throws DocumentException {
+        int i = 0;
+        for (ReportTemplateConfig.Section section : rtc.sections()) {
+            i++;
+            String destName = "section-" + i;
 
-        PdfPTable box = new PdfPTable(1);
-        box.setWidthPercentage(100);
-        PdfPCell cell = new PdfPCell();
-        cell.setBackgroundColor(CARD_BG);
-        cell.setBorderColor(BORDER);
-        cell.setPadding(10f);
-        Paragraph heading = new Paragraph("Executive Summary", SECTION_FONT);
-        heading.setSpacingAfter(4f);
-        cell.addElement(heading);
-        cell.addElement(new Paragraph(executiveSummary, BODY_FONT));
-        box.addCell(cell);
+            PdfPTable box = new PdfPTable(1);
+            box.setWidthPercentage(100);
+            box.setSpacingAfter(10f);
+            PdfPCell cell = new PdfPCell();
+            cell.setBackgroundColor(CARD_BG);
+            cell.setBorderColor(BORDER);
+            cell.setPadding(10f);
 
-        doc.add(box);
-        doc.add(Chunk.NEWLINE);
+            Chunk titleChunk = new Chunk(section.title(), SECTION_FONT);
+            if (addBookmarks) titleChunk.setLocalDestination(destName);
+            Paragraph heading = new Paragraph(titleChunk);
+            heading.setSpacingAfter(4f);
+            cell.addElement(heading);
+
+            var body = MarkdownPdfRenderer.render(markdownParser.parse(rtc.interpolate(section.content())), BODY_FONT, accent);
+            for (Element el : body) cell.addElement(el);
+
+            box.addCell(cell);
+            doc.add(box);
+
+            if (addBookmarks) {
+                new PdfOutline(writer.getRootOutline(), PdfAction.gotoLocalPage(destName, false), section.title());
+            }
+        }
     }
 
-    private void appendSummary(Document doc, List<Finding> findings) throws DocumentException {
+    private void appendSummary(Document doc, List<Finding> findings, Color accent) throws DocumentException {
         long critical = ReportGenerator.countBySeverity(findings, "CRITICAL");
         long high = ReportGenerator.countBySeverity(findings, "HIGH");
         long medium = ReportGenerator.countBySeverity(findings, "MEDIUM");
@@ -145,7 +181,7 @@ public final class PdfReportGenerator {
         table.addCell(statCell(high, "HIGH", HIGH));
         table.addCell(statCell(medium, "MEDIUM", MEDIUM));
         table.addCell(statCell(low, "LOW/INFO", LOW));
-        table.addCell(statCell(findings.size(), "TOTAL FINDINGS", ACCENT));
+        table.addCell(statCell(findings.size(), "TOTAL FINDINGS", accent));
         doc.add(table);
     }
 
@@ -168,21 +204,19 @@ public final class PdfReportGenerator {
         return cell;
     }
 
-    private void appendFindings(Document doc, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash) throws DocumentException {
+    private void appendFindings(Document doc, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, PdfWriter writer, boolean addBookmarks) throws DocumentException {
         doc.add(new Paragraph("Findings", SECTION_FONT));
         doc.add(Chunk.NEWLINE);
 
         int index = 1;
         for (Finding f : findings) {
-            // Renders the first captured item per finding for now — full multi-evidence
-            // rendering (looping the group) lands in Step 06.
-            List<CapturedEvidence> group = evidenceByHash.get(f.similarityHash());
-            CapturedEvidence first = (group == null || group.isEmpty()) ? null : group.get(0);
-            appendFindingCard(doc, index++, f, first);
+            List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
+            appendFindingCard(doc, index, f, group, writer, addBookmarks);
+            index++;
         }
     }
 
-    private void appendFindingCard(Document doc, int index, Finding f, CapturedEvidence evidence) throws DocumentException {
+    private void appendFindingCard(Document doc, int index, Finding f, List<CapturedEvidence> evidenceGroup, PdfWriter writer, boolean addBookmarks) throws DocumentException {
         // Everything about this finding — title/badge, meta rows, and the screenshot — is
         // built as rows of ONE PdfPTable, not separate doc.add() calls. A PdfPTable's own
         // rows always render in the order added, even when the table splits across a page
@@ -194,8 +228,14 @@ public final class PdfReportGenerator {
         PdfPTable card = new PdfPTable(new float[]{1, 4});
         card.setWidthPercentage(100);
         card.setSpacingBefore(8f);
+        // Keeps each evidence image + its caption row from splitting across a page break —
+        // the whole row moves to the next page as a unit instead.
+        card.setSplitRows(false);
 
-        PdfPCell titleCell = new PdfPCell(new Phrase("#" + index + ". " + f.type(), FINDING_TITLE_FONT));
+        String destName = "finding-" + index;
+        Chunk titleChunk = new Chunk("#" + index + ". " + f.type(), FINDING_TITLE_FONT);
+        if (addBookmarks) titleChunk.setLocalDestination(destName);
+        PdfPCell titleCell = new PdfPCell(new Phrase(titleChunk));
         titleCell.setColspan(2);
         titleCell.setBorder(Rectangle.BOTTOM);
         titleCell.setBorderColor(BORDER);
@@ -224,29 +264,48 @@ public final class PdfReportGenerator {
             addMetaRow(card, entry.getKey(), entry.getValue());
         }
 
-        PdfPCell contentCell = new PdfPCell();
-        contentCell.setColspan(2);
-        contentCell.setBorder(Rectangle.NO_BORDER);
-        contentCell.setPaddingTop(6f);
-        if (evidence != null) {
-            try {
-                ByteArrayOutputStream png = new ByteArrayOutputStream();
-                javax.imageio.ImageIO.write(evidence.image(), "png", png);
-                Image img = Image.getInstance(png.toByteArray());
-                float maxWidth = doc.getPageSize().getWidth() - doc.leftMargin() - doc.rightMargin() - 20f;
-                img.scaleToFit(maxWidth, 700f);
-                contentCell.addElement(img);
-            } catch (IOException e) {
-                api.logging().logToError("Failed to embed evidence image in PDF for finding '" + f.type() + "': " + e);
-                contentCell.addElement(new Paragraph("(screenshot could not be embedded)", BODY_FONT));
-            }
-        } else {
+        if (evidenceGroup.isEmpty()) {
+            PdfPCell contentCell = new PdfPCell();
+            contentCell.setColspan(2);
+            contentCell.setBorder(Rectangle.NO_BORDER);
+            contentCell.setPaddingTop(6f);
             contentCell.addElement(new Paragraph("No screenshot captured for this finding.", BODY_FONT));
+            card.addCell(contentCell);
+        } else {
+            for (CapturedEvidence evidence : evidenceGroup) {
+                // Image + its caption share one cell in a row of `card`, which has
+                // setSplitRows(false) — the whole row (image + caption) moves to the next
+                // page as a unit instead of a break landing between them.
+                PdfPCell contentCell = new PdfPCell();
+                contentCell.setColspan(2);
+                contentCell.setBorder(Rectangle.NO_BORDER);
+                contentCell.setPaddingTop(6f);
+                try {
+                    ByteArrayOutputStream png = new ByteArrayOutputStream();
+                    javax.imageio.ImageIO.write(evidence.image(), "png", png);
+                    Image img = Image.getInstance(png.toByteArray());
+                    float maxWidth = doc.getPageSize().getWidth() - doc.leftMargin() - doc.rightMargin() - 20f;
+                    img.scaleToFit(maxWidth, 700f);
+                    contentCell.addElement(img);
+                } catch (IOException e) {
+                    api.logging().logToError("Failed to embed evidence image in PDF for finding '" + f.type() + "': " + e);
+                    contentCell.addElement(new Paragraph("(screenshot could not be embedded)", BODY_FONT));
+                }
+                if (evidence.caption() != null && !evidence.caption().isBlank()) {
+                    Paragraph caption = new Paragraph(evidence.caption(), LABEL_FONT);
+                    caption.setSpacingBefore(4f);
+                    contentCell.addElement(caption);
+                }
+                card.addCell(contentCell);
+            }
         }
-        card.addCell(contentCell);
 
         card.setSpacingAfter(12f);
         doc.add(card);
+
+        if (addBookmarks) {
+            new PdfOutline(writer.getRootOutline(), PdfAction.gotoLocalPage(destName, false), f.type());
+        }
     }
 
     private void addMetaRow(PdfPTable table, String label, String value) {

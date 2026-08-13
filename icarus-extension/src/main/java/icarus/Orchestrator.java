@@ -19,6 +19,7 @@ import icarus.ui.ToastNotification;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.MouseAdapter;
@@ -1066,6 +1067,49 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 .build();
     }
 
+    /**
+     * Reads a screenshot off the system clipboard (e.g. an OS/browser screenshot of Burp's
+     * embedded browser tab) and opens it directly in ICARUS's annotation editor as manual
+     * evidence, tied to {@code rr} the same way {@link #blankManualFinding} is — keeps
+     * {@link Finding#evidence()} non-null so this doesn't get miscategorized as a passive
+     * finding by {@link FindingRegistry#getPassiveFindings()}.
+     * <p>
+     * This is the safe alternative to injecting a capture script into proxied HTML responses
+     * (see {@code .claude/in_browser_evidence_capture_plan.md}): that would alter every page's
+     * DOM for every client behind the proxy, not just Burp's embedded browser, and Montoya's
+     * {@code ProxyRequestHandler} has no way to short-circuit a request with a synthetic
+     * response anyway (only {@code drop()}/{@code continueWith()} — {@code spoof()} exists
+     * only on the generic {@code HttpHandler}). Any OS screenshot tool already captures the
+     * embedded Chromium browser's real rendered pixels; this just wires "paste" into the
+     * existing annotation flow instead of reinventing screen capture.
+     */
+    public void pasteEvidenceFromClipboard(HttpRequestResponse rr) {
+        Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        try {
+            if (!clipboard.isDataFlavorAvailable(DataFlavor.imageFlavor)) {
+                JOptionPane.showMessageDialog(suiteFrame,
+                        "No image found on the clipboard. Take a screenshot first, then try again.");
+                return;
+            }
+            Image raw = (Image) clipboard.getData(DataFlavor.imageFlavor);
+            java.awt.image.BufferedImage image = toBufferedImage(raw);
+            evidenceCapture.captureInteractiveWithImage(blankManualFinding(rr), image);
+        } catch (Exception e) {
+            api.logging().logToError("Failed to read image from clipboard: " + e);
+            JOptionPane.showMessageDialog(suiteFrame, "Could not read image from clipboard: " + e.getMessage());
+        }
+    }
+
+    private java.awt.image.BufferedImage toBufferedImage(Image img) {
+        if (img instanceof java.awt.image.BufferedImage bi) return bi;
+        var bi = new java.awt.image.BufferedImage(img.getWidth(null), img.getHeight(null), java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = bi.createGraphics();
+        g2.drawImage(img, 0, 0, null);
+        g2.dispose();
+        return bi;
+    }
+
     public void runScan(HttpRequestResponse target, boolean isManual) {
         scanRunner.runScan(target, isManual);
     }
@@ -1107,6 +1151,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
         });
         items.add(createEvidence);
+
+        var pasteEvidence = new JMenuItem("ICARUS → Paste Screenshot as Evidence");
+        pasteEvidence.addActionListener(e -> pasteEvidenceFromClipboard(requestResponses.get(0)));
+        items.add(pasteEvidence);
 
         // AutoAuth: only shown when the user actually highlighted text in a message editor —
         // these need selection offsets that scan-style modules never receive.

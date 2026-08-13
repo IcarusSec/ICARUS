@@ -257,6 +257,13 @@ public final class EvidenceCapture {
         });
     }
 
+    /** Same direct-to-annotation entry point the RATE_LIMIT table image above uses, for a
+     *  screenshot that already exists (e.g. pasted from the system clipboard) — skips Phase 1
+     *  text cleanup since there's no request/response text to render. */
+    public void captureInteractiveWithImage(Finding finding, BufferedImage image) {
+        SwingUtilities.invokeLater(() -> showPhase2(new JDialog(), finding, image, finding.type()));
+    }
+
     // ===================================================================================
     // PHASE 1: TEXT CLEANUP
     // ===================================================================================

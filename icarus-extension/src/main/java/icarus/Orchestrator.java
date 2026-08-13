@@ -267,9 +267,16 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, previewScroll);
         split.setResizeWeight(0.6);
         // Report-level free text (scope/methodology/takeaway), not tied to any one finding —
-        // persisted in config so it survives across Evidence Manager sessions. Read directly
-        // by ReportGenerator/PdfReportGenerator at generate time, no plumbing needed elsewhere.
-        JTextArea txtSummary = new JTextArea(config.getString("evidence.executive_summary", ""), 3, 0);
+        // stored as the "Executive Summary" section of ReportTemplateConfig (Settings →
+        // Reporting owns the rest of the sections; this is a quick-edit shortcut for the one
+        // every report needs) so it survives across Evidence Manager sessions and is read by
+        // both generators via ReportTemplateConfig.fromConfig() at generate time.
+        var initialRtc = icarus.core.ReportTemplateConfig.fromConfig(config);
+        String initialSummary = initialRtc.sections().stream()
+                .filter(s -> "Executive Summary".equals(s.title()))
+                .map(icarus.core.ReportTemplateConfig.Section::content)
+                .findFirst().orElse("");
+        JTextArea txtSummary = new JTextArea(initialSummary, 3, 0);
         txtSummary.setLineWrap(true);
         txtSummary.setWrapStyleWord(true);
         txtSummary.setBorder(BorderFactory.createTitledBorder("Report Notes (optional executive summary, shown at the top of the report)"));
@@ -277,7 +284,18 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            private void save() { config.set("evidence.executive_summary", txtSummary.getText()); }
+            private void save() {
+                var rtc = icarus.core.ReportTemplateConfig.fromConfig(config);
+                List<icarus.core.ReportTemplateConfig.Section> sections = new ArrayList<>(rtc.sections());
+                var updated = new icarus.core.ReportTemplateConfig.Section("Executive Summary", txtSummary.getText());
+                int idx = -1;
+                for (int i = 0; i < sections.size(); i++) {
+                    if ("Executive Summary".equals(sections.get(i).title())) { idx = i; break; }
+                }
+                if (idx >= 0) sections.set(idx, updated); else sections.add(0, updated);
+                rtc.setSections(sections);
+                rtc.saveTo(config);
+            }
         });
         JScrollPane summaryScroll = new JScrollPane(txtSummary);
         summaryScroll.setPreferredSize(new Dimension(0, 80));

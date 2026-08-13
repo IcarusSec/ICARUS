@@ -4,7 +4,11 @@ import burp.api.montoya.MontoyaApi;
 
 import icarus.core.Finding;
 import icarus.core.ModuleConfig;
+import icarus.core.ReportTemplateConfig;
 import icarus.evidence.EvidenceCapture.CapturedEvidence;
+
+import org.commonmark.parser.Parser;
+import org.commonmark.renderer.html.HtmlRenderer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -24,6 +28,8 @@ public final class ReportGenerator {
 
     private final MontoyaApi api;
     private final CweRepository cweRepository = new CweRepository();
+    private final Parser markdownParser = Parser.builder().build();
+    private final HtmlRenderer markdownRenderer = HtmlRenderer.builder().build();
 
     public ReportGenerator(MontoyaApi api) {
         this.api = api;
@@ -70,11 +76,14 @@ public final class ReportGenerator {
             if (name != null && !name.isBlank()) projectName = name;
         }
 
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+
         String html;
         try {
             StringBuilder sb = new StringBuilder();
-            appendHeader(sb, reportDir.getFileName().toString(), projectName);
-            appendExecutiveSummary(sb, config.getString("evidence.executive_summary", ""));
+            appendHeader(sb, reportDir.getFileName().toString(), projectName, rtc);
+            if (rtc.tocEnabled()) appendToc(sb, rtc, findings);
+            appendSections(sb, rtc);
             appendSummary(sb, findings);
             appendFindings(sb, findings, evidenceByHash);
             appendFooter(sb);
@@ -99,7 +108,9 @@ public final class ReportGenerator {
         return sb.toString();
     }
 
-    private void appendHeader(StringBuilder html, String reportName, String projectName) {
+    private void appendHeader(StringBuilder html, String reportName, String projectName, ReportTemplateConfig rtc) {
+        String accent = rtc.primaryColor() != null ? rtc.primaryColor() : "#3e7bb8";
+        String accent2 = rtc.secondaryColor() != null ? rtc.secondaryColor() : "#6e6e6e";
         html.append("""
             <!DOCTYPE html>
             <html lang="en">
@@ -114,7 +125,8 @@ public final class ReportGenerator {
                         --text: #1a1a1a;
                         --text-muted: #666666;
                         --border: #dddddd;
-                        --accent: #3e7bb8;
+                        --accent: %s;
+                        --accent2: %s;
                         --critical: #cc2e2e;
                         --high: #d9711f;
                         --medium: #b38f00;
@@ -200,12 +212,24 @@ public final class ReportGenerator {
                         text-align: left;
                     }
                     .meta-table th { color: var(--text-muted); width: 120px; font-weight: normal; }
+                    .evidence-block { margin-top: 2rem; }
                     .evidence-img {
                         max-width: 100%%;
                         border: 1px solid var(--border);
                         border-radius: 4px;
                     }
+                    .evidence-caption {
+                        margin-top: 0.75rem;
+                        padding-left: 1rem;
+                        border-left: 3px solid var(--accent);
+                        color: var(--text-muted);
+                    }
+                    .toc { background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem 1.5rem; margin-bottom: 2rem; }
+                    .toc ul { margin: 0.5rem 0 0; padding-left: 1.25rem; }
+                    .toc a { color: var(--accent); text-decoration: none; }
+                    .toc a:hover { text-decoration: underline; }
                 </style>
+                %s
             </head>
             <body>
                 <div class="header">
@@ -213,21 +237,60 @@ public final class ReportGenerator {
                     <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s%s</p>
                 </div>
             """.formatted(
+                accent, accent2,
+                customCssBlock(rtc.customCssPath()),
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 reportName,
                 projectName != null ? " | Project: " + escapeHtml(projectName) : ""
             ));
     }
 
-    /** Free-text scope/methodology/takeaway a client reads before the finding list. Omitted entirely if blank. */
-    private void appendExecutiveSummary(StringBuilder html, String executiveSummary) {
-        if (executiveSummary == null || executiveSummary.isBlank()) return;
-        html.append("""
-                <div class="exec-summary">
-                    <h2>Executive Summary</h2>
-                    <p>%s</p>
-                </div>
-            """.formatted(escapeHtml(executiveSummary).replace("\n", "<br>")));
+    /** Reads a user-supplied CSS file (Settings → Reporting → Theme) and wraps it in its own
+     *  &lt;style&gt; block placed after the base one, so its rules override by cascade order.
+     *  Missing/unreadable files are skipped silently — this is a nice-to-have override, not
+     *  something that should ever break report generation. */
+    private String customCssBlock(String customCssPath) {
+        if (customCssPath == null || customCssPath.isBlank()) return "";
+        try {
+            String css = Files.readString(Path.of(customCssPath));
+            return "<style>\n" + css + "\n</style>";
+        } catch (IOException | RuntimeException e) {
+            api.logging().logToError("Failed to read custom report CSS at " + customCssPath + ": " + e);
+            return "";
+        }
+    }
+
+    /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,
+     *  with {{variable}} interpolation. Empty if the user has no sections configured. */
+    private void appendSections(StringBuilder html, ReportTemplateConfig rtc) {
+        int i = 0;
+        for (ReportTemplateConfig.Section section : rtc.sections()) {
+            i++;
+            String bodyHtml = markdownRenderer.render(markdownParser.parse(rtc.interpolate(section.content())));
+            html.append("""
+                    <div class="exec-summary" id="section-%d">
+                        <h2>%s</h2>
+                        %s
+                    </div>
+                """.formatted(i, escapeHtml(section.title()), bodyHtml));
+        }
+    }
+
+    private void appendToc(StringBuilder html, ReportTemplateConfig rtc, List<Finding> findings) {
+        html.append("<div class=\"toc\"><strong>Contents</strong><ul>\n");
+        int i = 0;
+        for (ReportTemplateConfig.Section section : rtc.sections()) {
+            i++;
+            html.append("<li><a href=\"#section-").append(i).append("\">")
+                .append(escapeHtml(section.title())).append("</a></li>\n");
+        }
+        int idx = 1;
+        for (Finding f : findings) {
+            html.append("<li><a href=\"#finding-").append(idx).append("\">#")
+                .append(idx).append(". ").append(escapeHtml(f.type())).append("</a></li>\n");
+            idx++;
+        }
+        html.append("</ul></div>\n");
     }
 
     private void appendSummary(StringBuilder html, List<Finding> findings) {
@@ -277,7 +340,7 @@ public final class ReportGenerator {
         int index = 1;
         for (Finding f : findings) {
             html.append("""
-                <div class="finding-card">
+                <div class="finding-card" id="finding-%d">
                     <div class="finding-header">
                         <h3 class="finding-title">#%d. %s</h3>
                         <span class="badge %s">%s</span>
@@ -289,7 +352,7 @@ public final class ReportGenerator {
                             <tr><th>Target Path</th><td><code>%s</code></td></tr>
                             <tr><th>Description</th><td>%s</td></tr>
             """.formatted(
-                index++, escapeHtml(f.type()),
+                index, index++, escapeHtml(f.type()),
                 f.severity().name(), f.severity().name(),
                 f.module(), f.category().name(),
                 escapeHtml(f.path()), escapeHtml(f.description())
@@ -315,18 +378,22 @@ public final class ReportGenerator {
                 }
             }
 
-            // Renders the first captured item per finding for now — full multi-evidence
-            // rendering (looping evidenceByHash.get(...)) lands in Step 05.
-            List<CapturedEvidence> group = evidenceByHash.get(f.similarityHash());
-            CapturedEvidence c = (group == null || group.isEmpty()) ? null : group.get(0);
-            if (c != null) {
-                html.append("""
-                        </table>
-                        <h4>Evidence</h4>
-                        <img class="evidence-img" src="%s" alt="Evidence for %s">
-                    </div>
-                </div>
-            """.formatted(c.imagePath().getFileName().toString(), f.type()));
+            List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
+            if (!group.isEmpty()) {
+                html.append("                        </table>\n                        <h4>Evidence</h4>\n");
+                for (CapturedEvidence c : group) {
+                    html.append("""
+                            <div class="evidence-block">
+                                <img class="evidence-img" src="%s" alt="Evidence for %s">
+                    """.formatted(c.imagePath().getFileName().toString(), escapeHtml(f.type())));
+                    if (c.caption() != null && !c.caption().isBlank()) {
+                        html.append("                                <div class=\"evidence-caption\">")
+                            .append(escapeHtml(c.caption()))
+                            .append("</div>\n");
+                    }
+                    html.append("                            </div>\n");
+                }
+                html.append("                    </div>\n                </div>\n");
             } else {
                 html.append("""
                         </table>

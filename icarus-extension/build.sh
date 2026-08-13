@@ -22,6 +22,13 @@ if [ ! -f "libs/openpdf-3.0.5.jar" ]; then
     wget -q -O libs/openpdf-3.0.5.jar "https://repo1.maven.org/maven2/com/github/librepdf/openpdf/3.0.5/openpdf-3.0.5.jar"
 fi
 
+# 1c. Download commonmark-java (Markdown parsing for report sections) if not present.
+# Dependency-free single jar (~80KB) -- bundled the same way as OpenPDF, see step 4c.
+if [ ! -f "libs/commonmark-0.30.0.jar" ]; then
+    echo "[*] Downloading commonmark-java..."
+    wget -q -O libs/commonmark-0.30.0.jar "https://repo1.maven.org/maven2/org/commonmark/commonmark/0.30.0/commonmark-0.30.0.jar"
+fi
+
 # 2. Prepare build directory
 rm -rf build_manual
 mkdir -p build_manual/classes
@@ -36,7 +43,7 @@ echo "[+] Found $SOURCE_COUNT Java files"
 # 4. Compile
 echo "[*] Compiling sources..."
 javac -d build_manual/classes \
-      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-3.0.5.jar" \
+      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-3.0.5.jar:libs/commonmark-0.30.0.jar" \
       --release 21 \
       @build_manual/sources.txt
 
@@ -51,6 +58,8 @@ fi
 # don't clobber ours.
 echo "[*] Bundling OpenPDF classes..."
 unzip -q -o libs/openpdf-3.0.5.jar -d build_manual/classes -x "META-INF/*"
+echo "[*] Bundling commonmark-java classes..."
+unzip -q -o libs/commonmark-0.30.0.jar -d build_manual/classes -x "META-INF/*"
 
 # 5. Package into JAR
 echo "[*] Packaging JAR..."

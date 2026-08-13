@@ -17,17 +17,16 @@ import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
 
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.awt.datatransfer.DataFlavor;
-import java.awt.datatransfer.Transferable;
-import java.awt.datatransfer.UnsupportedFlavorException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -143,129 +142,120 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
      */
     public void showEvidenceManager() {
         JDialog dialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS — Evidence Manager", false);
-        dialog.setSize(1100, 700);
+        dialog.setSize(1300, 800);
         dialog.setLocationRelativeTo(null);
         dialog.setLayout(new BorderLayout());
 
-        List<EvidenceCapture.CapturedEvidence> entries = new ArrayList<>(evidenceCapture.getCaptured());
+        // Master-detail view state: hashOrder controls which finding comes first in the
+        // report, groups holds each finding's evidence in its own report order. Both are
+        // fully rebuilt from evidenceCapture.getCaptured() by `reload` — EvidenceCapture
+        // stays the single source of truth, this is just a convenient grouped view over it.
+        // Grouped by similarityHash (not Finding identity) for the same reason
+        // EvidenceCapture.groupedBySimilarityHash() is — re-editing a finding's evidence
+        // builds a new Finding instance with the same hash.
+        List<String> hashOrder = new ArrayList<>();
+        Map<String, List<EvidenceCapture.CapturedEvidence>> groups = new LinkedHashMap<>();
 
-        DefaultTableModel model = new DefaultTableModel(new String[]{"Include", "#", "Title", "Severity", "Path", "CWE", "Image File"}, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) { return column == 0; }
-
-            @Override
-            public Class<?> getColumnClass(int columnIndex) {
-                // Without this, an empty table (0 rows) can't infer Boolean from row data and
-                // renders column 0 as the text "true"/"false" instead of an actual checkbox.
-                return columnIndex == 0 ? Boolean.class : Object.class;
-            }
-        };
-
-        JTable table = new JTable(model);
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setRowHeight(22);
-        table.getColumnModel().getColumn(0).setMaxWidth(60);
-        // No row sorter: this table's order IS the report's order, driven entirely by
-        // drag-and-drop below — clicking a column header to sort would silently desync
-        // what the user sees from what dragging actually reorders.
-        JScrollPane tableScroll = new JScrollPane(table);
-
-        // Rebuilds the table from `entries` in place, keeping the same row selected —
-        // called after every reorder/remove so the "#" column always matches report order.
-        Runnable refreshTable = () -> {
-            int selected = table.getSelectedRow();
-            model.setRowCount(0);
-            for (int i = 0; i < entries.size(); i++) {
-                var ce = entries.get(i);
-                Finding f = ce.finding();
-                model.addRow(new Object[]{
-                    evidenceCapture.isIncluded(ce), i + 1, f.type(), f.severity().name(), f.path(),
-                    String.join(", ", f.cweIds()), ce.imagePath().getFileName().toString()
-                });
-            }
-            if (selected >= 0 && selected < table.getRowCount()) {
-                table.setRowSelectionInterval(selected, selected);
-            }
-        };
-        refreshTable.run();
-
-        // Unchecking "Include" leaves the screenshot in place (unlike Remove) but drops it
-        // from the next Preview/Generate/Export — reversible, unlike deleting it.
-        model.addTableModelListener(e -> {
-            if (e.getColumn() != 0 || e.getType() != javax.swing.event.TableModelEvent.UPDATE) return;
-            int row = e.getFirstRow();
-            if (row < 0 || row >= entries.size()) return;
-            evidenceCapture.setIncluded(entries.get(row), (Boolean) model.getValueAt(row, 0));
+        DefaultListModel<String> masterModel = new DefaultListModel<>();
+        JList<String> masterList = new JList<>(masterModel);
+        masterList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        masterList.setCellRenderer((list, hash, index, isSelected, hasFocus) -> {
+            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+            Finding display = group.get(group.size() - 1).finding(); // freshest edit
+            JLabel l = new JLabel(display.severity().name() + "  ·  " + display.type()
+                    + "  (" + group.size() + (group.size() == 1 ? " item)" : " items)"));
+            l.setOpaque(true);
+            l.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+            l.setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+            l.setForeground(isSelected ? list.getSelectionForeground() : list.getForeground());
+            return l;
         });
+        JScrollPane masterScroll = new JScrollPane(masterList);
 
-        // Drag-and-drop row reordering: drag a row to a new position to reorder the report.
-        // JTable's built-in row-move TransferHandler support, not a hand-rolled mouse listener.
-        table.setDragEnabled(true);
-        table.setDropMode(DropMode.INSERT_ROWS);
-        DataFlavor rowFlavor = new DataFlavor(Integer.class, "Evidence Manager row index");
-        table.setTransferHandler(new TransferHandler() {
-            @Override
-            protected Transferable createTransferable(JComponent c) {
-                int row = table.getSelectedRow();
-                return new Transferable() {
-                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{rowFlavor}; }
-                    public boolean isDataFlavorSupported(DataFlavor flavor) { return rowFlavor.equals(flavor); }
-                    public Object getTransferData(DataFlavor flavor) { return row; }
-                };
+        JPanel detailPanel = new JPanel();
+        detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
+        JScrollPane detailScroll = new JScrollPane(detailPanel);
+        detailScroll.getVerticalScrollBar().setUnitIncrement(16);
+
+        // Forward-reference workaround (same single-element-array idiom EvidenceCapture's
+        // annotation editor already uses for mutable lambda state): `reload` and
+        // `refreshDetail` are mutually independent, but card/button callbacks need to
+        // trigger both together, and neither can name the other before both exist.
+        Runnable[] refreshAllRef = new Runnable[1];
+
+        Runnable reload = () -> {
+            String selectedHash = masterList.getSelectedValue();
+            hashOrder.clear();
+            groups.clear();
+            for (var ce : evidenceCapture.getCaptured()) {
+                String hash = ce.finding().similarityHash();
+                if (!groups.containsKey(hash)) hashOrder.add(hash);
+                groups.computeIfAbsent(hash, h -> new ArrayList<>()).add(ce);
             }
-
-            @Override
-            public int getSourceActions(JComponent c) { return MOVE; }
-
-            @Override
-            public boolean canImport(TransferSupport support) {
-                return support.isDrop() && support.isDataFlavorSupported(rowFlavor);
+            masterModel.clear();
+            hashOrder.forEach(masterModel::addElement);
+            if (selectedHash != null && hashOrder.contains(selectedHash)) {
+                masterList.setSelectedValue(selectedHash, true);
+            } else if (!hashOrder.isEmpty()) {
+                masterList.setSelectedIndex(0);
             }
+        };
 
-            @Override
-            public boolean importData(TransferSupport support) {
-                if (!canImport(support)) return false;
-                try {
-                    int from = (int) support.getTransferable().getTransferData(rowFlavor);
-                    int to = ((JTable.DropLocation) support.getDropLocation()).getRow();
-                    if (to > from) to--; // dropping below the dragged row's old slot shifts by one
-                    if (from < 0 || from >= entries.size() || to < 0 || to >= entries.size() || from == to) {
-                        return false;
-                    }
-
-                    var moved = entries.remove(from);
-                    entries.add(to, moved);
-                    evidenceCapture.reorderCaptured(entries);
-
-                    refreshTable.run();
-                    table.setRowSelectionInterval(to, to);
-                    return true;
-                } catch (UnsupportedFlavorException | IOException ex) {
-                    return false;
+        Runnable refreshDetail = () -> {
+            detailPanel.removeAll();
+            String hash = masterList.getSelectedValue();
+            if (hash == null) {
+                JLabel empty = new JLabel("Select a finding on the left to manage its evidence.");
+                empty.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+                detailPanel.add(empty);
+            } else {
+                List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+                for (int i = 0; i < group.size(); i++) {
+                    detailPanel.add(buildEvidenceCard(dialog, group, i, hashOrder, groups, () -> refreshAllRef[0].run()));
+                    detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
                 }
             }
+            detailPanel.revalidate();
+            detailPanel.repaint();
+        };
+
+        masterList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) refreshDetail.run();
         });
 
-        JLabel preview = new JLabel("Select a row to preview its screenshot", SwingConstants.CENTER);
-        JScrollPane previewScroll = new JScrollPane(preview);
-        previewScroll.setPreferredSize(new Dimension(420, 0));
+        refreshAllRef[0] = () -> { reload.run(); refreshDetail.run(); };
+        refreshAllRef[0].run();
 
-        table.getSelectionModel().addListSelectionListener(e -> {
-            if (e.getValueIsAdjusting()) return;
-            int row = table.getSelectedRow();
-            if (row < 0 || row >= entries.size()) {
-                preview.setIcon(null);
-                preview.setText("Select a row to preview its screenshot");
-                return;
+        JButton btnGroupUp = new JButton("▲ Move Finding Up");
+        btnGroupUp.addActionListener(e -> {
+            int idx = masterList.getSelectedIndex();
+            if (idx > 0) {
+                Collections.swap(hashOrder, idx, idx - 1);
+                syncGroupsToCapture(hashOrder, groups);
+                refreshAllRef[0].run();
             }
-            var ce = entries.get(row);
-            Image scaled = ce.image().getScaledInstance(380, -1, Image.SCALE_SMOOTH);
-            preview.setIcon(new ImageIcon(scaled));
-            preview.setText(null);
         });
+        JButton btnGroupDown = new JButton("▼ Move Finding Down");
+        btnGroupDown.addActionListener(e -> {
+            int idx = masterList.getSelectedIndex();
+            if (idx >= 0 && idx < hashOrder.size() - 1) {
+                Collections.swap(hashOrder, idx, idx + 1);
+                syncGroupsToCapture(hashOrder, groups);
+                refreshAllRef[0].run();
+            }
+        });
+        JPanel masterButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+        masterButtons.add(btnGroupUp);
+        masterButtons.add(btnGroupDown);
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableScroll, previewScroll);
-        split.setResizeWeight(0.6);
+        JPanel masterPanel = new JPanel(new BorderLayout(0, 4));
+        masterPanel.add(new JLabel("Findings (report order)"), BorderLayout.NORTH);
+        masterPanel.add(masterScroll, BorderLayout.CENTER);
+        masterPanel.add(masterButtons, BorderLayout.SOUTH);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, masterPanel, detailScroll);
+        split.setResizeWeight(0.28);
+        split.setDividerSize(6);
         // Report-level free text (scope/methodology/takeaway), not tied to any one finding —
         // stored as the "Executive Summary" section of ReportTemplateConfig (Settings →
         // Reporting owns the rest of the sections; this is a quick-edit shortcut for the one
@@ -300,35 +290,15 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JScrollPane summaryScroll = new JScrollPane(txtSummary);
         summaryScroll.setPreferredSize(new Dimension(0, 80));
 
-        JLabel dragHint = new JLabel("  Drag rows to reorder the report.");
-        dragHint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+        JLabel hint = new JLabel("  Select a finding on the left; manage its evidence cards on the right.");
+        hint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(summaryScroll, BorderLayout.CENTER);
-        topPanel.add(dragHint, BorderLayout.SOUTH);
+        topPanel.add(hint, BorderLayout.SOUTH);
 
         dialog.add(topPanel, BorderLayout.NORTH);
         dialog.add(split, BorderLayout.CENTER);
-
-        JButton btnEdit = new JButton("Edit…");
-        btnEdit.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) return;
-            evidenceCapture.captureInteractive(entries.get(row).finding());
-        });
-
-        JButton btnRemove = new JButton("Remove Evidence");
-        btnRemove.addActionListener(e -> {
-            int row = table.getSelectedRow();
-            if (row < 0) return;
-            int confirm = JOptionPane.showConfirmDialog(dialog,
-                    "Remove this screenshot from the report? The finding itself stays in the Results tab.",
-                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-            if (confirm != JOptionPane.YES_OPTION) return;
-            evidenceCapture.removeCaptured(entries.get(row));
-            entries.remove(row);
-            refreshTable.run();
-        });
 
         JButton btnPreview = new JButton("Preview");
         btnPreview.addActionListener(e -> previewReport(dialog, btnPreview));
@@ -348,8 +318,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        btnPanel.add(btnEdit);
-        btnPanel.add(btnRemove);
         btnPanel.add(btnPreview);
         btnPanel.add(btnGenerate);
         btnPanel.add(btnExportPdf);
@@ -357,6 +325,94 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
         dialog.setVisible(true);
+    }
+
+    /** Flattens {@code groups} back into EvidenceCapture's report order, following {@code hashOrder}. */
+    private void syncGroupsToCapture(List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
+        List<EvidenceCapture.CapturedEvidence> flat = new ArrayList<>();
+        for (String hash : hashOrder) flat.addAll(groups.get(hash));
+        evidenceCapture.reorderCaptured(flat);
+    }
+
+    /**
+     * One evidence card in the Evidence Manager's detail feed: thumbnail, caption editor,
+     * include toggle, reorder-within-finding buttons (drag-and-drop for a nested list turns
+     * bug-prone fast in raw Swing — buttons are the documented fallback), re-annotate, and
+     * remove. {@code onChange} is called after anything that changes membership/order
+     * (remove, reorder) so the caller can rebuild both the master list and detail feed from
+     * EvidenceCapture; caption edits don't call it — full rebuild on every keystroke would
+     * steal focus mid-type, and captions don't affect ordering/membership.
+     */
+    private JPanel buildEvidenceCard(JDialog dialog, List<EvidenceCapture.CapturedEvidence> group, int indexInGroup,
+                                      List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups,
+                                      Runnable onChange) {
+        EvidenceCapture.CapturedEvidence ce = group.get(indexInGroup);
+
+        JPanel card = new JPanel(new BorderLayout(8, 8));
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(80, 80, 80)),
+                BorderFactory.createEmptyBorder(8, 8, 8, 8)));
+
+        Image scaled = ce.image().getScaledInstance(320, -1, Image.SCALE_SMOOTH);
+        JLabel thumb = new JLabel(new ImageIcon(scaled));
+        card.add(thumb, BorderLayout.WEST);
+
+        JPanel right = new JPanel(new BorderLayout(4, 4));
+
+        JTextArea txtCaption = new JTextArea(ce.caption(), 3, 30);
+        txtCaption.setLineWrap(true);
+        txtCaption.setWrapStyleWord(true);
+        txtCaption.setBorder(BorderFactory.createTitledBorder("Caption"));
+        txtCaption.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() { evidenceCapture.setCaption(ce, txtCaption.getText()); }
+        });
+        right.add(new JScrollPane(txtCaption), BorderLayout.CENTER);
+
+        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+
+        JCheckBox chkInclude = new JCheckBox("Include in report", evidenceCapture.isIncluded(ce));
+        chkInclude.addActionListener(e -> evidenceCapture.setIncluded(ce, chkInclude.isSelected()));
+        controls.add(chkInclude);
+
+        JButton btnUp = new JButton("▲");
+        btnUp.setEnabled(indexInGroup > 0);
+        btnUp.addActionListener(e -> {
+            Collections.swap(group, indexInGroup, indexInGroup - 1);
+            syncGroupsToCapture(hashOrder, groups);
+            onChange.run();
+        });
+        controls.add(btnUp);
+
+        JButton btnDown = new JButton("▼");
+        btnDown.setEnabled(indexInGroup < group.size() - 1);
+        btnDown.addActionListener(e -> {
+            Collections.swap(group, indexInGroup, indexInGroup + 1);
+            syncGroupsToCapture(hashOrder, groups);
+            onChange.run();
+        });
+        controls.add(btnDown);
+
+        JButton btnEdit = new JButton("Edit / Re-annotate…");
+        btnEdit.addActionListener(e -> evidenceCapture.captureInteractive(ce.finding()));
+        controls.add(btnEdit);
+
+        JButton btnRemove = new JButton("Remove");
+        btnRemove.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(dialog,
+                    "Remove this screenshot from the report? The finding itself stays in the Results tab.",
+                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+            evidenceCapture.removeCaptured(ce);
+            onChange.run();
+        });
+        controls.add(btnRemove);
+
+        right.add(controls, BorderLayout.SOUTH);
+        card.add(right, BorderLayout.CENTER);
+        return card;
     }
 
     /**

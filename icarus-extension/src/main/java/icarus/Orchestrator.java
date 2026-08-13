@@ -404,20 +404,27 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private JPanel buildEvidenceCard(JDialog dialog, List<EvidenceCapture.CapturedEvidence> group, int indexInGroup,
                                       List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups,
                                       Runnable onChange) {
-        EvidenceCapture.CapturedEvidence ce = group.get(indexInGroup);
+        // EvidenceCapture.setCaption() replaces the CapturedEvidence record on every edit
+        // (records are immutable) rather than mutating it in place — every control on this
+        // card has to track the CURRENT reference through that array, not the one captured
+        // at build time, or the very next action (another keystroke, Include toggle, Remove)
+        // operates on an already-replaced object and silently no-ops. group.set() keeps the
+        // shared `groups` map (Up/Down/syncGroupsToCapture's source of truth) in sync too, so
+        // reordering right after a caption edit doesn't revert it.
+        EvidenceCapture.CapturedEvidence[] ceRef = { group.get(indexInGroup) };
 
         JPanel card = new JPanel(new BorderLayout(8, 8));
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(80, 80, 80)),
                 BorderFactory.createEmptyBorder(8, 8, 8, 8)));
 
-        Image scaled = ce.image().getScaledInstance(320, -1, Image.SCALE_SMOOTH);
+        Image scaled = ceRef[0].image().getScaledInstance(320, -1, Image.SCALE_SMOOTH);
         JLabel thumb = new JLabel(new ImageIcon(scaled));
         card.add(thumb, BorderLayout.WEST);
 
         JPanel right = new JPanel(new BorderLayout(4, 4));
 
-        JTextArea txtCaption = new JTextArea(ce.caption(), 3, 30);
+        JTextArea txtCaption = new JTextArea(ceRef[0].caption(), 3, 30);
         txtCaption.setLineWrap(true);
         txtCaption.setWrapStyleWord(true);
         txtCaption.setBorder(BorderFactory.createTitledBorder("Caption"));
@@ -425,14 +432,17 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            private void save() { evidenceCapture.setCaption(ce, txtCaption.getText()); }
+            private void save() {
+                ceRef[0] = evidenceCapture.setCaption(ceRef[0], txtCaption.getText());
+                group.set(indexInGroup, ceRef[0]);
+            }
         });
         right.add(new JScrollPane(txtCaption), BorderLayout.CENTER);
 
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
 
-        JCheckBox chkInclude = new JCheckBox("Include in report", evidenceCapture.isIncluded(ce));
-        chkInclude.addActionListener(e -> evidenceCapture.setIncluded(ce, chkInclude.isSelected()));
+        JCheckBox chkInclude = new JCheckBox("Include in report", evidenceCapture.isIncluded(ceRef[0]));
+        chkInclude.addActionListener(e -> evidenceCapture.setIncluded(ceRef[0], chkInclude.isSelected()));
         controls.add(chkInclude);
 
         JButton btnUp = new JButton("▲");
@@ -454,7 +464,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         controls.add(btnDown);
 
         JButton btnEdit = new JButton("Edit / Re-annotate…");
-        btnEdit.addActionListener(e -> evidenceCapture.captureInteractive(ce.finding()));
+        btnEdit.addActionListener(e -> evidenceCapture.captureInteractive(ceRef[0].finding()));
         controls.add(btnEdit);
 
         JButton btnRemove = new JButton("Remove");
@@ -463,7 +473,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                     "Remove this screenshot from the report? The finding itself stays in the Results tab.",
                     "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             if (confirm != JOptionPane.YES_OPTION) return;
-            evidenceCapture.removeCaptured(ce);
+            evidenceCapture.removeCaptured(ceRef[0]);
             onChange.run();
         });
         controls.add(btnRemove);

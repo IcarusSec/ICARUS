@@ -115,17 +115,32 @@ public final class EvidenceCapture {
      * Replaces {@code evidence}'s caption in place (records are immutable, so this swaps in
      * a new instance at the same list position — preserving report order and carrying over
      * inclusion/exclusion, which is tracked by object identity in {@link #excludedFromReport}).
+     *
+     * Matched by {@code imagePath} (unique per capture, and stable across edits) rather than
+     * full record equality/identity — {@code equals()} on a record includes every field, so
+     * once the caption changes, the caller's original reference no longer matches anything in
+     * this list and every subsequent call here would silently no-op. Returns the new instance
+     * so the caller can keep tracking "this card's evidence" across edits instead of holding a
+     * now-stale reference.
      */
-    public void setCaption(CapturedEvidence evidence, String caption) {
-        int idx = captured.indexOf(evidence);
-        if (idx < 0) return;
-        boolean wasExcluded = excludedFromReport.contains(evidence);
-        CapturedEvidence updated = new CapturedEvidence(evidence.finding(), evidence.imagePath(), evidence.image(), caption);
+    public CapturedEvidence setCaption(CapturedEvidence evidence, String caption) {
+        int idx = -1;
+        for (int i = 0; i < captured.size(); i++) {
+            if (captured.get(i).imagePath().equals(evidence.imagePath())) {
+                idx = i;
+                break;
+            }
+        }
+        if (idx < 0) return evidence;
+        CapturedEvidence current = captured.get(idx);
+        boolean wasExcluded = excludedFromReport.contains(current);
+        CapturedEvidence updated = new CapturedEvidence(current.finding(), current.imagePath(), current.image(), caption);
         captured.set(idx, updated);
         if (wasExcluded) {
-            excludedFromReport.remove(evidence);
+            excludedFromReport.remove(current);
             excludedFromReport.add(updated);
         }
+        return updated;
     }
 
     /**

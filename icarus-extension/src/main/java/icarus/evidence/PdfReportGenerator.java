@@ -84,13 +84,15 @@ public final class PdfReportGenerator {
         Path reportDir = outputPdfFile.toAbsolutePath().getParent();
         Files.createDirectories(reportDir);
 
-        String projectName = null;
-        if (config.getBool("evidence.include_project_name", true)) {
-            String name = api.project().name();
-            if (name != null && !name.isBlank()) projectName = name;
-        }
-
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        String projectName = rtc.variables().get("projectName");
+        if (projectName == null || projectName.isBlank()) {
+            projectName = null;
+            if (config.getBool("evidence.include_project_name", true)) {
+                String name = api.project().name();
+                if (name != null && !name.isBlank()) projectName = name;
+            }
+        }
         Color accent = themeColor(rtc.primaryColor(), ACCENT);
         boolean addBookmarks = rtc.tocEnabled();
         // Same single persistent "Retest Mode" toggle as ReportGenerator — see its generate() for why.
@@ -110,7 +112,7 @@ public final class PdfReportGenerator {
             writer.setStrictImageSequence(true);
             doc.open();
 
-            appendHeader(doc, reportDir.getFileName().toString(), projectName);
+            appendHeader(doc, reportDir.getFileName().toString(), projectName, rtc);
             appendSections(doc, rtc, accent, writer, addBookmarks, retest);
             appendSummary(doc, findings, accent);
             appendFindings(doc, findings, evidenceByHash, writer, addBookmarks, config, retest);
@@ -124,15 +126,35 @@ public final class PdfReportGenerator {
         return true;
     }
 
-    private void appendHeader(Document doc, String reportName, String projectName) throws DocumentException {
+    private void appendHeader(Document doc, String reportName, String projectName, ReportTemplateConfig rtc) throws DocumentException {
         doc.add(new Paragraph("ICARUS Security Report", TITLE_FONT));
 
         String subtitle = "Generated on: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
-                + " | Report ID: " + reportName
-                + (projectName != null ? " | Project: " + projectName : "");
+                + " | Report ID: " + reportName;
         Paragraph sub = new Paragraph(subtitle, SUBTITLE_FONT);
-        sub.setSpacingAfter(14f);
+        sub.setSpacingAfter(8f);
         doc.add(sub);
+
+        PdfPTable details = new PdfPTable(2);
+        details.setWidthPercentage(60);
+        details.setHorizontalAlignment(Element.ALIGN_LEFT);
+        boolean any = false;
+        any |= addMetaRowIfPresent(details, "Project", projectName);
+        any |= addMetaRowIfPresent(details, "Author", rtc.variables().get("author"));
+        any |= addMetaRowIfPresent(details, "Revisor", rtc.variables().get("revisor"));
+        any |= addMetaRowIfPresent(details, "Ambient", rtc.variables().get("ambient"));
+        any |= addMetaRowIfPresent(details, "Date", rtc.variables().get("reportDate"));
+        if (any) {
+            details.setSpacingAfter(14f);
+            doc.add(details);
+        }
+    }
+
+    /** Adds a label/value row via {@link #addMetaRow} unless {@code value} is blank; reports whether it added one. */
+    private boolean addMetaRowIfPresent(PdfPTable table, String label, String value) {
+        if (value == null || value.isBlank()) return false;
+        addMetaRow(table, label, value);
+        return true;
     }
 
     /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,

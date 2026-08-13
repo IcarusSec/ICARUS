@@ -369,8 +369,14 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         bottomOfTop.add(hint, BorderLayout.SOUTH);
         topPanel.add(bottomOfTop, BorderLayout.SOUTH);
 
-        dialog.add(topPanel, BorderLayout.NORTH);
-        dialog.add(split, BorderLayout.CENTER);
+        JPanel evidenceTab = new JPanel(new BorderLayout());
+        evidenceTab.add(topPanel, BorderLayout.NORTH);
+        evidenceTab.add(split, BorderLayout.CENTER);
+
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.addTab("Evidence", evidenceTab);
+        tabs.addTab("Report Details", buildReportDetailsPanel(initialRtc));
+        dialog.add(tabs, BorderLayout.CENTER);
 
         JButton btnPreview = new JButton("Preview");
         btnPreview.addActionListener(e -> previewReport(dialog, btnPreview));
@@ -405,6 +411,58 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
         dialog.setVisible(true);
+    }
+
+    /**
+     * "Report Details" tab of the Evidence Manager: Project/Author/Revisor/Ambient/Date
+     * fields, stored as well-known keys in {@link ReportTemplateConfig#variables()} — the
+     * same map Settings → Reporting's "Template Variables" editor already persists and
+     * {@link ProjectStateCodec} already exports/imports wholesale, so these fields need no
+     * new storage, codec, or {{variable}} interpolation wiring of their own. Rendered into
+     * the HTML/PDF report headers by {@link icarus.evidence.ReportGenerator} and
+     * {@link PdfReportGenerator}.
+     */
+    private JPanel buildReportDetailsPanel(ReportTemplateConfig initialRtc) {
+        String[] labels = {"Project / Report Name:", "Author:", "Revisor:", "Ambient / Environment:", "Date:"};
+        String[] keys = {"projectName", "author", "revisor", "ambient", "reportDate"};
+
+        String existingDate = initialRtc.variables().get("reportDate");
+        if (existingDate == null || existingDate.isBlank()) {
+            initialRtc.variables().put("reportDate", java.time.LocalDate.now().toString());
+            initialRtc.saveTo(config);
+        }
+
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(6, 6, 6, 6);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        for (int i = 0; i < labels.length; i++) {
+            gbc.gridx = 0; gbc.gridy = i; gbc.weightx = 0;
+            form.add(new JLabel(labels[i]), gbc);
+            gbc.gridx = 1; gbc.weightx = 1;
+            form.add(reportDetailField(keys[i], initialRtc.variables().get(keys[i])), gbc);
+        }
+
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.add(form, BorderLayout.NORTH);
+        return wrapper;
+    }
+
+    /** Text field bound to {@code ReportTemplateConfig.variables().get(key)}, auto-saving on every keystroke. */
+    private JTextField reportDetailField(String key, String initialValue) {
+        JTextField field = new JTextField(initialValue != null ? initialValue : "");
+        field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() {
+                var rtc = ReportTemplateConfig.fromConfig(config);
+                rtc.variables().put(key, field.getText());
+                rtc.saveTo(config);
+            }
+        });
+        return field;
     }
 
     /**

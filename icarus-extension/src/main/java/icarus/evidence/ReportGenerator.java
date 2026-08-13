@@ -70,13 +70,15 @@ public final class ReportGenerator {
             }
         }
 
-        String projectName = null;
-        if (config.getBool("evidence.include_project_name", true)) {
-            String name = api.project().name();
-            if (name != null && !name.isBlank()) projectName = name;
-        }
-
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        String projectName = rtc.variables().get("projectName");
+        if (projectName == null || projectName.isBlank()) {
+            projectName = null;
+            if (config.getBool("evidence.include_project_name", true)) {
+                String name = api.project().name();
+                if (name != null && !name.isBlank()) projectName = name;
+            }
+        }
         // One persistent "Retest Mode" toggle (Evidence Manager) drives both the per-finding
         // status dropdown there and this report profile — a separate one-shot "Generate Retest
         // Report" export-dialog checkbox would just be a second control for the same decision,
@@ -122,6 +124,15 @@ public final class ReportGenerator {
         String text = dark ? "#e8e8e8" : "#1a1a1a";
         String textMuted = dark ? "#a0a0a0" : "#666666";
         String border = dark ? "#3a3a3a" : "#dddddd";
+
+        StringBuilder detailRows = new StringBuilder();
+        appendMetaRow(detailRows, "Project", projectName);
+        appendMetaRow(detailRows, "Author", rtc.variables().get("author"));
+        appendMetaRow(detailRows, "Revisor", rtc.variables().get("revisor"));
+        appendMetaRow(detailRows, "Ambient", rtc.variables().get("ambient"));
+        appendMetaRow(detailRows, "Date", rtc.variables().get("reportDate"));
+        String detailsTable = detailRows.isEmpty() ? "" : "<table class=\"meta-table\">" + detailRows + "</table>";
+
         html.append("""
             <!DOCTYPE html>
             <html lang="en">
@@ -245,7 +256,8 @@ public final class ReportGenerator {
             <body>
                 <div class="header">
                     <h1>ICARUS Security Report</h1>
-                    <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s%s</p>
+                    <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s</p>
+                    %s
                 </div>
             """.formatted(
                 bg, cardBg, text, textMuted, border,
@@ -253,8 +265,14 @@ public final class ReportGenerator {
                 customCssBlock(rtc.customCssPath()),
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 reportName,
-                projectName != null ? " | Project: " + escapeHtml(projectName) : ""
+                detailsTable
             ));
+    }
+
+    /** Appends a {@code <tr>} for {@code label}/{@code value} unless {@code value} is blank. */
+    private void appendMetaRow(StringBuilder html, String label, String value) {
+        if (value == null || value.isBlank()) return;
+        html.append("<tr><th>").append(escapeHtml(label)).append("</th><td>").append(escapeHtml(value)).append("</td></tr>");
     }
 
     /** Reads a user-supplied CSS file (Settings → Reporting → Theme) and wraps it in its own

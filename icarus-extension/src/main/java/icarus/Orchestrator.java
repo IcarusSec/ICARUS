@@ -246,9 +246,41 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 refreshAllRef[0].run();
             }
         });
-        JPanel masterButtons = new JPanel(new GridLayout(1, 2, 4, 0));
+        JButton btnRename = new JButton("Rename Finding…");
+        btnRename.addActionListener(e -> {
+            int idx = masterList.getSelectedIndex();
+            if (idx < 0) return;
+            String hash = hashOrder.get(idx);
+            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+            Finding current = group.get(group.size() - 1).finding(); // freshest edit
+            String newTitle = JOptionPane.showInputDialog(dialog, "New finding name:", current.type());
+            if (newTitle == null || newTitle.isBlank() || newTitle.equals(current.type())) return;
+
+            // Renaming changes similarityHash() (module+type+path), so this is really "move
+            // every evidence item in this group to a new Finding instance with the changed
+            // title" — reuses moveToFinding() for that, which also repaints each screenshot's
+            // header to the new name instead of leaving the old one baked into the pixels.
+            Finding.Builder builder = Finding.builder(current.module(), newTitle)
+                    .description(current.description())
+                    .severity(current.severity())
+                    .category(current.category())
+                    .path(current.path())
+                    .evidence(current.evidence());
+            current.metadata().forEach(builder::meta);
+            current.cweIds().forEach(builder::cwe);
+            Finding renamed = builder.build();
+
+            for (var ce : group) {
+                evidenceCapture.moveToFinding(ce, renamed);
+            }
+            findings.processDeduplication(List.of(renamed), false);
+            refreshAllRef[0].run();
+        });
+
+        JPanel masterButtons = new JPanel(new GridLayout(3, 1, 0, 4));
         masterButtons.add(btnGroupUp);
         masterButtons.add(btnGroupDown);
+        masterButtons.add(btnRename);
 
         JPanel masterPanel = new JPanel(new BorderLayout(0, 4));
         masterPanel.add(new JLabel("Findings (report order)"), BorderLayout.NORTH);

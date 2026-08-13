@@ -124,19 +124,84 @@ public final class EvidenceCapture {
      * now-stale reference.
      */
     public CapturedEvidence setCaption(CapturedEvidence evidence, String caption) {
-        return replace(evidence, evidence.finding(), caption);
+        return replace(evidence, evidence.finding(), caption, null);
     }
 
     /**
      * Re-assigns a piece of evidence to a different finding — e.g. a screenshot captured
-     * against the wrong finding, or one that turns out to belong under another. Since
-     * grouping is by {@link Finding#similarityHash()} (see {@link #groupedBySimilarityHash()}),
-     * this is what actually moves it between groups in the Evidence Manager; the image file
-     * and caption are untouched. Same imagePath-based matching and identity-swap semantics as
-     * {@link #setCaption} — see that method's doc for why.
+     * against the wrong finding, one that turns out to belong under another, or a finding
+     * being renamed (every one of its evidence items gets moved to a new {@link Finding}
+     * instance with the changed title). Since grouping is by {@link Finding#similarityHash()}
+     * (see {@link #groupedBySimilarityHash()}), this is what actually moves it between groups
+     * in the Evidence Manager. Also repaints the screenshot's header banner (the fixed "ICARUS
+     * · title" / "severity · description" strip every capture path draws — see
+     * {@link #repaintHeaderForFinding}) and persists it back to {@code evidence.imagePath()}, so
+     * the image itself reflects wherever it ended up, not just the in-memory Finding link.
+     * Same imagePath-based matching and identity-swap semantics as {@link #setCaption} — see
+     * that method's doc for why.
      */
     public CapturedEvidence moveToFinding(CapturedEvidence evidence, Finding targetFinding) {
-        return replace(evidence, targetFinding, evidence.caption());
+        int idx = indexByImagePath(evidence.imagePath());
+        if (idx < 0) return evidence;
+        CapturedEvidence current = captured.get(idx);
+        BufferedImage repainted = repaintHeaderForFinding(current.image(), targetFinding);
+        try {
+            ImageIO.write(repainted, "png", current.imagePath().toFile());
+        } catch (IOException e) {
+            api.logging().logToError("Failed to persist updated evidence header image after move: " + e);
+            // Still reassign the finding even if the on-disk image couldn't be updated —
+            // the Evidence Manager/report generators read the in-memory image either way.
+        }
+        return replace(evidence, targetFinding, current.caption(), repainted);
+    }
+
+    /**
+     * Re-paints the fixed header banner (title + severity/description subtitle) baked into an
+     * evidence screenshot at capture time, using {@code newFinding}'s title/severity/
+     * description and the currently configured color scheme. Every screenshot this extension
+     * produces shares the same banner geometry — a filled 0,0-to-width,70 strip, title at
+     * (20,30), subtitle at (20,55); see {@link #renderTextToImage} and
+     * {@link #drawRateLimitTable} — so repainting just that region doesn't need the original
+     * request/response text.
+     *
+     * ponytail: if the color scheme setting changed since capture, the repainted header uses
+     * the CURRENT scheme rather than matching the rest of the (untouched) image pixel-for-pixel
+     * — a minor, rare cosmetic mismatch, not worth persisting the original scheme per screenshot
+     * to avoid. Also doesn't account for a user-drawn annotation (Phase 2) overlapping the
+     * header region — an edge case rare enough not to special-case here.
+     */
+    public BufferedImage repaintHeaderForFinding(BufferedImage image, Finding newFinding) {
+        BufferedImage out = new BufferedImage(image.getWidth(), image.getHeight(), BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.drawImage(image, 0, 0, null);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+
+        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
+        int imgWidth = image.getWidth();
+
+        g.setColor(cs.headerBg());
+        g.fillRect(0, 0, imgWidth, 70);
+        g.setColor(cs.divider());
+        g.drawLine(0, 70, imgWidth, 70);
+
+        g.setColor(cs.titleText());
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+        g.drawString("ICARUS  ·  " + newFinding.type() + projectNameSuffix(), 20, 30);
+
+        g.setColor(cs.dim());
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+        g.drawString(newFinding.severity().name() + "  ·  " + newFinding.description(), 20, 55);
+
+        g.dispose();
+        return out;
+    }
+
+    private int indexByImagePath(Path imagePath) {
+        for (int i = 0; i < captured.size(); i++) {
+            if (captured.get(i).imagePath().equals(imagePath)) return i;
+        }
+        return -1;
     }
 
     /**
@@ -145,20 +210,15 @@ public final class EvidenceCapture {
      * once caption/finding changes, the caller's original reference no longer matches anything
      * in this list and a lookup by equals/identity would silently no-op. Returns the new
      * instance so the caller can keep tracking "this card's evidence" across edits instead of
-     * holding a now-stale reference.
+     * holding a now-stale reference. {@code image} of {@code null} keeps the current image.
      */
-    private CapturedEvidence replace(CapturedEvidence evidence, Finding finding, String caption) {
-        int idx = -1;
-        for (int i = 0; i < captured.size(); i++) {
-            if (captured.get(i).imagePath().equals(evidence.imagePath())) {
-                idx = i;
-                break;
-            }
-        }
+    private CapturedEvidence replace(CapturedEvidence evidence, Finding finding, String caption, BufferedImage image) {
+        int idx = indexByImagePath(evidence.imagePath());
         if (idx < 0) return evidence;
         CapturedEvidence current = captured.get(idx);
+        BufferedImage finalImage = image != null ? image : current.image();
         boolean wasExcluded = excludedFromReport.contains(current);
-        CapturedEvidence updated = new CapturedEvidence(finding, current.imagePath(), current.image(), caption);
+        CapturedEvidence updated = new CapturedEvidence(finding, current.imagePath(), finalImage, caption);
         captured.set(idx, updated);
         if (wasExcluded) {
             excludedFromReport.remove(current);

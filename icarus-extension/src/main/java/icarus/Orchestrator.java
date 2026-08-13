@@ -12,6 +12,7 @@ import icarus.autoauth.AutoAuthModule;
 import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.PdfReportGenerator;
+import icarus.evidence.ProjectStateCodec;
 import icarus.evidence.ReportGenerator;
 import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
@@ -309,6 +310,12 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JButton btnExportPdf = new JButton("Export PDF");
         btnExportPdf.addActionListener(e -> exportPdfReportInteractive(dialog, btnExportPdf, getReportableFindings()));
 
+        JButton btnExportProject = new JButton("Export Project…");
+        btnExportProject.addActionListener(e -> exportProjectStateInteractive(dialog, btnExportProject));
+
+        JButton btnImportProject = new JButton("Import Project…");
+        btnImportProject.addActionListener(e -> importProjectStateInteractive(dialog, btnImportProject, () -> refreshAllRef[0].run()));
+
         JButton btnClose = new JButton("Close");
         btnClose.addActionListener(e -> {
             // Report Notes are kept up to date in-memory on every keystroke already;
@@ -318,6 +325,8 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         });
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        btnPanel.add(btnImportProject);
+        btnPanel.add(btnExportProject);
         btnPanel.add(btnPreview);
         btnPanel.add(btnGenerate);
         btnPanel.add(btnExportPdf);
@@ -552,6 +561,128 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 } catch (Exception ex) {
                     api.logging().logToError(formatLabel + " generation failed: " + ex.getCause());
                     JOptionPane.showMessageDialog(parent, formatLabel + " generation failed: " + ex.getCause());
+                }
+            }
+        }.execute();
+    }
+
+    /**
+     * Exports the full Evidence Manager state (findings, screenshots, captions, inclusion,
+     * and the active {@link ReportTemplateConfig}) to a portable {@code .icarus} project
+     * file, via {@link ProjectStateCodec}. Base64-encoding every screenshot is the expensive
+     * part, so it runs in {@code doInBackground} — a large evidence set shouldn't freeze the
+     * dialog while exporting.
+     */
+    public void exportProjectStateInteractive(Component parent, JButton triggerButton) {
+        List<EvidenceCapture.CapturedEvidence> evidence = evidenceCapture.getCaptured();
+        if (evidence.isEmpty()) {
+            JOptionPane.showMessageDialog(parent, "No captured evidence to export yet.");
+            return;
+        }
+
+        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        fc.setSelectedFile(new java.io.File("project.icarus"));
+        if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+
+        java.io.File selectedFile = fc.getSelectedFile();
+        if (!selectedFile.getName().toLowerCase().endsWith(".icarus")) {
+            selectedFile = new java.io.File(selectedFile.getParentFile(), selectedFile.getName() + ".icarus");
+        }
+        if (selectedFile.exists()) {
+            int overwrite = JOptionPane.showConfirmDialog(parent,
+                    selectedFile.getName() + " already exists. Overwrite?",
+                    "Confirm Overwrite", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (overwrite != JOptionPane.YES_OPTION) {
+                return;
+            }
+        }
+
+        java.io.File finalSelectedFile = selectedFile;
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+
+        if (triggerButton != null) triggerButton.setEnabled(false);
+        new SwingWorker<Void, Void>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                String json = ProjectStateCodec.export(evidence, evidenceCapture::isIncluded, rtc);
+                Files.writeString(finalSelectedFile.toPath(), json);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                if (triggerButton != null) triggerButton.setEnabled(true);
+                Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+                try {
+                    get();
+                    ToastNotification.show(suiteFrame, "Project exported: " + finalSelectedFile.getAbsolutePath());
+                } catch (Exception ex) {
+                    api.logging().logToError("Project export failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, "Project export failed: " + ex.getCause());
+                }
+            }
+        }.execute();
+    }
+
+    /**
+     * Imports a {@code .icarus} project file, fully replacing current Evidence Manager state
+     * (simpler than a merge, and matches the "baseline for a retest months later" use case) —
+     * every imported finding is re-registered into {@link FindingRegistry} via the same
+     * dedup path manual evidence capture uses, so it's immediately visible in the Results tab
+     * and reportable, not just sitting in {@link EvidenceCapture} orphaned from the registry.
+     */
+    public void importProjectStateInteractive(Component parent, JButton triggerButton, Runnable onImported) {
+        JFileChooser fc = new JFileChooser(new java.io.File(config.getString("evidence.output_dir", System.getProperty("user.home"))));
+        if (fc.showOpenDialog(parent) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        java.io.File selectedFile = fc.getSelectedFile();
+
+        int confirm = JOptionPane.showConfirmDialog(parent,
+                "Importing replaces all evidence currently in the Evidence Manager. Continue?",
+                "Confirm Import", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (confirm != JOptionPane.YES_OPTION) {
+            return;
+        }
+
+        if (triggerButton != null) triggerButton.setEnabled(false);
+        new SwingWorker<ProjectStateCodec.ImportResult, Void>() {
+            @Override
+            protected ProjectStateCodec.ImportResult doInBackground() throws Exception {
+                String json = Files.readString(selectedFile.toPath());
+                return ProjectStateCodec.importFrom(json);
+            }
+
+            @Override
+            protected void done() {
+                if (triggerButton != null) triggerButton.setEnabled(true);
+                Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+                try {
+                    ProjectStateCodec.ImportResult result = get();
+                    Path dir = Path.of(config.getString("evidence.output_dir", System.getProperty("user.home")));
+                    Files.createDirectories(dir);
+
+                    evidenceCapture.clearAll();
+                    for (var item : result.items()) {
+                        String filename = "evidence-" + item.finding().type().replaceAll("[^a-zA-Z0-9.-]", "_")
+                                + "-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID() + ".png";
+                        Path imagePath = dir.resolve(filename);
+                        Files.write(imagePath, item.imageBytes());
+                        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(imagePath.toFile());
+                        var ce = new EvidenceCapture.CapturedEvidence(item.finding(), imagePath, image, item.caption());
+                        evidenceCapture.restoreCaptured(ce, item.included());
+                        findings.processDeduplication(List.of(item.finding()), false);
+                    }
+                    result.reportTemplateConfig().saveTo(config);
+                    api.persistence().extensionData().setString("config", config.serialize());
+
+                    onImported.run();
+                    ToastNotification.show(suiteFrame, "Project imported: " + result.items().size() + " evidence item(s).");
+                } catch (Exception ex) {
+                    api.logging().logToError("Project import failed: " + ex.getCause());
+                    JOptionPane.showMessageDialog(parent, "Project import failed: " + ex.getCause());
                 }
             }
         }.execute();

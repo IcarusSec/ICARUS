@@ -72,6 +72,18 @@ public final class EvidenceCapture {
         excludedFromReport.remove(evidence);
     }
 
+    /** Discards all captured evidence and inclusion state — used when importing a project file to fully replace current state. */
+    public void clearAll() {
+        captured.clear();
+        excludedFromReport.clear();
+    }
+
+    /** Adds a reconstructed piece of evidence (e.g. from an imported project file) without going through the interactive capture flow. */
+    public void restoreCaptured(CapturedEvidence evidence, boolean included) {
+        captured.add(evidence);
+        if (!included) excludedFromReport.add(evidence);
+    }
+
     public void setIncluded(CapturedEvidence evidence, boolean included) {
         if (included) {
             excludedFromReport.remove(evidence);

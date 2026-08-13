@@ -40,15 +40,27 @@ public class Icarus implements BurpExtension {
         }
         config.migrateReportTemplateConfigIfNeeded();
 
-        List<IcarusModule> modules = List.of(
-            new ParamValidatorModule(api),
-            new HttpVerbModule(api),
-            new JwtCheckerModule(api),
-            new SensitiveHeaderModule(api),
-            new PostmanExportModule(api),
-            new RateLimitModule(api),
-            new PassiveErrorModule()
-        );
+        List<IcarusModule> modules = java.util.stream.Stream.of(
+            "icarus.modules.ParamValidatorModule",
+            "icarus.modules.HttpVerbModule",
+            "icarus.modules.JwtCheckerModule",
+            "icarus.modules.SensitiveHeaderModule",
+            "icarus.modules.PostmanExportModule",
+            "icarus.modules.RateLimitModule",
+            "icarus.modules.PassiveErrorModule"
+        ).map(className -> {
+            try {
+                Class<?> clazz = Class.forName(className);
+                try {
+                    return (IcarusModule) clazz.getConstructor(MontoyaApi.class).newInstance(api);
+                } catch (NoSuchMethodException e) {
+                    return (IcarusModule) clazz.getConstructor().newInstance();
+                }
+            } catch (Throwable t) {
+                // ponytail: reflection ceiling - standard lib ServiceLoader needs boilerplate (META-INF), this allows pure file deletion
+                return null;
+            }
+        }).filter(java.util.Objects::nonNull).toList();
 
         var evidenceCapture = new EvidenceCapture(api, config);
         var reportGenerator = new ReportGenerator(api);

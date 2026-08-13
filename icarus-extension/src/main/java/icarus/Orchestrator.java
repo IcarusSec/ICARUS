@@ -14,7 +14,6 @@ import icarus.evidence.EvidenceCapture;
 import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ProjectStateCodec;
 import icarus.evidence.ReportGenerator;
-import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
 
 import javax.swing.*;
@@ -1019,9 +1018,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private Finding detectSmartEvidence(HttpRequestResponse rr) {
         if (rr.response() == null) return null;
 
-        // Reuse PassiveErrorModule's detection instead of a second copy of the same
+        // Reuse PassiveErrorModule's detection if it exists instead of a second copy of the same
         // VerboseErrorDetector/status-code checks living here.
-        List<Finding> errorFindings = new PassiveErrorModule().run(rr, config, msg -> {});
+        IcarusModule pem = modules.stream().filter(m -> m.getClass().getSimpleName().equals("PassiveErrorModule")).findFirst().orElse(null);
+        List<Finding> errorFindings = pem != null ? pem.run(rr, config, msg -> {}) : List.of();
         if (!errorFindings.isEmpty()) {
             Finding candidate = errorFindings.get(0);
             return confirmSmartEvidence(candidate.type(), candidate.description()) ? candidate : null;

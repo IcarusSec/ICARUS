@@ -19,7 +19,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -63,10 +62,8 @@ public final class PdfReportGenerator {
             return false;
         }
 
-        var evidenceByFinding = new IdentityHashMap<Finding, CapturedEvidence>();
-        for (var c : capture.getCaptured()) {
-            evidenceByFinding.put(c.finding(), c);
-        }
+        // Grouped by Finding#similarityHash(), not identity — see ReportGenerator for why.
+        var evidenceByHash = capture.groupedBySimilarityHash();
 
         Path reportDir = outputPdfFile.toAbsolutePath().getParent();
         Files.createDirectories(reportDir);
@@ -94,7 +91,7 @@ public final class PdfReportGenerator {
             appendHeader(doc, reportDir.getFileName().toString(), projectName);
             appendExecutiveSummary(doc, config.getString("evidence.executive_summary", ""));
             appendSummary(doc, findings);
-            appendFindings(doc, findings, evidenceByFinding);
+            appendFindings(doc, findings, evidenceByHash);
         } catch (DocumentException e) {
             throw new IOException("PDF generation failed", e);
         } finally {
@@ -171,13 +168,17 @@ public final class PdfReportGenerator {
         return cell;
     }
 
-    private void appendFindings(Document doc, List<Finding> findings, Map<Finding, CapturedEvidence> evidenceByFinding) throws DocumentException {
+    private void appendFindings(Document doc, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash) throws DocumentException {
         doc.add(new Paragraph("Findings", SECTION_FONT));
         doc.add(Chunk.NEWLINE);
 
         int index = 1;
         for (Finding f : findings) {
-            appendFindingCard(doc, index++, f, evidenceByFinding.get(f));
+            // Renders the first captured item per finding for now — full multi-evidence
+            // rendering (looping the group) lands in Step 06.
+            List<CapturedEvidence> group = evidenceByHash.get(f.similarityHash());
+            CapturedEvidence first = (group == null || group.isEmpty()) ? null : group.get(0);
+            appendFindingCard(doc, index++, f, first);
         }
     }
 

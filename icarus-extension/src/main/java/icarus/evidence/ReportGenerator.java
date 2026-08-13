@@ -13,7 +13,6 @@ import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,27 +42,24 @@ public final class ReportGenerator {
             return false;
         }
 
-        // Screenshots are optional per finding — captured by identity, since
-        // captureInteractive() is always called with the same Finding reference
-        // that's already in `findings` (never a copy).
-        var evidenceByFinding = new IdentityHashMap<Finding, CapturedEvidence>();
-        for (var c : capture.getCaptured()) {
-            evidenceByFinding.put(c.finding(), c);
-        }
+        // Screenshots are grouped by Finding#similarityHash(), not identity — re-editing a
+        // finding's evidence builds a new Finding instance with the same hash, so identity
+        // matching used to silently drop every prior screenshot for that finding.
+        var evidenceByHash = capture.groupedBySimilarityHash();
 
         Path reportDir = outputHtmlFile.toAbsolutePath().getParent();
         Files.createDirectories(reportDir);
 
         for (Finding f : findings) {
-            var c = evidenceByFinding.get(f);
-            if (c == null) continue;
-            Path src = c.imagePath().toAbsolutePath().normalize();
-            Path dest = reportDir.resolve(c.imagePath().getFileName()).normalize();
-            if (!src.equals(dest)) {
-                try {
-                    Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
-                } catch (IOException e) {
-                    api.logging().logToError("Failed to copy evidence image " + src.getFileName() + " into report directory: " + e);
+            for (var c : evidenceByHash.getOrDefault(f.similarityHash(), List.of())) {
+                Path src = c.imagePath().toAbsolutePath().normalize();
+                Path dest = reportDir.resolve(c.imagePath().getFileName()).normalize();
+                if (!src.equals(dest)) {
+                    try {
+                        Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (IOException e) {
+                        api.logging().logToError("Failed to copy evidence image " + src.getFileName() + " into report directory: " + e);
+                    }
                 }
             }
         }
@@ -80,7 +76,7 @@ public final class ReportGenerator {
             appendHeader(sb, reportDir.getFileName().toString(), projectName);
             appendExecutiveSummary(sb, config.getString("evidence.executive_summary", ""));
             appendSummary(sb, findings);
-            appendFindings(sb, findings, evidenceByFinding);
+            appendFindings(sb, findings, evidenceByHash);
             appendFooter(sb);
             html = sb.toString();
         } catch (RuntimeException e) {
@@ -277,7 +273,7 @@ public final class ReportGenerator {
         return findings.stream().filter(f -> f.severity().name().equals(severity)).count();
     }
 
-    private void appendFindings(StringBuilder html, List<Finding> findings, Map<Finding, CapturedEvidence> evidenceByFinding) {
+    private void appendFindings(StringBuilder html, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash) {
         int index = 1;
         for (Finding f : findings) {
             html.append("""
@@ -319,7 +315,10 @@ public final class ReportGenerator {
                 }
             }
 
-            var c = evidenceByFinding.get(f);
+            // Renders the first captured item per finding for now — full multi-evidence
+            // rendering (looping evidenceByHash.get(...)) lands in Step 05.
+            List<CapturedEvidence> group = evidenceByHash.get(f.similarityHash());
+            CapturedEvidence c = (group == null || group.isEmpty()) ? null : group.get(0);
             if (c != null) {
                 html.append("""
                         </table>

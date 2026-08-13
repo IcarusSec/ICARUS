@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -95,6 +96,42 @@ public final class EvidenceCapture {
 
     public List<CapturedEvidence> getCaptured() {
         return List.copyOf(captured);
+    }
+
+    /**
+     * Replaces {@code evidence}'s caption in place (records are immutable, so this swaps in
+     * a new instance at the same list position — preserving report order and carrying over
+     * inclusion/exclusion, which is tracked by object identity in {@link #excludedFromReport}).
+     */
+    public void setCaption(CapturedEvidence evidence, String caption) {
+        int idx = captured.indexOf(evidence);
+        if (idx < 0) return;
+        boolean wasExcluded = excludedFromReport.contains(evidence);
+        CapturedEvidence updated = new CapturedEvidence(evidence.finding(), evidence.imagePath(), evidence.image(), caption);
+        captured.set(idx, updated);
+        if (wasExcluded) {
+            excludedFromReport.remove(evidence);
+            excludedFromReport.add(updated);
+        }
+    }
+
+    /**
+     * Groups included evidence by {@link Finding#similarityHash()} instead of Finding object
+     * identity — re-editing a finding's evidence (Evidence Editor "Apply") builds a brand new
+     * Finding instance with the same hash, so identity-based lookups silently orphaned every
+     * prior screenshot for that finding. Hash grouping is what makes 1-finding-to-N-evidence
+     * actually work: every piece of evidence captured against "the same" finding (by hash)
+     * lands in one group, regardless of which edit produced its Finding instance.
+     * List order (both within a group and across groups) follows this object's internal
+     * `captured` order, which drag-and-drop reordering in the Evidence Manager controls.
+     */
+    public Map<String, List<CapturedEvidence>> groupedBySimilarityHash() {
+        Map<String, List<CapturedEvidence>> grouped = new java.util.LinkedHashMap<>();
+        for (CapturedEvidence ce : captured) {
+            if (!isIncluded(ce)) continue;
+            grouped.computeIfAbsent(ce.finding().similarityHash(), h -> new ArrayList<>()).add(ce);
+        }
+        return grouped;
     }
 
     public void captureInteractive(Finding finding) {
@@ -397,7 +434,7 @@ public final class EvidenceCapture {
             Path out = dir.resolve(filename);
             ImageIO.write(image, "png", out.toFile());
 
-            captured.add(new CapturedEvidence(finding, out, image));
+            captured.add(new CapturedEvidence(finding, out, image, ""));
             onApplied.accept(finding);
             ToastNotification.show(api.userInterface().swingUtils().suiteFrame(),
                     "Evidence added to report: " + finding.type());
@@ -1266,7 +1303,7 @@ public final class EvidenceCapture {
                 if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
                     File f = fc.getSelectedFile();
                     ImageIO.write(out, "png", f);
-                    captured.add(new CapturedEvidence(finding, f.toPath(), out));
+                    captured.add(new CapturedEvidence(finding, f.toPath(), out, ""));
                     onApplied.accept(finding);
                     if (f.getParentFile() != null) {
                         config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
@@ -1522,5 +1559,6 @@ public final class EvidenceCapture {
         }
         return sb.toString();
     }
-    public record CapturedEvidence(Finding finding, Path imagePath, BufferedImage image) {}
+    /** @param caption editable text tied to this specific piece of evidence, shown beneath its image in reports (Step 05/06). */
+    public record CapturedEvidence(Finding finding, Path imagePath, BufferedImage image, String caption) {}
 }

@@ -112,20 +112,25 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
      * landed in the Results tab for awareness. Order follows EvidenceCapture's captured
      * list, which the Evidence Manager's drag-and-drop reordering controls directly —
      * report order was previously undefined HashMap iteration order via getAllFindingRecords().
-     * Also drops orphaned entries left behind when a finding was re-edited (the old,
-     * pre-edit CapturedEvidence stays in the list, but the registry only tracks the latest),
-     * and entries the user unchecked in the Evidence Manager's Include column.
+     * Grouped by {@link Finding#similarityHash()}, not Finding object identity — re-editing a
+     * finding's evidence (Evidence Editor "Apply") builds a brand new Finding instance with the
+     * same hash, so identity-based matching used to silently orphan every prior screenshot for
+     * that finding instead of keeping them as additional evidence for the same reportable entry.
+     * Returns the registry's current canonical Finding per hash (freshest title/severity/etc.),
+     * one per hash regardless of how many CapturedEvidence entries share it — matching
+     * {@link icarus.evidence.EvidenceCapture#groupedBySimilarityHash()}'s keys, which is what
+     * the report generators actually iterate for each finding's evidence images.
      */
     public List<Finding> getReportableFindings() {
         List<Finding> result = new ArrayList<>();
-        Set<Finding> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Set<String> seenHashes = new HashSet<>();
         for (var ce : evidenceCapture.getCaptured()) {
             if (!evidenceCapture.isIncluded(ce)) continue;
-            Finding f = ce.finding();
-            if (!seen.add(f)) continue;
-            var record = findings.getRecordByHash(f.similarityHash());
-            if (record == null || record.isSuppressed() || record.getFinding() != f) continue;
-            result.add(f);
+            String hash = ce.finding().similarityHash();
+            if (!seenHashes.add(hash)) continue;
+            var record = findings.getRecordByHash(hash);
+            if (record == null || record.isSuppressed()) continue;
+            result.add(record.getFinding());
         }
         return result;
     }

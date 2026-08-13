@@ -348,9 +348,33 @@ public class SettingsPanel {
 
         // ── Theme ─────────────────────────────────────────────
         JPanel pnlTheme = createSection("Theme & Styling");
+
+        JComboBox<String> comboBaseTheme = new JComboBox<>(new String[]{"Light", "Dark"});
+        comboBaseTheme.setSelectedItem("dark".equals(rtc.themeName()) ? "Dark" : "Light");
+        addLabeledCombo(pnlTheme, "HTML base theme:", comboBaseTheme);
+
         JTextField txtPrimary = new JTextField(rtc.primaryColor() != null ? rtc.primaryColor() : "", 10);
-        addLabeledField(pnlTheme, "Primary color (#hex):", txtPrimary);
         JTextField txtSecondary = new JTextField(rtc.secondaryColor() != null ? rtc.secondaryColor() : "", 10);
+
+        // Named presets are just a shortcut that fills the two hex fields below — they stay
+        // freely editable afterward, so this doesn't need its own persisted state.
+        Map<String, String[]> presets = new LinkedHashMap<>();
+        presets.put("Custom", new String[]{"", ""});
+        presets.put("ICARUS Blue (default)", new String[]{"#3e7bb8", "#6e6e6e"});
+        presets.put("Crimson", new String[]{"#b3272c", "#6e6e6e"});
+        presets.put("Forest", new String[]{"#2f7a4f", "#6e6e6e"});
+        presets.put("Slate", new String[]{"#41505f", "#8a99a8"});
+        JComboBox<String> comboPreset = new JComboBox<>(presets.keySet().toArray(new String[0]));
+        comboPreset.addActionListener(e -> {
+            String[] colors = presets.get((String) comboPreset.getSelectedItem());
+            if (colors != null && !colors[0].isEmpty()) {
+                txtPrimary.setText(colors[0]);
+                txtSecondary.setText(colors[1]);
+            }
+        });
+        addLabeledCombo(pnlTheme, "Color preset:", comboPreset);
+
+        addLabeledField(pnlTheme, "Primary color (#hex):", txtPrimary);
         addLabeledField(pnlTheme, "Secondary color (#hex):", txtSecondary);
 
         JTextField txtCssPath = new JTextField(rtc.customCssPath() != null ? rtc.customCssPath() : "", 30);
@@ -425,6 +449,7 @@ public class SettingsPanel {
             rtc.setPrimaryColor(blankToNull(txtPrimary.getText()));
             rtc.setSecondaryColor(blankToNull(txtSecondary.getText()));
             rtc.setCustomCssPath(blankToNull(txtCssPath.getText()));
+            rtc.setThemeName("Dark".equals(comboBaseTheme.getSelectedItem()) ? "dark" : "light");
             rtc.setTocEnabled(chkToc.isSelected());
             rtc.setRetestStatuses(nonBlankLines(txtRetestStatuses.getText()));
             rtc.setRetestSuppressedSections(nonBlankLines(txtSuppressed.getText()));
@@ -433,6 +458,17 @@ public class SettingsPanel {
         });
 
         return root;
+    }
+
+    private void addLabeledCombo(JPanel parent, String label, JComboBox<String> combo) {
+        JPanel row = new JPanel(new BorderLayout(4, 0));
+        themeHelper.applyTheme(row);
+        JLabel lbl = new JLabel(label);
+        themeHelper.applyTheme(lbl);
+        row.add(lbl, BorderLayout.WEST);
+        row.add(combo, BorderLayout.CENTER);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        ((JPanel) parent.getComponent(0)).add(row);
     }
 
     private void addLabeledField(JPanel parent, String label, JTextField field) {

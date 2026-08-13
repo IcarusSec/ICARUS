@@ -116,6 +116,12 @@ public final class ReportGenerator {
     private void appendHeader(StringBuilder html, String reportName, String projectName, ReportTemplateConfig rtc) {
         String accent = rtc.primaryColor() != null ? rtc.primaryColor() : "#3e7bb8";
         String accent2 = rtc.secondaryColor() != null ? rtc.secondaryColor() : "#6e6e6e";
+        boolean dark = "dark".equals(rtc.themeName());
+        String bg = dark ? "#1a1a1a" : "#ffffff";
+        String cardBg = dark ? "#262626" : "#f7f7f7";
+        String text = dark ? "#e8e8e8" : "#1a1a1a";
+        String textMuted = dark ? "#a0a0a0" : "#666666";
+        String border = dark ? "#3a3a3a" : "#dddddd";
         html.append("""
             <!DOCTYPE html>
             <html lang="en">
@@ -125,11 +131,11 @@ public final class ReportGenerator {
                 <title>ICARUS Security Report</title>
                 <style>
                     :root {
-                        --bg: #ffffff;
-                        --card-bg: #f7f7f7;
-                        --text: #1a1a1a;
-                        --text-muted: #666666;
-                        --border: #dddddd;
+                        --bg: %s;
+                        --card-bg: %s;
+                        --text: %s;
+                        --text-muted: %s;
+                        --border: %s;
                         --accent: %s;
                         --accent2: %s;
                         --critical: #cc2e2e;
@@ -242,6 +248,7 @@ public final class ReportGenerator {
                     <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s%s</p>
                 </div>
             """.formatted(
+                bg, cardBg, text, textMuted, border,
                 accent, accent2,
                 customCssBlock(rtc.customCssPath()),
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),

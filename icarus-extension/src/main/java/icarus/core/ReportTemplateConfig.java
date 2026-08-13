@@ -19,6 +19,7 @@ public final class ReportTemplateConfig {
     private String primaryColor;
     private String secondaryColor;
     private String customCssPath;
+    private String themeName = "light"; // "light" or "dark" — HTML report base theme
     private List<String> retestStatuses = new ArrayList<>();
     private List<String> retestSuppressedSections = new ArrayList<>();
     private boolean tocEnabled = true;
@@ -37,6 +38,9 @@ public final class ReportTemplateConfig {
 
     public String customCssPath() { return customCssPath; }
     public void setCustomCssPath(String customCssPath) { this.customCssPath = customCssPath; }
+
+    public String themeName() { return themeName; }
+    public void setThemeName(String themeName) { this.themeName = themeName; }
 
     public List<String> retestStatuses() { return retestStatuses; }
     public void setRetestStatuses(List<String> retestStatuses) { this.retestStatuses = new ArrayList<>(retestStatuses); }
@@ -77,6 +81,8 @@ public final class ReportTemplateConfig {
         result.primaryColor = stringOrNull(theme.get("primaryColor"));
         result.secondaryColor = stringOrNull(theme.get("secondaryColor"));
         result.customCssPath = stringOrNull(theme.get("customCssPath"));
+        String themeNameRaw = stringOrNull(theme.get("themeName"));
+        result.themeName = themeNameRaw != null ? themeNameRaw : "light";
 
         result.retestStatuses = ((List<Object>) map.getOrDefault("retestStatuses", List.of()))
                 .stream().map(String::valueOf).collect(java.util.stream.Collectors.toCollection(ArrayList::new));
@@ -111,6 +117,7 @@ public final class ReportTemplateConfig {
         theme.put("primaryColor", primaryColor);
         theme.put("secondaryColor", secondaryColor);
         theme.put("customCssPath", customCssPath);
+        theme.put("themeName", themeName);
 
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("sections", sectionsJson);

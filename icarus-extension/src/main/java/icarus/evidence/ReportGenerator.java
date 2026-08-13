@@ -77,15 +77,20 @@ public final class ReportGenerator {
         }
 
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        // One persistent "Retest Mode" toggle (Evidence Manager) drives both the per-finding
+        // status dropdown there and this report profile — a separate one-shot "Generate Retest
+        // Report" export-dialog checkbox would just be a second control for the same decision,
+        // since there's no existing modal export options dialog to add it to.
+        boolean retest = config.getBool("retest.enabled", false);
 
         String html;
         try {
             StringBuilder sb = new StringBuilder();
             appendHeader(sb, reportDir.getFileName().toString(), projectName, rtc);
-            if (rtc.tocEnabled()) appendToc(sb, rtc, findings);
-            appendSections(sb, rtc);
+            if (rtc.tocEnabled()) appendToc(sb, rtc, findings, retest);
+            appendSections(sb, rtc, retest);
             appendSummary(sb, findings);
-            appendFindings(sb, findings, evidenceByHash);
+            appendFindings(sb, findings, evidenceByHash, config, retest);
             appendFooter(sb);
             html = sb.toString();
         } catch (RuntimeException e) {
@@ -262,9 +267,10 @@ public final class ReportGenerator {
 
     /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,
      *  with {{variable}} interpolation. Empty if the user has no sections configured. */
-    private void appendSections(StringBuilder html, ReportTemplateConfig rtc) {
+    private void appendSections(StringBuilder html, ReportTemplateConfig rtc, boolean retest) {
         int i = 0;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
+            if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
             String bodyHtml = markdownRenderer.render(markdownParser.parse(rtc.interpolate(section.content())));
             html.append("""
@@ -276,10 +282,11 @@ public final class ReportGenerator {
         }
     }
 
-    private void appendToc(StringBuilder html, ReportTemplateConfig rtc, List<Finding> findings) {
+    private void appendToc(StringBuilder html, ReportTemplateConfig rtc, List<Finding> findings, boolean retest) {
         html.append("<div class=\"toc\"><strong>Contents</strong><ul>\n");
         int i = 0;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
+            if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
             html.append("<li><a href=\"#section-").append(i).append("\">")
                 .append(escapeHtml(section.title())).append("</a></li>\n");
@@ -336,7 +343,7 @@ public final class ReportGenerator {
         return findings.stream().filter(f -> f.severity().name().equals(severity)).count();
     }
 
-    private void appendFindings(StringBuilder html, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash) {
+    private void appendFindings(StringBuilder html, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config, boolean retest) {
         int index = 1;
         for (Finding f : findings) {
             html.append("""
@@ -375,6 +382,15 @@ public final class ReportGenerator {
                     html.append("""
                             <tr><th>%s</th><td><code>%s</code></td></tr>
                     """.formatted(escapeHtml(meta.getKey()), escapeHtml(meta.getValue())));
+                }
+            }
+
+            if (retest) {
+                String status = config.getString("retest.status." + f.similarityHash(), "");
+                if (!status.isBlank()) {
+                    html.append("                        <tr><th>Retest Status</th><td><strong>")
+                        .append(escapeHtml(status))
+                        .append("</strong></td></tr>\n");
                 }
             }
 

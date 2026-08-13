@@ -93,6 +93,8 @@ public final class PdfReportGenerator {
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
         Color accent = themeColor(rtc.primaryColor(), ACCENT);
         boolean addBookmarks = rtc.tocEnabled();
+        // Same single persistent "Retest Mode" toggle as ReportGenerator — see its generate() for why.
+        boolean retest = config.getBool("retest.enabled", false);
 
         // Not try-with-resources: doc.close() below already closes the underlying
         // FileOutputStream via PdfWriter/DocWriter, and closing it again first would leave
@@ -109,9 +111,9 @@ public final class PdfReportGenerator {
             doc.open();
 
             appendHeader(doc, reportDir.getFileName().toString(), projectName);
-            appendSections(doc, rtc, accent, writer, addBookmarks);
+            appendSections(doc, rtc, accent, writer, addBookmarks, retest);
             appendSummary(doc, findings, accent);
-            appendFindings(doc, findings, evidenceByHash, writer, addBookmarks);
+            appendFindings(doc, findings, evidenceByHash, writer, addBookmarks, config, retest);
         } catch (DocumentException e) {
             throw new IOException("PDF generation failed", e);
         } finally {
@@ -136,9 +138,10 @@ public final class PdfReportGenerator {
     /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,
      *  with {{variable}} interpolation — one bordered card per section, matching the old
      *  single "Executive Summary" card's look. Bookmarks added when {@code addBookmarks}. */
-    private void appendSections(Document doc, ReportTemplateConfig rtc, Color accent, PdfWriter writer, boolean addBookmarks) throws DocumentException {
+    private void appendSections(Document doc, ReportTemplateConfig rtc, Color accent, PdfWriter writer, boolean addBookmarks, boolean retest) throws DocumentException {
         int i = 0;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
+            if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
             String destName = "section-" + i;
 
@@ -204,19 +207,20 @@ public final class PdfReportGenerator {
         return cell;
     }
 
-    private void appendFindings(Document doc, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, PdfWriter writer, boolean addBookmarks) throws DocumentException {
+    private void appendFindings(Document doc, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, PdfWriter writer, boolean addBookmarks, ModuleConfig config, boolean retest) throws DocumentException {
         doc.add(new Paragraph("Findings", SECTION_FONT));
         doc.add(Chunk.NEWLINE);
 
         int index = 1;
         for (Finding f : findings) {
             List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
-            appendFindingCard(doc, index, f, group, writer, addBookmarks);
+            String retestStatus = retest ? config.getString("retest.status." + f.similarityHash(), "") : "";
+            appendFindingCard(doc, index, f, group, writer, addBookmarks, retestStatus);
             index++;
         }
     }
 
-    private void appendFindingCard(Document doc, int index, Finding f, List<CapturedEvidence> evidenceGroup, PdfWriter writer, boolean addBookmarks) throws DocumentException {
+    private void appendFindingCard(Document doc, int index, Finding f, List<CapturedEvidence> evidenceGroup, PdfWriter writer, boolean addBookmarks, String retestStatus) throws DocumentException {
         // Everything about this finding — title/badge, meta rows, and the screenshot — is
         // built as rows of ONE PdfPTable, not separate doc.add() calls. A PdfPTable's own
         // rows always render in the order added, even when the table splits across a page
@@ -259,6 +263,9 @@ public final class PdfReportGenerator {
         addMetaRow(card, "Description", f.description());
         if (!f.cweIds().isEmpty()) {
             addMetaRow(card, "CWE", String.join(", ", f.cweIds()));
+        }
+        if (retestStatus != null && !retestStatus.isBlank()) {
+            addMetaRow(card, "Retest Status", retestStatus);
         }
         for (var entry : f.metadata().entrySet()) {
             addMetaRow(card, entry.getKey(), entry.getValue());

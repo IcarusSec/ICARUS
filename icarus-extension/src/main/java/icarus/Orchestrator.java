@@ -210,6 +210,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 empty.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
                 detailPanel.add(empty);
             } else {
+                if (config.getBool("retest.enabled", false)) {
+                    detailPanel.add(buildRetestStatusRow(hash));
+                    detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+                }
                 List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
                 for (int i = 0; i < group.size(); i++) {
                     detailPanel.add(buildEvidenceCard(dialog, group, i, hashOrder, groups, () -> refreshAllRef[0].run()));
@@ -294,9 +298,24 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JLabel hint = new JLabel("  Select a finding on the left; manage its evidence cards on the right.");
         hint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
+        // One toggle drives both: showing/editing each finding's resolution status here, and
+        // switching HTML/PDF generation to the retest profile (suppressed sections + status
+        // shown per finding) — see ReportGenerator.generate()'s comment for why this is one
+        // flag instead of a separate one-shot export-dialog checkbox.
+        JCheckBox chkRetest = new JCheckBox("Retest Mode (show resolution status; suppress configured sections in reports)",
+                config.getBool("retest.enabled", false));
+        chkRetest.addActionListener(e -> {
+            config.set("retest.enabled", chkRetest.isSelected());
+            api.persistence().extensionData().setString("config", config.serialize());
+            refreshAllRef[0].run();
+        });
+
         JPanel topPanel = new JPanel(new BorderLayout());
         topPanel.add(summaryScroll, BorderLayout.CENTER);
-        topPanel.add(hint, BorderLayout.SOUTH);
+        JPanel bottomOfTop = new JPanel(new BorderLayout());
+        bottomOfTop.add(chkRetest, BorderLayout.NORTH);
+        bottomOfTop.add(hint, BorderLayout.SOUTH);
+        topPanel.add(bottomOfTop, BorderLayout.SOUTH);
 
         dialog.add(topPanel, BorderLayout.NORTH);
         dialog.add(split, BorderLayout.CENTER);
@@ -334,6 +353,36 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
         dialog.setVisible(true);
+    }
+
+    /**
+     * One row above the evidence card feed: the selected finding's retest resolution status,
+     * persisted as a flat {@code retest.status.<hash>} config key (reuses ModuleConfig's
+     * existing string-key persistence rather than threading status through the Finding/
+     * FindingRegistry data model for what's meant to be a lightweight quick-edit dropdown).
+     * Options come from {@code ReportTemplateConfig.retestStatuses()} (Settings → Reporting).
+     */
+    private JPanel buildRetestStatusRow(String hash) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        row.setBorder(BorderFactory.createTitledBorder("Retest Status"));
+
+        List<String> statuses = ReportTemplateConfig.fromConfig(config).retestStatuses();
+        if (statuses.isEmpty()) {
+            row.add(new JLabel("No retest statuses configured — add some in Settings → Reporting."));
+            return row;
+        }
+
+        String key = "retest.status." + hash;
+        JComboBox<String> combo = new JComboBox<>(statuses.toArray(new String[0]));
+        String current = config.getString(key, "");
+        if (!current.isBlank()) combo.setSelectedItem(current);
+        else combo.setSelectedIndex(-1);
+        combo.addActionListener(e -> {
+            config.set(key, (String) combo.getSelectedItem());
+            api.persistence().extensionData().setString("config", config.serialize());
+        });
+        row.add(combo);
+        return row;
     }
 
     /** Flattens {@code groups} back into EvidenceCapture's report order, following {@code hashOrder}. */

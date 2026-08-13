@@ -404,17 +404,18 @@ public final class ReportGenerator {
             List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
             if (!group.isEmpty()) {
                 html.append("                        </table>\n                        <h4>Evidence</h4>\n");
+                int evidenceIndex = 1;
                 for (CapturedEvidence c : group) {
                     html.append("""
                             <div class="evidence-block">
                                 <img class="evidence-img" src="%s" alt="Evidence for %s">
                     """.formatted(c.imagePath().getFileName().toString(), escapeHtml(f.type())));
-                    if (c.caption() != null && !c.caption().isBlank()) {
-                        html.append("                                <div class=\"evidence-caption\">")
-                            .append(escapeHtml(c.caption()))
-                            .append("</div>\n");
-                    }
+                    String caption = c.caption() == null ? "" : c.caption();
+                    html.append("                                <div class=\"evidence-caption\">")
+                        .append(evidenceIndex).append(". ").append(escapeHtml(caption))
+                        .append("</div>\n");
                     html.append("                            </div>\n");
+                    evidenceIndex++;
                 }
                 html.append("                    </div>\n                </div>\n");
             } else {

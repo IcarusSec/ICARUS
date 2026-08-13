@@ -161,10 +161,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JList<String> masterList = new JList<>(masterModel);
         masterList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         masterList.setCellRenderer((list, hash, index, isSelected, hasFocus) -> {
-            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
-            Finding display = group.get(group.size() - 1).finding(); // freshest edit
-            JLabel l = new JLabel(display.severity().name() + "  ·  " + display.type()
-                    + "  (" + group.size() + (group.size() == 1 ? " item)" : " items)"));
+            JLabel l = new JLabel(findingLabel(hash, groups));
             l.setOpaque(true);
             l.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
             l.setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
@@ -355,6 +352,14 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         dialog.setVisible(true);
     }
 
+    /** Shared by the master list's cell renderer and the "Move to Finding…" picker. */
+    private String findingLabel(String hash, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
+        List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+        Finding display = group.get(group.size() - 1).finding(); // freshest edit
+        return display.severity().name() + "  ·  " + display.type()
+                + "  (" + group.size() + (group.size() == 1 ? " item)" : " items)");
+    }
+
     /**
      * One row above the evidence card feed: the selected finding's retest resolution status,
      * persisted as a flat {@code retest.status.<hash>} config key (reuses ModuleConfig's
@@ -427,7 +432,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JTextArea txtCaption = new JTextArea(ceRef[0].caption(), 3, 30);
         txtCaption.setLineWrap(true);
         txtCaption.setWrapStyleWord(true);
-        txtCaption.setBorder(BorderFactory.createTitledBorder("Caption"));
+        // Just a display label — the "1.", "2." numbering itself is applied at report
+        // generation time (ReportGenerator/PdfReportGenerator), not stored in the caption
+        // text, so it stays correct automatically after any reorder/move/remove.
+        txtCaption.setBorder(BorderFactory.createTitledBorder("Caption #" + (indexInGroup + 1)));
         txtCaption.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
@@ -466,6 +474,26 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         JButton btnEdit = new JButton("Edit / Re-annotate…");
         btnEdit.addActionListener(e -> evidenceCapture.captureInteractive(ceRef[0].finding()));
         controls.add(btnEdit);
+
+        JButton btnMove = new JButton("Move to Finding…");
+        btnMove.addActionListener(e -> {
+            String ownHash = ceRef[0].finding().similarityHash();
+            List<String> targets = hashOrder.stream().filter(h -> !h.equals(ownHash)).toList();
+            if (targets.isEmpty()) {
+                JOptionPane.showMessageDialog(dialog, "There's no other finding to move this evidence to.");
+                return;
+            }
+            String[] labels = targets.stream().map(h -> findingLabel(h, groups)).toArray(String[]::new);
+            String choice = (String) JOptionPane.showInputDialog(dialog, "Move this evidence to:",
+                    "Move to Finding", JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
+            if (choice == null) return;
+            String targetHash = targets.get(java.util.List.of(labels).indexOf(choice));
+            Finding targetFinding = findings.getFindingByHash(targetHash);
+            if (targetFinding == null) return; // suppressed/removed since the list was built
+            evidenceCapture.moveToFinding(ceRef[0], targetFinding);
+            onChange.run();
+        });
+        controls.add(btnMove);
 
         JButton btnRemove = new JButton("Remove");
         btnRemove.addActionListener(e -> {

@@ -124,6 +124,30 @@ public final class EvidenceCapture {
      * now-stale reference.
      */
     public CapturedEvidence setCaption(CapturedEvidence evidence, String caption) {
+        return replace(evidence, evidence.finding(), caption);
+    }
+
+    /**
+     * Re-assigns a piece of evidence to a different finding — e.g. a screenshot captured
+     * against the wrong finding, or one that turns out to belong under another. Since
+     * grouping is by {@link Finding#similarityHash()} (see {@link #groupedBySimilarityHash()}),
+     * this is what actually moves it between groups in the Evidence Manager; the image file
+     * and caption are untouched. Same imagePath-based matching and identity-swap semantics as
+     * {@link #setCaption} — see that method's doc for why.
+     */
+    public CapturedEvidence moveToFinding(CapturedEvidence evidence, Finding targetFinding) {
+        return replace(evidence, targetFinding, evidence.caption());
+    }
+
+    /**
+     * Matched by {@code imagePath} (unique per capture, and stable across edits) rather than
+     * full record equality/identity — {@code equals()} on a record includes every field, so
+     * once caption/finding changes, the caller's original reference no longer matches anything
+     * in this list and a lookup by equals/identity would silently no-op. Returns the new
+     * instance so the caller can keep tracking "this card's evidence" across edits instead of
+     * holding a now-stale reference.
+     */
+    private CapturedEvidence replace(CapturedEvidence evidence, Finding finding, String caption) {
         int idx = -1;
         for (int i = 0; i < captured.size(); i++) {
             if (captured.get(i).imagePath().equals(evidence.imagePath())) {
@@ -134,7 +158,7 @@ public final class EvidenceCapture {
         if (idx < 0) return evidence;
         CapturedEvidence current = captured.get(idx);
         boolean wasExcluded = excludedFromReport.contains(current);
-        CapturedEvidence updated = new CapturedEvidence(current.finding(), current.imagePath(), current.image(), caption);
+        CapturedEvidence updated = new CapturedEvidence(finding, current.imagePath(), current.image(), caption);
         captured.set(idx, updated);
         if (wasExcluded) {
             excludedFromReport.remove(current);

@@ -279,6 +279,7 @@ public final class PdfReportGenerator {
             contentCell.addElement(new Paragraph("No screenshot captured for this finding.", BODY_FONT));
             card.addCell(contentCell);
         } else {
+            int evidenceIndex = 1;
             for (CapturedEvidence evidence : evidenceGroup) {
                 // Image + its caption share one cell in a row of `card`, which has
                 // setSplitRows(false) — the whole row (image + caption) moves to the next
@@ -298,12 +299,12 @@ public final class PdfReportGenerator {
                     api.logging().logToError("Failed to embed evidence image in PDF for finding '" + f.type() + "': " + e);
                     contentCell.addElement(new Paragraph("(screenshot could not be embedded)", BODY_FONT));
                 }
-                if (evidence.caption() != null && !evidence.caption().isBlank()) {
-                    Paragraph caption = new Paragraph(evidence.caption(), LABEL_FONT);
-                    caption.setSpacingBefore(4f);
-                    contentCell.addElement(caption);
-                }
+                String evidenceCaption = evidence.caption() == null ? "" : evidence.caption();
+                Paragraph caption = new Paragraph(evidenceIndex + ". " + evidenceCaption, LABEL_FONT);
+                caption.setSpacingBefore(4f);
+                contentCell.addElement(caption);
                 card.addCell(contentCell);
+                evidenceIndex++;
             }
         }
 

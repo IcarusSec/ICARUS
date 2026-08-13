@@ -38,6 +38,7 @@ public class Icarus implements BurpExtension {
         if (persisted != null) {
             loadPersistedConfig(config, persisted);
         }
+        config.migrateReportTemplateConfigIfNeeded();
 
         List<IcarusModule> modules = List.of(
             new ParamValidatorModule(api),

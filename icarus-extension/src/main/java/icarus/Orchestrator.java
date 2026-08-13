@@ -19,6 +19,10 @@ import icarus.ui.ToastNotification;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,6 +51,13 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final AutoAuthModule autoAuth;
     private final ScanRunner scanRunner;
     private final FindingRegistry findings;
+
+    // Local, in-process drag-and-drop transfer of a CapturedEvidence reference from an
+    // evidence card (Evidence Manager detail panel) onto a finding in the master list, to
+    // move that screenshot to a different finding. No serialization involved — Swing DnD
+    // between components in the same JVM just carries the object reference.
+    private static final DataFlavor EVIDENCE_DRAG_FLAVOR =
+            new DataFlavor(EvidenceCapture.CapturedEvidence.class, "ICARUS Evidence Card");
 
     public Orchestrator(MontoyaApi api,
                         List<IcarusModule> modules,
@@ -246,41 +257,53 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 refreshAllRef[0].run();
             }
         });
-        JButton btnRename = new JButton("Rename Finding…");
-        btnRename.addActionListener(e -> {
-            int idx = masterList.getSelectedIndex();
-            if (idx < 0) return;
-            String hash = hashOrder.get(idx);
-            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
-            Finding current = group.get(group.size() - 1).finding(); // freshest edit
-            String newTitle = JOptionPane.showInputDialog(dialog, "New finding name:", current.type());
-            if (newTitle == null || newTitle.isBlank() || newTitle.equals(current.type())) return;
-
-            // Renaming changes similarityHash() (module+type+path), so this is really "move
-            // every evidence item in this group to a new Finding instance with the changed
-            // title" — reuses moveToFinding() for that, which also repaints each screenshot's
-            // header to the new name instead of leaving the old one baked into the pixels.
-            Finding.Builder builder = Finding.builder(current.module(), newTitle)
-                    .description(current.description())
-                    .severity(current.severity())
-                    .category(current.category())
-                    .path(current.path())
-                    .evidence(current.evidence());
-            current.metadata().forEach(builder::meta);
-            current.cweIds().forEach(builder::cwe);
-            Finding renamed = builder.build();
-
-            for (var ce : group) {
-                evidenceCapture.moveToFinding(ce, renamed);
+        JButton btnEditFinding = new JButton("Edit Finding…");
+        btnEditFinding.addActionListener(e -> editSelectedFinding(dialog, masterList, hashOrder, groups, refreshAllRef));
+        masterList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() != 2) return;
+                int idx = masterList.locationToIndex(e.getPoint());
+                if (idx < 0) return;
+                masterList.setSelectedIndex(idx);
+                editSelectedFinding(dialog, masterList, hashOrder, groups, refreshAllRef);
             }
-            findings.processDeduplication(List.of(renamed), false);
-            refreshAllRef[0].run();
+        });
+
+        // Drop target for dragging an evidence card's thumbnail (buildEvidenceCard, below)
+        // onto a different finding here to move it. DropMode.ON (not INSERT) since this drop
+        // means "onto this finding," not "reorder relative to it."
+        masterList.setDropMode(DropMode.ON);
+        masterList.setTransferHandler(new TransferHandler() {
+            @Override
+            public boolean canImport(TransferSupport support) {
+                return support.isDrop() && support.isDataFlavorSupported(EVIDENCE_DRAG_FLAVOR);
+            }
+
+            @Override
+            public boolean importData(TransferSupport support) {
+                if (!canImport(support)) return false;
+                try {
+                    var dragged = (EvidenceCapture.CapturedEvidence) support.getTransferable().getTransferData(EVIDENCE_DRAG_FLAVOR);
+                    int dropIndex = ((JList.DropLocation) support.getDropLocation()).getIndex();
+                    if (dropIndex < 0 || dropIndex >= hashOrder.size()) return false;
+                    String targetHash = hashOrder.get(dropIndex);
+                    if (targetHash.equals(dragged.finding().similarityHash())) return false; // dropped on its own finding
+                    Finding targetFinding = findings.getFindingByHash(targetHash);
+                    if (targetFinding == null) return false;
+                    evidenceCapture.moveToFinding(dragged, targetFinding);
+                    refreshAllRef[0].run();
+                    return true;
+                } catch (Exception ex) {
+                    return false;
+                }
+            }
         });
 
         JPanel masterButtons = new JPanel(new GridLayout(3, 1, 0, 4));
         masterButtons.add(btnGroupUp);
         masterButtons.add(btnGroupDown);
-        masterButtons.add(btnRename);
+        masterButtons.add(btnEditFinding);
 
         JPanel masterPanel = new JPanel(new BorderLayout(0, 4));
         masterPanel.add(new JLabel("Findings (report order)"), BorderLayout.NORTH);
@@ -384,6 +407,86 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         dialog.setVisible(true);
     }
 
+    /**
+     * Opens a small modal editor for the master list's currently selected finding — title,
+     * severity, and CWE IDs — reachable via the "Edit Finding…" button or a double-click on
+     * the finding. Renaming (or any of these fields changing) alters
+     * {@link Finding#similarityHash()} (module+type+path) or is otherwise part of the same
+     * canonical Finding all this group's evidence shares, so applying the edit means moving
+     * every evidence item in the group to a new {@code Finding} instance — reuses
+     * {@link EvidenceCapture#moveToFinding}, which also repaints each screenshot's header
+     * banner to match (title/severity/description) without touching the rest of the image,
+     * so annotations stay intact.
+     */
+    private void editSelectedFinding(JDialog parent, JList<String> masterList, List<String> hashOrder,
+                                      Map<String, List<EvidenceCapture.CapturedEvidence>> groups, Runnable[] refreshAllRef) {
+        int idx = masterList.getSelectedIndex();
+        if (idx < 0) return;
+        String hash = hashOrder.get(idx);
+        List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+        Finding current = group.get(group.size() - 1).finding(); // freshest edit
+
+        JDialog editor = new JDialog(parent, "Edit Finding", true);
+        editor.setLayout(new BorderLayout(8, 8));
+
+        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
+        form.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+
+        form.add(new JLabel("Title:"));
+        JTextField txtTitle = new JTextField(current.type());
+        form.add(txtTitle);
+
+        form.add(new JLabel("Severity:"));
+        JComboBox<Severity> comboSeverity = new JComboBox<>(Severity.values());
+        comboSeverity.setSelectedItem(current.severity());
+        form.add(comboSeverity);
+
+        form.add(new JLabel("CWE IDs (comma-separated):"));
+        JTextField txtCwe = new JTextField(String.join(", ", current.cweIds()));
+        form.add(txtCwe);
+
+        editor.add(form, BorderLayout.CENTER);
+
+        JButton btnOk = new JButton("Save");
+        JButton btnCancel = new JButton("Cancel");
+        btnCancel.addActionListener(e -> editor.dispose());
+        btnOk.addActionListener(e -> {
+            String newTitle = txtTitle.getText().strip();
+            if (newTitle.isEmpty()) {
+                JOptionPane.showMessageDialog(editor, "Title can't be empty.");
+                return;
+            }
+            Severity newSeverity = (Severity) comboSeverity.getSelectedItem();
+            List<String> newCweIds = java.util.Arrays.stream(txtCwe.getText().split(","))
+                    .map(String::strip).filter(s -> !s.isEmpty()).toList();
+
+            Finding.Builder builder = Finding.builder(current.module(), newTitle)
+                    .description(current.description())
+                    .severity(newSeverity)
+                    .category(current.category())
+                    .path(current.path())
+                    .evidence(current.evidence());
+            current.metadata().forEach(builder::meta);
+            newCweIds.forEach(builder::cwe);
+            Finding updated = builder.build();
+
+            for (var ce : group) {
+                evidenceCapture.moveToFinding(ce, updated);
+            }
+            findings.processDeduplication(List.of(updated), false);
+            refreshAllRef[0].run();
+            editor.dispose();
+        });
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttons.add(btnCancel);
+        buttons.add(btnOk);
+        editor.add(buttons, BorderLayout.SOUTH);
+
+        editor.pack();
+        editor.setLocationRelativeTo(parent);
+        editor.setVisible(true);
+    }
+
     /** Shared by the master list's cell renderer and the "Move to Finding…" picker. */
     private String findingLabel(String hash, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
         List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
@@ -457,6 +560,32 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         Image scaled = ceRef[0].image().getScaledInstance(320, -1, Image.SCALE_SMOOTH);
         JLabel thumb = new JLabel(new ImageIcon(scaled));
+        thumb.setToolTipText("Drag onto a finding on the left to move this evidence there");
+        thumb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        // JLabel has no built-in drag support (unlike JList/JTable/JTextComponent), so drag
+        // initiation is manual: a TransferHandler exporting the current CapturedEvidence
+        // reference, kicked off on mouse press. ceRef[0] (not the stale `ce` captured at
+        // build time) — same reasoning as every other control on this card.
+        thumb.setTransferHandler(new TransferHandler() {
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                EvidenceCapture.CapturedEvidence dragged = ceRef[0];
+                return new Transferable() {
+                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{EVIDENCE_DRAG_FLAVOR}; }
+                    public boolean isDataFlavorSupported(DataFlavor flavor) { return EVIDENCE_DRAG_FLAVOR.equals(flavor); }
+                    public Object getTransferData(DataFlavor flavor) { return dragged; }
+                };
+            }
+
+            @Override
+            public int getSourceActions(JComponent c) { return MOVE; }
+        });
+        thumb.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                thumb.getTransferHandler().exportAsDrag(thumb, e, TransferHandler.MOVE);
+            }
+        });
         card.add(thumb, BorderLayout.WEST);
 
         JPanel right = new JPanel(new BorderLayout(4, 4));

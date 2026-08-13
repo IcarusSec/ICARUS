@@ -125,6 +125,9 @@ public final class JsonParser {
         while (p[0] < s.length() && "-+.eE0123456789".indexOf(s.charAt(p[0])) >= 0) {
             p[0]++;
         }
+        if (p[0] == start) {
+            throw new IllegalArgumentException("Invalid JSON at position " + start + ": '" + s.charAt(start) + "'");
+        }
         return new RawNumber(s.substring(start, p[0]));
     }
 
@@ -253,6 +256,8 @@ public final class JsonParser {
         assert ((RawNumber) parse("2e2")).isInteger() == false;
         assert ((RawNumber) parse("42")).isInteger();
         assert write(parse("{\"a\":2e2,\"b\":[1,2.5]}")).equals("{\"a\":2e2,\"b\":[1,2.5]}");
+        assert formatJsonString("<html><body>x</body></html>").equals("<html><body>x</body></html>")
+                : "non-JSON body must fall back to raw text, not silently become empty";
         System.out.println("JsonParser self-check passed (run with -ea to enforce).");
     }
 }

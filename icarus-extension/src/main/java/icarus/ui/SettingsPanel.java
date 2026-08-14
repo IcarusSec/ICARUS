@@ -198,7 +198,7 @@ public class SettingsPanel {
         JLabel mcpPortLbl = new JLabel("Port (0 = auto-assign):");
         themeHelper.applyTheme(mcpPortLbl);
         pnlMcpPort.add(mcpPortLbl);
-        JTextField txtMcpPort = new JTextField(String.valueOf(config.getInt("mcp.port", 0)), 6);
+        JTextField txtMcpPort = new JTextField(String.valueOf(config.getInt("mcp.port", 61337)), 6);
         themeHelper.applyTheme(txtMcpPort);
         pnlMcpPort.add(txtMcpPort);
         ((JPanel) pnlMcp.getComponent(0)).add(pnlMcpPort);
@@ -217,7 +217,7 @@ public class SettingsPanel {
             if (requestedPort < 0 || requestedPort > 65535) {
                 JOptionPane.showMessageDialog(mainPanel, "Port must be between 0 and 65535 (0 = auto-assign).",
                         "Invalid MCP Port", JOptionPane.ERROR_MESSAGE);
-                txtMcpPort.setText(String.valueOf(config.getInt("mcp.port", 0)));
+                txtMcpPort.setText(String.valueOf(config.getInt("mcp.port", 61337)));
                 return;
             }
             config.set("mcp.port", requestedPort);
@@ -233,7 +233,7 @@ public class SettingsPanel {
             boolean enabled = chkMcp.isSelected();
             config.set("mcp.enabled", enabled);
             api.persistence().extensionData().setString("config", config.serialize());
-            if (enabled) mcpServer.start(config.getInt("mcp.port", 0)); else mcpServer.stop();
+            if (enabled) mcpServer.start(config.getInt("mcp.port", 61337)); else mcpServer.stop();
             mcpStatus.setText(mcpServer.statusSummary());
         });
         ((JPanel) pnlMcp.getComponent(0)).add(chkMcp);

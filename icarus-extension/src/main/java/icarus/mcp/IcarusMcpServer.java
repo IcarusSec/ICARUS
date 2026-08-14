@@ -18,8 +18,14 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,8 +41,12 @@ import java.util.Map;
  * build has no dependency resolver.
  *
  * <p>Off by default (config key {@code mcp.enabled}, toggled in Settings). Bound to 127.0.0.1
- * only; a fresh random API key is generated on every start and logged to Burp's output (never
- * written to disk) — the client must send {@code Authorization: Bearer <key>}.
+ * only; the API key is derived deterministically from this machine's network hardware addresses
+ * (see {@link #machineApiKey()}) rather than randomized per start, so it stays the same across
+ * restarts and extension updates — an AI agent's saved config doesn't need re-pasting every time
+ * — while still never being written to disk itself, only logged to Burp's output. Loopback-only
+ * binding remains the actual security boundary (any local process could derive the same key from
+ * the same machine identifiers), so this trades nothing away in practice.
  *
  * <p>JSON mapping uses the SDK's own {@link JacksonMcpJsonMapper} (correct record&lt;-&gt;JSON
  * round-tripping) rather than hand-rolling one against this repo's {@link JsonParser} — but
@@ -87,9 +97,7 @@ public final class IcarusMcpServer {
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
-            byte[] keyBytes = new byte[32];
-            new SecureRandom().nextBytes(keyBytes);
-            String apiKey = HexFormat.of().formatHex(keyBytes);
+            String apiKey = machineApiKey();
 
             transportProvider = new IcarusMcpTransportProvider(
                     msg -> api.logging().logToError(msg), jsonMapper, "/sse", "/message", apiKey);
@@ -118,6 +126,34 @@ public final class IcarusMcpServer {
         transportProvider.stop();
         server = null;
         transportProvider = null;
+    }
+
+    /**
+     * Derives a stable API key from this machine's network hardware addresses (sorted so
+     * interface enumeration order doesn't matter), so the same machine always gets the same key
+     * across restarts and extension updates. Falls back to a random per-run key only if no
+     * hardware address is readable at all (e.g. a sandboxed/offline environment).
+     */
+    private static String machineApiKey() {
+        try {
+            List<String> macs = new ArrayList<>();
+            var interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces.hasMoreElements()) {
+                byte[] mac = interfaces.nextElement().getHardwareAddress();
+                if (mac != null && mac.length > 0) macs.add(HexFormat.of().formatHex(mac));
+            }
+            Collections.sort(macs);
+            String machineIdentity = macs.isEmpty() ? InetAddress.getLocalHost().getHostName() : String.join(",", macs);
+            if (machineIdentity.isEmpty()) throw new IllegalStateException("no machine identity available");
+
+            MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
+            byte[] digest = sha256.digest(("icarus-mcp:" + machineIdentity).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException | IOException | IllegalStateException e) {
+            byte[] keyBytes = new byte[32];
+            new SecureRandom().nextBytes(keyBytes);
+            return HexFormat.of().formatHex(keyBytes);
+        }
     }
 
     private McpServerFeatures.SyncToolSpecification listFindingsTool() {

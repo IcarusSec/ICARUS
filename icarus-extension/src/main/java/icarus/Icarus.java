@@ -8,6 +8,7 @@ import burp.api.montoya.ui.hotkey.HotKeyContext;
 import icarus.autoauth.AutoAuthModule;
 import icarus.autoauth.AutoAuthPreviewEditorProvider;
 import icarus.core.*;
+import icarus.mcp.IcarusMcpServer;
 import icarus.modules.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
@@ -22,6 +23,16 @@ import java.util.List;
  * with auto-evidence capture and structured reporting.
  */
 public class Icarus implements BurpExtension {
+    public static final boolean HTML_and_PDF_REPORT = true;
+
+    // Feature toggles for all modules
+    public static final boolean ENABLE_PARAM_VALIDATOR = true;
+    public static final boolean ENABLE_HTTP_VERB = true;
+    public static final boolean ENABLE_JWT_CHECKER = true;
+    public static final boolean ENABLE_SENSITIVE_HEADER = true;
+    public static final boolean ENABLE_POSTMAN_EXPORT = true;
+    public static final boolean ENABLE_RATE_LIMIT = true;
+    public static final boolean ENABLE_PASSIVE_ERROR = true;
 
     public static final String NAME = "ICARUS";
     public static final String VERSION = "1.3.1";
@@ -40,27 +51,14 @@ public class Icarus implements BurpExtension {
         }
         config.migrateReportTemplateConfigIfNeeded();
 
-        List<IcarusModule> modules = java.util.stream.Stream.of(
-            "icarus.modules.ParamValidatorModule",
-            "icarus.modules.HttpVerbModule",
-            "icarus.modules.JwtCheckerModule",
-            "icarus.modules.SensitiveHeaderModule",
-            "icarus.modules.PostmanExportModule",
-            "icarus.modules.RateLimitModule",
-            "icarus.modules.PassiveErrorModule"
-        ).map(className -> {
-            try {
-                Class<?> clazz = Class.forName(className);
-                try {
-                    return (IcarusModule) clazz.getConstructor(MontoyaApi.class).newInstance(api);
-                } catch (NoSuchMethodException e) {
-                    return (IcarusModule) clazz.getConstructor().newInstance();
-                }
-            } catch (Throwable t) {
-                // ponytail: reflection ceiling - standard lib ServiceLoader needs boilerplate (META-INF), this allows pure file deletion
-                return null;
-            }
-        }).filter(java.util.Objects::nonNull).toList();
+        List<IcarusModule> modules = new java.util.ArrayList<>();
+        if (ENABLE_PARAM_VALIDATOR) modules.add(new ParamValidatorModule(api));
+        if (ENABLE_HTTP_VERB) modules.add(new HttpVerbModule(api));
+        if (ENABLE_JWT_CHECKER) modules.add(new JwtCheckerModule(api));
+        if (ENABLE_SENSITIVE_HEADER) modules.add(new SensitiveHeaderModule(api));
+        if (ENABLE_POSTMAN_EXPORT) modules.add(new PostmanExportModule(api));
+        if (ENABLE_RATE_LIMIT) modules.add(new RateLimitModule(api));
+        if (ENABLE_PASSIVE_ERROR) modules.add(new PassiveErrorModule());
 
         var evidenceCapture = new EvidenceCapture(api, config);
         var reportGenerator = new ReportGenerator(api);
@@ -68,8 +66,16 @@ public class Icarus implements BurpExtension {
 
         var orchestrator = new Orchestrator(api, modules, config, evidenceCapture, reportGenerator, autoAuth);
 
+        // Local MCP server (AI agent access to findings) — off by default, toggled in Settings.
+        // Built here (not lazily in the toggle handler) so Settings can start/stop the same
+        // instance; extensionUnloaded must stop it or a reload leaves the old HttpServer
+        // holding its port.
+        var mcpServer = new IcarusMcpServer(api, orchestrator);
+        if (config.getBool("mcp.enabled", false)) mcpServer.start();
+        api.extension().registerUnloadingHandler(mcpServer::stop);
+
         // Register UI tab
-        var tab = new IcarusTab(api, config, modules, orchestrator);
+        var tab = new IcarusTab(api, config, modules, orchestrator, mcpServer);
         api.userInterface().registerSuiteTab(NAME, tab.getComponent());
 
         // Register context menu
@@ -228,6 +234,9 @@ public class Icarus implements BurpExtension {
         config.set("evidence.colorscheme", "Minimal Dark");
         config.set("evidence.include_project_name", true);
         config.set("evidence.manual_severity", "INFO");
+
+        // ── MCP (AI agent) server defaults ──
+        config.set("mcp.enabled", false);
     }
 
     private void loadPersistedConfig(ModuleConfig config, String serialized) {

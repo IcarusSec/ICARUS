@@ -7,6 +7,7 @@ import icarus.Orchestrator;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
 import icarus.core.ModuleConfig;
+import icarus.mcp.IcarusMcpServer;
 
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
@@ -33,6 +34,7 @@ public class IcarusTab {
     private final ModuleConfig config;
     private final List<IcarusModule> modules;
     private final Orchestrator orchestrator;
+    private final IcarusMcpServer mcpServer;
     private final ThemeHelper themeHelper;
 
     private final JPanel mainPanel;
@@ -40,11 +42,12 @@ public class IcarusTab {
     private final DefaultListModel<String> auditModel;
 
     public IcarusTab(MontoyaApi api, ModuleConfig config, List<IcarusModule> modules,
-                     Orchestrator orchestrator) {
+                     Orchestrator orchestrator, IcarusMcpServer mcpServer) {
         this.api = api;
         this.config = config;
         this.modules = modules;
         this.orchestrator = orchestrator;
+        this.mcpServer = mcpServer;
         this.themeHelper = new ThemeHelper(api.userInterface());
 
         this.mainPanel = new JPanel(new BorderLayout());
@@ -93,7 +96,7 @@ public class IcarusTab {
         themeHelper.applyTheme(tabs);
 
         // ── Settings Tab ──
-        tabs.addTab("Settings", new SettingsPanel(api, config, themeHelper, orchestrator.autoAuth()).getComponent());
+        tabs.addTab("Settings", new SettingsPanel(api, config, themeHelper, orchestrator.autoAuth(), mcpServer).getComponent());
 
         // ── Results Tab ──
         JPanel resultsPanel = new JPanel(new BorderLayout());
@@ -270,10 +273,12 @@ public class IcarusTab {
         });
 
         bottomBar.add(btnImportProxy);
-        bottomBar.add(btnEvidenceManager);
-        bottomBar.add(btnPreviewReport);
-        bottomBar.add(btnGenerateReport);
-        bottomBar.add(btnExportPdf);
+        if (icarus.Icarus.HTML_and_PDF_REPORT) {
+            bottomBar.add(btnEvidenceManager);
+            bottomBar.add(btnPreviewReport);
+            bottomBar.add(btnGenerateReport);
+            bottomBar.add(btnExportPdf);
+        }
         bottomBar.add(btnPassiveLogs);
         bottomBar.add(btnClearBtn);
         resultsPanel.add(bottomBar, BorderLayout.SOUTH);

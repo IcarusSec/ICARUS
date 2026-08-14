@@ -8,6 +8,7 @@ import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
 import icarus.evidence.EvidenceColorScheme;
+import icarus.mcp.IcarusMcpServer;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -25,16 +26,18 @@ public class SettingsPanel {
     private final ModuleConfig config;
     private final ThemeHelper themeHelper;
     private final AutoAuthModule autoAuth;
+    private final IcarusMcpServer mcpServer;
     private final JPanel mainPanel;
 
     private final List<Runnable> saveHooks = new ArrayList<>();
     private final List<JComponent> expandableLists = new ArrayList<>();
 
-    public SettingsPanel(MontoyaApi api, ModuleConfig config, ThemeHelper themeHelper, AutoAuthModule autoAuth) {
+    public SettingsPanel(MontoyaApi api, ModuleConfig config, ThemeHelper themeHelper, AutoAuthModule autoAuth, IcarusMcpServer mcpServer) {
         this.api = api;
         this.config = config;
         this.themeHelper = themeHelper;
         this.autoAuth = autoAuth;
+        this.mcpServer = mcpServer;
         this.mainPanel = new JPanel(new BorderLayout(0, 10));
         this.mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
         themeHelper.applyTheme(this.mainPanel);
@@ -180,6 +183,27 @@ public class SettingsPanel {
         });
         settingsTabs.addTab("AutoAuth", wrapInScroll(pnlAuto));
 
+        // MCP (AI agent access) — live toggle (starts/stops mcpServer immediately) rather than
+        // addCheckbox's save-on-click-Save pattern, since flipping this opens/closes a real
+        // localhost port and the status label needs to reflect that right away.
+        JPanel pnlMcp = createSection("AI Integration (MCP Server)");
+        JLabel mcpHint = new JLabel("Lets AI agents (Claude Desktop, etc.) query ICARUS findings over a local MCP connection.");
+        themeHelper.applyTheme(mcpHint);
+        ((JPanel) pnlMcp.getComponent(0)).add(mcpHint);
+        JLabel mcpStatus = addStatusLabel(pnlMcp, mcpServer.statusSummary());
+        JCheckBox chkMcp = new JCheckBox("Enable Local MCP Server", config.getBool("mcp.enabled", false));
+        themeHelper.applyTheme(chkMcp);
+        chkMcp.setAlignmentX(Component.LEFT_ALIGNMENT);
+        chkMcp.addActionListener(e -> {
+            boolean enabled = chkMcp.isSelected();
+            config.set("mcp.enabled", enabled);
+            api.persistence().extensionData().setString("config", config.serialize());
+            if (enabled) mcpServer.start(); else mcpServer.stop();
+            mcpStatus.setText(mcpServer.statusSummary());
+        });
+        ((JPanel) pnlMcp.getComponent(0)).add(chkMcp);
+        settingsTabs.addTab("MCP", wrapInScroll(pnlMcp));
+
         // Evidence
         JPanel pnlEvidence = createSection("Evidence Capture");
         addOutputDirField(pnlEvidence);
@@ -190,7 +214,9 @@ public class SettingsPanel {
         settingsTabs.addTab("Evidence", wrapInScroll(pnlEvidence));
 
         // Reporting
-        settingsTabs.addTab("Reporting", wrapInScroll(buildReportingTab()));
+        if (icarus.Icarus.HTML_and_PDF_REPORT) {
+            settingsTabs.addTab("Reporting", wrapInScroll(buildReportingTab()));
+        }
 
         // Initially hide expandable lists
         for (JComponent c : expandableLists) {

@@ -1,8 +1,5 @@
 package icarus.mcp;
 
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
@@ -12,23 +9,42 @@ import io.modelcontextprotocol.spec.McpServerTransportProvider;
 
 import reactor.core.publisher.Mono;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
- * Hand-rolled MCP legacy-SSE transport against JDK's built-in {@link HttpServer}, modeled on
+ * Hand-rolled MCP legacy-SSE transport against a raw {@link ServerSocket}, modeled on
  * mcp-core's own {@code HttpServletSseServerTransportProvider} for matching wire behavior
  * (same endpoint/event shape) without needing a servlet container (Jetty) just to run one
  * servlet inside a Burp extension.
+ *
+ * <p>Deliberately does NOT use JDK's built-in {@code com.sun.net.httpserver.HttpServer}: that
+ * class lives in the {@code jdk.httpserver} platform module, which Burp's extension classloader
+ * does not resolve (extensions are loaded via a plain {@code URLClassLoader} whose delegation
+ * doesn't reach it), producing {@code ClassNotFoundException} at runtime despite compiling fine.
+ * A raw socket server needs only {@code java.base}, which is always resolvable.
+ *
+ * <p>Every connection is handled as exactly one request/response with {@code Connection: close}
+ * — no keep-alive, no chunked encoding, no persistent-connection request pipelining — since this
+ * is a local, low-volume, single-user loopback server; the SSE response is close-delimited (no
+ * {@code Content-Length}, body read until the socket closes), which is valid framing per RFC 7230
+ * §3.3.3 and handled natively by every HTTP client tested against it, including
+ * {@code java.net.http.HttpClient}.
  *
  * <p>GET {@code ssePath} opens an SSE stream, mints a session, and emits an {@code endpoint}
  * event carrying the POST URL for that session; POST {@code messagePath}{@code ?sessionId=...}
@@ -46,7 +62,9 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
 
     private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
     private volatile McpServerSession.Factory sessionFactory;
-    private HttpServer httpServer;
+    private ServerSocket serverSocket;
+    private ExecutorService executor;
+    private volatile boolean running;
 
     IcarusMcpTransportProvider(Consumer<String> errorLog, McpJsonMapper jsonMapper, String ssePath, String messagePath, String apiKey) {
         this.errorLog = errorLog;
@@ -58,25 +76,44 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
 
     /** Binds and starts the HTTP server on 127.0.0.1. {@code port} 0 picks an ephemeral port. Returns the bound port. */
     int start(int port) throws IOException {
-        httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        serverSocket = new ServerSocket();
+        serverSocket.bind(new InetSocketAddress("127.0.0.1", port));
+        running = true;
         // GET /sse blocks its handler thread for the lifetime of the session (see
-        // SseSessionTransport#awaitClose) — a single-threaded default executor would let one
-        // open SSE connection starve every other request, including the POSTs that session
-        // needs to receive. Daemon threads so a stuck connection can't block extensionUnloaded.
-        httpServer.setExecutor(Executors.newCachedThreadPool(r -> {
+        // SseSessionTransport#awaitClose) — a single-threaded executor would let one open SSE
+        // connection starve every other request, including the POSTs that session needs to
+        // receive. Daemon threads so a stuck connection can't block extensionUnloaded.
+        executor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "icarus-mcp");
             t.setDaemon(true);
             return t;
-        }));
-        httpServer.createContext(ssePath, this::handleSse);
-        httpServer.createContext(messagePath, this::handleMessage);
-        httpServer.start();
-        return httpServer.getAddress().getPort();
+        });
+        Thread acceptThread = new Thread(this::acceptLoop, "icarus-mcp-accept");
+        acceptThread.setDaemon(true);
+        acceptThread.start();
+        return serverSocket.getLocalPort();
+    }
+
+    private void acceptLoop() {
+        while (running) {
+            try {
+                Socket socket = serverSocket.accept();
+                executor.submit(() -> handleConnection(socket));
+            } catch (IOException e) {
+                if (running) errorLog.accept("ICARUS MCP accept failed: " + e);
+            }
+        }
     }
 
     void stop() {
+        running = false;
         closeGracefully().block();
-        if (httpServer != null) httpServer.stop(0);
+        try {
+            if (serverSocket != null) serverSocket.close();
+        } catch (IOException ignored) {
+            // already tearing down
+        }
+        if (executor != null) executor.shutdownNow();
     }
 
     @Override
@@ -101,70 +138,170 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         });
     }
 
-    private boolean authorized(HttpExchange exchange) {
-        String header = exchange.getRequestHeaders().getFirst("Authorization");
-        return header != null && header.equals("Bearer " + apiKey);
-    }
-
-    private void handleSse(HttpExchange exchange) throws IOException {
-        String sessionId = null;
+    private void handleConnection(Socket socket) {
         try {
-            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
+            InputStream in = socket.getInputStream();
+            String requestLine = readLine(in);
+            if (requestLine == null || requestLine.isEmpty()) {
+                socket.close();
                 return;
             }
-            if (!authorized(exchange)) {
-                exchange.sendResponseHeaders(401, -1);
+            String[] parts = requestLine.split(" ");
+            if (parts.length < 2) {
+                socket.close();
+                return;
+            }
+            String method = parts[0];
+            String rawTarget = parts[1];
+
+            Map<String, String> headers = new HashMap<>();
+            String line;
+            while ((line = readLine(in)) != null && !line.isEmpty()) {
+                int idx = line.indexOf(':');
+                if (idx > 0) headers.put(line.substring(0, idx).trim().toLowerCase(), line.substring(idx + 1).trim());
+            }
+
+            String path = rawTarget;
+            String query = null;
+            int q = rawTarget.indexOf('?');
+            if (q >= 0) {
+                path = rawTarget.substring(0, q);
+                query = rawTarget.substring(q + 1);
+            }
+
+            String authHeader = headers.get("authorization");
+            boolean authorized = authHeader != null && authHeader.equals("Bearer " + apiKey);
+
+            if (ssePath.equals(path) && "GET".equalsIgnoreCase(method)) {
+                handleSse(socket, authorized);
+            } else if (messagePath.equals(path) && "POST".equalsIgnoreCase(method)) {
+                int contentLength = 0;
+                try {
+                    contentLength = Integer.parseInt(headers.getOrDefault("content-length", "0"));
+                } catch (NumberFormatException ignored) {
+                    // treat as empty body
+                }
+                byte[] body = in.readNBytes(contentLength);
+                handleMessage(socket, authorized, query, body);
+            } else {
+                sendSimpleResponse(socket, 404);
+                socket.close();
+            }
+        } catch (IOException e) {
+            errorLog.accept("ICARUS MCP request handling failed: " + e);
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // already broken
+            }
+        }
+    }
+
+    private void handleSse(Socket socket, boolean authorized) {
+        String sessionId = null;
+        try {
+            if (!authorized) {
+                sendSimpleResponse(socket, 401);
                 return;
             }
 
             sessionId = UUID.randomUUID().toString();
-            exchange.getResponseHeaders().add("Content-Type", "text/event-stream");
-            exchange.getResponseHeaders().add("Cache-Control", "no-cache");
-            exchange.sendResponseHeaders(200, 0); // 0 = chunked, unknown length: keep streaming
+            OutputStream out = socket.getOutputStream();
+            out.write(("HTTP/1.1 200 OK\r\n"
+                    + "Content-Type: text/event-stream\r\n"
+                    + "Cache-Control: no-cache\r\n"
+                    + "Connection: close\r\n"
+                    + "\r\n").getBytes(StandardCharsets.US_ASCII));
+            out.flush();
 
-            SseSessionTransport transport = new SseSessionTransport(sessionId, exchange);
+            SseSessionTransport transport = new SseSessionTransport(sessionId, out);
             sessions.put(sessionId, sessionFactory.create(transport));
             transport.writeEvent("endpoint", messagePath + "?sessionId=" + sessionId);
 
             // Blocks this pooled thread for the session's lifetime — see start()'s comment on
             // why the executor must support many concurrent threads.
             transport.awaitClose();
+        } catch (IOException e) {
+            errorLog.accept("ICARUS MCP SSE handling failed: " + e);
         } finally {
             if (sessionId != null) sessions.remove(sessionId);
-            exchange.close();
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // already closed/broken
+            }
         }
     }
 
-    private void handleMessage(HttpExchange exchange) throws IOException {
+    private void handleMessage(Socket socket, boolean authorized, String query, byte[] body) {
         try {
-            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
-                return;
-            }
-            if (!authorized(exchange)) {
-                exchange.sendResponseHeaders(401, -1);
+            if (!authorized) {
+                sendSimpleResponse(socket, 401);
                 return;
             }
 
-            String sessionId = queryParam(exchange.getRequestURI().getRawQuery(), "sessionId");
+            String sessionId = queryParam(query, "sessionId");
             McpServerSession session = sessionId != null ? sessions.get(sessionId) : null;
             if (session == null) {
-                exchange.sendResponseHeaders(404, -1);
+                sendSimpleResponse(socket, 404);
                 return;
             }
 
-            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, body);
+            String bodyStr = new String(body, StandardCharsets.UTF_8);
+            McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, bodyStr);
             session.handle(message).block();
 
-            exchange.sendResponseHeaders(202, -1);
+            sendSimpleResponse(socket, 202);
         } catch (Exception e) {
             errorLog.accept("ICARUS MCP message handling failed: " + e);
-            exchange.sendResponseHeaders(500, -1);
+            try {
+                sendSimpleResponse(socket, 500);
+            } catch (IOException ignored) {
+                // already broken
+            }
         } finally {
-            exchange.close();
+            try {
+                socket.close();
+            } catch (IOException ignored) {
+                // already closed/broken
+            }
         }
+    }
+
+    private static void sendSimpleResponse(Socket socket, int status) throws IOException {
+        String response = "HTTP/1.1 " + status + " " + statusPhrase(status) + "\r\n"
+                + "Content-Length: 0\r\n"
+                + "Connection: close\r\n"
+                + "\r\n";
+        OutputStream out = socket.getOutputStream();
+        out.write(response.getBytes(StandardCharsets.US_ASCII));
+        out.flush();
+    }
+
+    private static String statusPhrase(int status) {
+        return switch (status) {
+            case 200 -> "OK";
+            case 202 -> "Accepted";
+            case 401 -> "Unauthorized";
+            case 404 -> "Not Found";
+            case 405 -> "Method Not Allowed";
+            case 500 -> "Internal Server Error";
+            default -> "";
+        };
+    }
+
+    /** Reads one CRLF- or LF-terminated line as ASCII; returns null at EOF with nothing read. */
+    private static String readLine(InputStream in) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        int b;
+        boolean any = false;
+        while ((b = in.read()) != -1) {
+            any = true;
+            if (b == '\n') break;
+            if (b != '\r') buf.write(b);
+        }
+        if (!any) return null;
+        return buf.toString(StandardCharsets.ISO_8859_1);
     }
 
     private static String queryParam(String rawQuery, String name) {
@@ -184,9 +321,9 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         private final CountDownLatch closeLatch = new CountDownLatch(1);
         private volatile boolean closed = false;
 
-        SseSessionTransport(String sessionId, HttpExchange exchange) {
+        SseSessionTransport(String sessionId, OutputStream out) {
             this.sessionId = sessionId;
-            this.out = exchange.getResponseBody();
+            this.out = out;
         }
 
         void writeEvent(String event, String data) throws IOException {

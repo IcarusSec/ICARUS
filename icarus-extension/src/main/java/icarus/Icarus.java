@@ -71,7 +71,7 @@ public class Icarus implements BurpExtension {
         // instance; extensionUnloaded must stop it or a reload leaves the old HttpServer
         // holding its port.
         var mcpServer = new IcarusMcpServer(api, orchestrator);
-        if (config.getBool("mcp.enabled", false)) mcpServer.start();
+        if (config.getBool("mcp.enabled", false)) mcpServer.start(config.getInt("mcp.port", 0));
         api.extension().registerUnloadingHandler(mcpServer::stop);
 
         // Register UI tab

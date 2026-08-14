@@ -191,17 +191,55 @@ public class SettingsPanel {
         themeHelper.applyTheme(mcpHint);
         ((JPanel) pnlMcp.getComponent(0)).add(mcpHint);
         JLabel mcpStatus = addStatusLabel(pnlMcp, mcpServer.statusSummary());
+
+        JPanel pnlMcpPort = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        themeHelper.applyTheme(pnlMcpPort);
+        pnlMcpPort.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel mcpPortLbl = new JLabel("Port (0 = auto-assign):");
+        themeHelper.applyTheme(mcpPortLbl);
+        pnlMcpPort.add(mcpPortLbl);
+        JTextField txtMcpPort = new JTextField(String.valueOf(config.getInt("mcp.port", 0)), 6);
+        themeHelper.applyTheme(txtMcpPort);
+        pnlMcpPort.add(txtMcpPort);
+        ((JPanel) pnlMcp.getComponent(0)).add(pnlMcpPort);
+
         JCheckBox chkMcp = new JCheckBox("Enable Local MCP Server", config.getBool("mcp.enabled", false));
         themeHelper.applyTheme(chkMcp);
         chkMcp.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        Runnable applyMcpPort = () -> {
+            int requestedPort;
+            try {
+                requestedPort = Integer.parseInt(txtMcpPort.getText().trim());
+            } catch (NumberFormatException ex) {
+                requestedPort = -1;
+            }
+            if (requestedPort < 0 || requestedPort > 65535) {
+                JOptionPane.showMessageDialog(mainPanel, "Port must be between 0 and 65535 (0 = auto-assign).",
+                        "Invalid MCP Port", JOptionPane.ERROR_MESSAGE);
+                txtMcpPort.setText(String.valueOf(config.getInt("mcp.port", 0)));
+                return;
+            }
+            config.set("mcp.port", requestedPort);
+            api.persistence().extensionData().setString("config", config.serialize());
+            if (mcpServer.isRunning()) {
+                mcpServer.stop();
+                mcpServer.start(requestedPort);
+            }
+            mcpStatus.setText(mcpServer.statusSummary());
+        };
+
         chkMcp.addActionListener(e -> {
             boolean enabled = chkMcp.isSelected();
             config.set("mcp.enabled", enabled);
             api.persistence().extensionData().setString("config", config.serialize());
-            if (enabled) mcpServer.start(); else mcpServer.stop();
+            if (enabled) mcpServer.start(config.getInt("mcp.port", 0)); else mcpServer.stop();
             mcpStatus.setText(mcpServer.statusSummary());
         });
         ((JPanel) pnlMcp.getComponent(0)).add(chkMcp);
+
+        addButton(pnlMcp, "Apply Port / Restart Server", applyMcpPort);
+
         settingsTabs.addTab("MCP", wrapInScroll(pnlMcp));
 
         // Evidence

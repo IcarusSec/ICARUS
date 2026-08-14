@@ -74,7 +74,13 @@ public final class IcarusMcpServer {
                 : "Stopped";
     }
 
+    /** Starts on an ephemeral port (0 = OS-assigned), same as historical behavior. */
     public synchronized void start() {
+        start(0);
+    }
+
+    /** Starts on {@code requestedPort} (0 = OS-assigned ephemeral port). */
+    public synchronized void start(int requestedPort) {
         if (server != null) return;
         try {
             ObjectMapper objectMapper = new ObjectMapper()
@@ -96,7 +102,7 @@ public final class IcarusMcpServer {
                     .tools(listFindingsTool())
                     .build();
 
-            port = transportProvider.start(0);
+            port = transportProvider.start(requestedPort);
             api.logging().logToOutput("ICARUS MCP server listening on http://127.0.0.1:" + port
                     + "/sse — Authorization: Bearer " + apiKey);
         } catch (IOException e) {

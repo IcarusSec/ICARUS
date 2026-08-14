@@ -187,7 +187,7 @@ public class SettingsPanel {
         // addCheckbox's save-on-click-Save pattern, since flipping this opens/closes a real
         // localhost port and the status label needs to reflect that right away.
         JPanel pnlMcp = createSection("AI Integration (MCP Server)");
-        JLabel mcpHint = new JLabel("Lets AI agents (Claude Desktop, etc.) query ICARUS findings over a local MCP connection.");
+        JLabel mcpHint = new JLabel("Let AI agents query ICARUS findings over a local MCP connection.");
         themeHelper.applyTheme(mcpHint);
         ((JPanel) pnlMcp.getComponent(0)).add(mcpHint);
         JLabel mcpStatus = addStatusLabel(pnlMcp, mcpServer.statusSummary());

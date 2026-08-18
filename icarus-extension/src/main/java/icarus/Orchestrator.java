@@ -566,17 +566,15 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         if (requestResponses.isEmpty()) return items;
 
-        JMenu mainMenu = new JMenu("ICARUS");
-
-        var runAll = new JMenuItem("Run All Modules");
+        var runAll = new JMenuItem("ICARUS → Run All Modules");
         runAll.addActionListener(e -> {
             for (var rr : requestResponses) {
                 scanRunner.runScan(rr, true);
             }
         });
-        mainMenu.add(runAll);
+        items.add(runAll);
 
-        JMenu modulesMenu = new JMenu("Modules");
+        JMenu modulesMenu = new JMenu("ICARUS → Modules");
         for (var module : modules) {
             var item = new JMenuItem(module.name());
             item.addActionListener(e -> {
@@ -586,9 +584,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             });
             modulesMenu.add(item);
         }
-        mainMenu.add(modulesMenu);
+        items.add(modulesMenu);
 
-        JMenu evidenceMenu = new JMenu("Evidence & Reporting");
+        JMenu evidenceMenu = new JMenu("ICARUS → Evidence & Reporting");
         var createEvidence = new JMenuItem("Send to Reporter Creation");
         createEvidence.addActionListener(e -> {
             for (var rr : requestResponses) {
@@ -608,13 +606,13 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         evidenceMenu.add(evidenceManager);
         
         if (icarus.Icarus.HTML_and_PDF_REPORT) {
-            mainMenu.add(evidenceMenu);
+            items.add(evidenceMenu);
         }
 
         // AutoAuth: only shown when the user actually highlighted text in a message editor —
         // these need selection offsets that scan-style modules never receive.
         event.messageEditorRequestResponse().ifPresent(selection -> {
-            JMenu authMenu = new JMenu("AutoAuth");
+            JMenu authMenu = new JMenu("ICARUS → AutoAuth");
             
             // Quick toggle so users can disable AutoAuth for manual JWT manipulation
             // without digging into Settings.
@@ -648,10 +646,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                     authMenu.add(addDestination);
                 }
             }
-            mainMenu.add(authMenu);
+            items.add(authMenu);
         });
 
-        items.add(mainMenu);
         return items;
     }
 

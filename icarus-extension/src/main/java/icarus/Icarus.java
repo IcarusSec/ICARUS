@@ -35,7 +35,7 @@ public class Icarus implements BurpExtension {
     public static final boolean ENABLE_PASSIVE_ERROR = true;
 
     public static final String NAME = "ICARUS";
-    public static final String VERSION = "1.3.1";
+    public static final String VERSION = "1.4.0";
 
     @Override
     public void initialize(MontoyaApi api) {

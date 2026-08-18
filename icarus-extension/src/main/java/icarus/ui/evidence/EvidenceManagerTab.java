@@ -244,9 +244,6 @@ public class EvidenceManagerTab {
             refreshAllRef[0].run();
         });
 
-        JCheckBox chkCompactMode = new JCheckBox("Compact Mode (Tabbed View for small screens)", config.getBool("ui.compact", false));
-        themeHelper.applyTheme(chkCompactMode);
-
         JButton btnPopOut = new JButton("Pop Out Evidence Manager");
         themeHelper.styleButton(btnPopOut);
 
@@ -263,8 +260,6 @@ public class EvidenceManagerTab {
         JPanel chkPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         themeHelper.applyTheme(chkPanel);
         chkPanel.add(chkRetest);
-        chkPanel.add(Box.createRigidArea(new Dimension(15, 0)));
-        chkPanel.add(chkCompactMode);
         bottomOfTop.add(chkPanel, BorderLayout.NORTH);
         bottomOfTop.add(hint, BorderLayout.SOUTH);
         topPanel.add(bottomOfTop, BorderLayout.SOUTH);
@@ -275,11 +270,20 @@ public class EvidenceManagerTab {
 
         JTabbedPane compactTabs = new JTabbedPane();
         themeHelper.applyTheme(compactTabs);
+        
+        boolean[] isCompactMode = { false };
 
         Runnable updateLayoutMode = () -> {
+            int width = evidenceTab.getWidth();
+            if (width <= 0) return; // not laid out yet
+
+            boolean shouldBeCompact = width < 1000;
+            if (isCompactMode[0] == shouldBeCompact && evidenceTab.getComponentCount() > 1) return; // already in correct state
+
+            isCompactMode[0] = shouldBeCompact;
             evidenceTab.remove(split);
             evidenceTab.remove(compactTabs);
-            if (config.getBool("ui.compact", false)) {
+            if (shouldBeCompact) {
                 compactTabs.addTab("1. Findings List", masterPanel);
                 compactTabs.addTab("2. Evidence Details", detailScroll);
                 evidenceTab.add(compactTabs, BorderLayout.CENTER);
@@ -292,18 +296,21 @@ public class EvidenceManagerTab {
             evidenceTab.repaint();
         };
 
-        chkCompactMode.addActionListener(e -> {
-            config.set("ui.compact", chkCompactMode.isSelected());
-            api.persistence().extensionData().setString("config", config.serialize());
-            updateLayoutMode.run();
+        evidenceTab.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                updateLayoutMode.run();
+            }
         });
-        updateLayoutMode.run(); // Apply initial layout
+
+        // Apply initial layout fallback just in case
+        evidenceTab.add(split, BorderLayout.CENTER);
 
         // When a finding is double clicked in compact mode, auto-switch to Evidence Details tab
         masterList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() == 2 && config.getBool("ui.compact", false)) {
+                if (e.getClickCount() == 2 && isCompactMode[0]) {
                     compactTabs.setSelectedIndex(1);
                 }
             }

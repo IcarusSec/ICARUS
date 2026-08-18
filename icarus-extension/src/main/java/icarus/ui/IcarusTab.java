@@ -279,22 +279,10 @@ public class IcarusTab {
         // We'll update the ActionListener once we move it to a tab, but for now it calls orchestrator.showEvidenceManager() or we can switch tab.
         // Let's assume we will switch tabs later.
         btnEvidenceManager.addActionListener(e -> {
-            // Find the JTabbedPane and select the "Evidence" tab
-            Container parent = mainPanel.getParent();
-            while (parent != null && !(parent instanceof JTabbedPane)) {
-                parent = parent.getParent();
+            int idx = tabs.indexOfTab("Evidence");
+            if (idx >= 0) {
+                tabs.setSelectedIndex(idx);
             }
-            if (parent instanceof JTabbedPane) {
-                JTabbedPane tabs = (JTabbedPane) parent;
-                for (int i = 0; i < tabs.getTabCount(); i++) {
-                    if ("Evidence".equals(tabs.getTitleAt(i))) {
-                        tabs.setSelectedIndex(i);
-                        return;
-                    }
-                }
-            }
-            // Fallback
-            orchestrator.showEvidenceManager();
         });
 
         JButton btnPreviewReport = new JButton("Preview");
@@ -350,6 +338,19 @@ public class IcarusTab {
         resultsPanel.add(bottomBar, BorderLayout.SOUTH);
 
         tabs.addTab("Results", resultsPanel);
+
+        if (icarus.Icarus.HTML_and_PDF_REPORT) {
+            icarus.ui.evidence.EvidenceManagerTab emTab = new icarus.ui.evidence.EvidenceManagerTab(api, config, orchestrator.getEvidenceCapture(), orchestrator, themeHelper);
+            tabs.addTab("Evidence", emTab.getComponent());
+            orchestrator.setShowEvidenceAction(() -> {
+                for (int i = 0; i < tabs.getTabCount(); i++) {
+                    if ("Evidence".equals(tabs.getTitleAt(i))) {
+                        tabs.setSelectedIndex(i);
+                        return;
+                    }
+                }
+            });
+        }
 
         // ── Audit Log Tab ──
         JPanel auditPanel = new JPanel(new BorderLayout());

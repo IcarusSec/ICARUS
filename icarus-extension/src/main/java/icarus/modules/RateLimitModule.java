@@ -123,7 +123,8 @@ public class RateLimitModule implements IcarusModule {
         boolean exportLog = proceed[2];
 
         HttpRequest baseRequest = requestResponse.request();
-        String path = baseRequest.path();
+        String fullPath = baseRequest.path();
+        String path = fullPath.contains("?") ? fullPath.substring(0, fullPath.indexOf("?")) : fullPath;
 
         List<Finding> findings = new ArrayList<>();
 
@@ -140,8 +141,8 @@ public class RateLimitModule implements IcarusModule {
         if (detection.serverCrashed) {
             logger.accept("Server crashed (status " + detection.blockStatus + ") — halting bypass attempts.");
             findings.add(Finding.builder(name(), "SERVER_CRASH")
-                    .description(String.format("Rate limit threshold or connection drop reached on `%s`: %d of %d requests completed before failure (Status: %d / Connection Terminated).",
-                            path, detection.requestsSent, totalRequests, detection.blockStatus))
+                    .description(String.format("Rate limit threshold or connection drop reached: %d of %d requests completed before failure (Status: %d / Connection Terminated).",
+                            detection.requestsSent, totalRequests, detection.blockStatus))
                     .severity(Severity.HIGH)
                     .category(Category.RATE_LIMIT)
                     .path(path)
@@ -168,8 +169,8 @@ public class RateLimitModule implements IcarusModule {
             // No rate limiting detected — that IS a finding. RPS isn't repeated here since
             // the evidence image already appends it from the "rps" meta field below.
             findings.add(Finding.builder(name(), "NO_RATE_LIMIT")
-                    .description(String.format("No rate limiting detected after %d identical requests to %s. All responses returned status %d in %.1f seconds.",
-                            detection.requestsSent, path, detection.dominantStatus, seconds))
+                    .description(String.format("No rate limiting detected after %d identical requests. All responses returned status %d in %.1f seconds.",
+                            detection.requestsSent, detection.dominantStatus, seconds))
                     .severity(Severity.MEDIUM)
                     .category(Category.RATE_LIMIT)
                     .path(path)
@@ -228,7 +229,7 @@ public class RateLimitModule implements IcarusModule {
 
         if (detectOnly) {
             findings.add(Finding.builder(name(), "RATE_LIMIT_ENFORCED")
-                    .description("Rate limiting confirmed on " + path + " — blocked after "
+                    .description("Rate limiting confirmed — blocked after "
                             + detection.blockedAt + " requests. " + blockType
                             + " (bypass attempts skipped: detection-only mode)")
                     .severity(Severity.INFO)
@@ -246,7 +247,7 @@ public class RateLimitModule implements IcarusModule {
                     .build());
         } else {
             findings.add(Finding.builder(name(), "RATE_LIMIT_DETECTED")
-                    .description("Rate limiting detected on " + path + " — blocked after "
+                    .description("Rate limiting detected — blocked after "
                             + detection.blockedAt + " requests. " + blockType)
                     .severity(Severity.INFO)
                     .category(Category.RATE_LIMIT)

@@ -248,12 +248,7 @@ public final class EvidenceCapture {
 
     public void captureInteractive(Finding finding) {
         SwingUtilities.invokeLater(() -> {
-            if (finding.category() == Category.RATE_LIMIT && finding.metadata().containsKey("blast_log")) {
-                BufferedImage tableImg = renderRateLimitTable(finding, true);
-                showPhase2(new JDialog(), finding, tableImg, finding.type());
-            } else {
-                showPhase1(finding);
-            }
+            showPhase1(finding);
         });
     }
 
@@ -517,16 +512,26 @@ public final class EvidenceCapture {
 
         btnApply.addActionListener(e -> {
             Finding updatedFinding = buildUpdatedFinding.get();
-            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
-                    updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            BufferedImage renderedText;
+            if (updatedFinding.category() == Category.RATE_LIMIT && updatedFinding.metadata().containsKey("blast_log")) {
+                renderedText = renderRateLimitTable(updatedFinding, chk1080.isSelected());
+            } else {
+                renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
+                        updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            }
             saveAndRegisterEvidence(updatedFinding, renderedText);
             editor.dispose();
         });
 
         btnAnnotate.addActionListener(e -> {
             Finding updatedFinding = buildUpdatedFinding.get();
-            BufferedImage renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
-                    updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            BufferedImage renderedText;
+            if (updatedFinding.category() == Category.RATE_LIMIT && updatedFinding.metadata().containsKey("blast_log")) {
+                renderedText = renderRateLimitTable(updatedFinding, chk1080.isSelected());
+            } else {
+                renderedText = renderTextToImage(reqArea.getText(), resArea.getText(),
+                        updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
+            }
             showPhase2(editor, updatedFinding, renderedText, updatedFinding.type());
         });
 
@@ -1060,12 +1065,30 @@ public final class EvidenceCapture {
         String endTime = finding.metadata().getOrDefault("end_time", "");
         String timeStr = (!startTime.isEmpty() && !endTime.isEmpty()) ? "  |  [" + startTime + " to " + endTime + "]" : "";
 
-        String rps = finding.metadata().get("rps");
-        String rpsStr = (rps != null && !rps.isBlank()) ? "  |  " + rps : "";
-
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-        g.drawString(finding.description() + timeStr + rpsStr, 20, 55);
+        String baseStr = finding.description() + timeStr;
+        g.drawString(baseStr, 20, 55);
+
+        String rps = finding.metadata().get("rps");
+        if (rps != null && !rps.isBlank()) {
+            int baseWidth = g.getFontMetrics().stringWidth(baseStr);
+            g.setColor(cs.dim());
+            g.drawString("  |  ", 20 + baseWidth, 55);
+            int pipeWidth = g.getFontMetrics().stringWidth("  |  ");
+            
+            Color rpsColor = cs.dim();
+            try {
+                String numericPart = rps.replaceAll("[^0-9.]", "");
+                double rpsValue = Double.parseDouble(numericPart);
+                if (rpsValue >= 50) rpsColor = cs.status5xx();
+                else if (rpsValue >= 15) rpsColor = cs.status3xx();
+                else rpsColor = cs.status2xx();
+            } catch (Exception ignored) {}
+            
+            g.setColor(rpsColor);
+            g.drawString(rps, 20 + baseWidth + pipeWidth, 55);
+        }
 
         String logStr = finding.metadata().get("blast_log");
         String[] entries = logStr.split(";");

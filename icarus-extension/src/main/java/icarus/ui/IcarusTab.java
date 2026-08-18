@@ -159,7 +159,7 @@ public class IcarusTab {
         JPopupMenu popup = new JPopupMenu();
         themeHelper.applyTheme(popup);
 
-        JMenuItem suppressItem = new JMenuItem("Suppress Finding");
+        JMenuItem suppressItem = new JMenuItem("Suppress Finding (Del)");
         themeHelper.applyTheme(suppressItem);
         suppressItem.addActionListener(e -> {
             int viewRow = table.getSelectedRow();
@@ -180,6 +180,33 @@ public class IcarusTab {
         popup.add(suppressItem);
         popup.addSeparator();
         popup.add(clearItem);
+        
+        // Keyboard Shortcuts
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("DELETE"), "suppressFinding");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("BACK_SPACE"), "suppressFinding");
+        table.getActionMap().put("suppressFinding", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                suppressItem.doClick();
+            }
+        });
+        
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("control E"), "sendToEvidence");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("meta E"), "sendToEvidence");
+        table.getActionMap().put("sendToEvidence", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                int viewRow = table.getSelectedRow();
+                if (viewRow >= 0) {
+                    int modelRow = table.convertRowIndexToModel(viewRow);
+                    String hash = (String) tableModel.getValueAt(modelRow, 0);
+                    Finding finding = orchestrator.getFindingByHash(hash);
+                    if (finding != null) {
+                        orchestrator.showEvidenceInteractive(finding);
+                    }
+                }
+            }
+        });
 
         table.addMouseListener(new MouseAdapter() {
             public void mousePressed(MouseEvent e) { showPopup(e); }
@@ -210,8 +237,14 @@ public class IcarusTab {
             }
         });
 
-        JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        JPanel bottomBar = new JPanel(new BorderLayout());
         themeHelper.applyTheme(bottomBar);
+
+        JPanel dataActions = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        themeHelper.applyTheme(dataActions);
+
+        JPanel reportActions = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        themeHelper.applyTheme(reportActions);
 
         JButton btnPassiveLogs = new JButton("View Current Log");
         themeHelper.styleButton(btnPassiveLogs);
@@ -242,14 +275,43 @@ public class IcarusTab {
 
         JButton btnEvidenceManager = new JButton("Manage Report Evidence");
         themeHelper.styleButton(btnEvidenceManager);
-        btnEvidenceManager.addActionListener(e -> orchestrator.showEvidenceManager());
+        // Note: With the new Evidence Manager Tab, this button could switch to that tab instead of opening a modal.
+        // We'll update the ActionListener once we move it to a tab, but for now it calls orchestrator.showEvidenceManager() or we can switch tab.
+        // Let's assume we will switch tabs later.
+        btnEvidenceManager.addActionListener(e -> {
+            // Find the JTabbedPane and select the "Evidence" tab
+            Container parent = mainPanel.getParent();
+            while (parent != null && !(parent instanceof JTabbedPane)) {
+                parent = parent.getParent();
+            }
+            if (parent instanceof JTabbedPane) {
+                JTabbedPane tabs = (JTabbedPane) parent;
+                for (int i = 0; i < tabs.getTabCount(); i++) {
+                    if ("Evidence".equals(tabs.getTitleAt(i))) {
+                        tabs.setSelectedIndex(i);
+                        return;
+                    }
+                }
+            }
+            // Fallback
+            orchestrator.showEvidenceManager();
+        });
 
         JButton btnPreviewReport = new JButton("Preview");
         themeHelper.styleButton(btnPreviewReport);
         btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
 
         JButton btnGenerateReport = new JButton("Generate HTML Report");
+        btnGenerateReport.setBackground(new Color(62, 123, 184)); // Primary accent
+        btnGenerateReport.setForeground(Color.WHITE);
+        btnGenerateReport.setFocusPainted(false);
+        // We keep themeHelper from overriding background by styling it partially.
+        // Wait, themeHelper.styleButton overrides background and foreground.
+        // We do it after themeHelper.styleButton.
         themeHelper.styleButton(btnGenerateReport);
+        btnGenerateReport.setBackground(new Color(62, 123, 184));
+        btnGenerateReport.setForeground(Color.WHITE);
+        
         btnGenerateReport.addActionListener(e -> {
             List<Finding> reportFindings = orchestrator.getReportableFindings();
             if (reportFindings.isEmpty()) {
@@ -272,15 +334,19 @@ public class IcarusTab {
             orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
         });
 
-        bottomBar.add(btnImportProxy);
+        dataActions.add(btnImportProxy);
+        dataActions.add(btnPassiveLogs);
+        dataActions.add(btnClearBtn);
+
         if (icarus.Icarus.HTML_and_PDF_REPORT) {
-            bottomBar.add(btnEvidenceManager);
-            bottomBar.add(btnPreviewReport);
-            bottomBar.add(btnGenerateReport);
-            bottomBar.add(btnExportPdf);
+            reportActions.add(btnEvidenceManager);
+            reportActions.add(btnPreviewReport);
+            reportActions.add(btnGenerateReport);
+            reportActions.add(btnExportPdf);
         }
-        bottomBar.add(btnPassiveLogs);
-        bottomBar.add(btnClearBtn);
+
+        bottomBar.add(dataActions, BorderLayout.WEST);
+        bottomBar.add(reportActions, BorderLayout.EAST);
         resultsPanel.add(bottomBar, BorderLayout.SOUTH);
 
         tabs.addTab("Results", resultsPanel);

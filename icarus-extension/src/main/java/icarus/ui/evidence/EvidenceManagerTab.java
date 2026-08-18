@@ -318,10 +318,14 @@ public class EvidenceManagerTab {
 
         // Pop out logic
         btnPopOut.addActionListener(e -> {
-            JDialog popOutFrame = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Manager (Detached)", false);
-            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-            popOutFrame.setSize(Math.min(1200, screenSize.width - 50), Math.min(800, screenSize.height - 100));
-            popOutFrame.setLocationRelativeTo(null);
+            Frame parent = api.userInterface().swingUtils().suiteFrame();
+            JDialog popOutFrame = new JDialog(parent, "ICARUS Evidence Manager (Detached)", false);
+            
+            GraphicsConfiguration gc = mainPanel.getGraphicsConfiguration();
+            Rectangle screenBounds = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+            
+            popOutFrame.setSize(Math.min(1200, screenBounds.width - 50), Math.min(800, screenBounds.height - 100));
+            popOutFrame.setLocationRelativeTo(parent);
             popOutFrame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
             // Re-parent the evidenceTab to the detached window

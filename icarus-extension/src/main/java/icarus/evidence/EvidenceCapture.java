@@ -290,12 +290,15 @@ public final class EvidenceCapture {
     }
 
     private void showPhase1(Finding finding) {
-        JDialog editor = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Editor - Phase 1: Text Cleanup", false);
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        int maxWidth = Math.min(1200, screenSize.width - 50);
-        int maxHeight = Math.min(800, screenSize.height - 100);
+        java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
+        JDialog editor = new JDialog(parent, "ICARUS Evidence Editor - Phase 1: Text Cleanup", false);
+        java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
+        java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+        
+        int maxWidth = Math.min(1200, screenBounds.width - 50);
+        int maxHeight = Math.min(800, screenBounds.height - 100);
         editor.setSize(new Dimension(maxWidth, maxHeight));
-        editor.setLocationRelativeTo(null);
+        editor.setLocationRelativeTo(parent);
         editor.setLayout(new BorderLayout());
 
         // Top Metadata Bar
@@ -1237,12 +1240,15 @@ public final class EvidenceCapture {
 
         // Owned by the Burp suite frame so it doesn't get lost behind Burp (was a
         // top-level, owner-less JFrame before).
-        JDialog frame = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence — Annotation", false);
-        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
-        int maxWidth = Math.min(1200, screenSize.width - 50);
-        int maxHeight = Math.min(800, screenSize.height - 100);
+        java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
+        JDialog frame = new JDialog(parent, "ICARUS Evidence — Annotation", false);
+        java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
+        java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+        
+        int maxWidth = Math.min(1200, screenBounds.width - 50);
+        int maxHeight = Math.min(800, screenBounds.height - 100);
         frame.setSize(new Dimension(maxWidth, maxHeight));
-        frame.setLocationRelativeTo(null);
+        frame.setLocationRelativeTo(parent);
         frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
         JPanel root = new JPanel(new BorderLayout());

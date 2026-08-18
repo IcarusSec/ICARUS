@@ -291,7 +291,10 @@ public final class EvidenceCapture {
 
     private void showPhase1(Finding finding) {
         JDialog editor = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Editor - Phase 1: Text Cleanup", false);
-        editor.setSize(1200, 800);
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int maxWidth = Math.min(1200, screenSize.width - 50);
+        int maxHeight = Math.min(800, screenSize.height - 100);
+        editor.setSize(new Dimension(maxWidth, maxHeight));
         editor.setLocationRelativeTo(null);
         editor.setLayout(new BorderLayout());
 
@@ -1235,7 +1238,10 @@ public final class EvidenceCapture {
         // Owned by the Burp suite frame so it doesn't get lost behind Burp (was a
         // top-level, owner-less JFrame before).
         JDialog frame = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence — Annotation", false);
-        frame.setSize(1200, 800);
+        Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+        int maxWidth = Math.min(1200, screenSize.width - 50);
+        int maxHeight = Math.min(800, screenSize.height - 100);
+        frame.setSize(new Dimension(maxWidth, maxHeight));
         frame.setLocationRelativeTo(null);
         frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
@@ -1251,6 +1257,7 @@ public final class EvidenceCapture {
         Point[] dragStart = { null };
         Shape[] preview = { null };
         int[] panOffset = { 0, 0 }; // x, y offset for panning
+        double[] scale = { 1.0 };
 
         JPanel canvas = new JPanel() {
             @Override
@@ -1259,11 +1266,13 @@ public final class EvidenceCapture {
                 Graphics2D g2 = (Graphics2D) gr.create();
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-                // Draw image at pan offset
-                g2.drawImage(snap, panOffset[0], panOffset[1], null);
+                g2.translate(panOffset[0], panOffset[1]);
+                g2.scale(scale[0], scale[0]);
+
+                // Draw image
+                g2.drawImage(snap, 0, 0, null);
 
                 // Draw committed shapes
-                g2.translate(panOffset[0], panOffset[1]);
                 g2.setStroke(new BasicStroke(3f));
                 for (int i = 0; i < shapes.size(); i++) {
                     drawAnnotation(g2, shapes.get(i), kinds.get(i), cols.get(i));
@@ -1304,8 +1313,7 @@ public final class EvidenceCapture {
                     panAnchor = e.getPoint();
                     canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 } else {
-                    // Convert screen point to image-space point
-                    dragStart[0] = new Point(e.getX() - panOffset[0], e.getY() - panOffset[1]);
+                    dragStart[0] = new Point((int)((e.getX() - panOffset[0]) / scale[0]), (int)((e.getY() - panOffset[1]) / scale[0]));
                 }
             }
 
@@ -1317,7 +1325,7 @@ public final class EvidenceCapture {
                     panAnchor = e.getPoint();
                     canvas.repaint();
                 } else if (dragStart[0] != null) {
-                    Point p = new Point(e.getX() - panOffset[0], e.getY() - panOffset[1]);
+                    Point p = new Point((int)((e.getX() - panOffset[0]) / scale[0]), (int)((e.getY() - panOffset[1]) / scale[0]));
                     if ("ARROW".equals(mode[0])) {
                         preview[0] = createArrow(dragStart[0], p);
                     } else {
@@ -1345,9 +1353,20 @@ public final class EvidenceCapture {
                     canvas.repaint();
                 }
             }
+            
+            @Override
+            public void mouseWheelMoved(java.awt.event.MouseWheelEvent e) {
+                double delta = e.getPreciseWheelRotation() < 0 ? 1.1 : 0.9;
+                scale[0] = Math.max(0.5, Math.min(3.0, scale[0] * delta));
+                // Center zoom on mouse cursor
+                panOffset[0] = (int)(e.getX() - (e.getX() - panOffset[0]) * delta);
+                panOffset[1] = (int)(e.getY() - (e.getY() - panOffset[1]) * delta);
+                canvas.repaint();
+            }
         };
         canvas.addMouseListener(mouseHandler);
         canvas.addMouseMotionListener(mouseHandler);
+        canvas.addMouseWheelListener(mouseHandler);
 
         JScrollPane scroll = new JScrollPane(canvas);
         scroll.getVerticalScrollBar().setUnitIncrement(16);

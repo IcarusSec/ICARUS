@@ -193,7 +193,8 @@ public class EvidenceManagerTab {
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, masterPanel, detailScroll);
         split.setResizeWeight(0.28);
-        split.setDividerSize(4); // Improved UI/UX divider size
+        split.setDividerSize(10); // Better size for one-touch expandable
+        split.setOneTouchExpandable(true);
         split.setBorder(BorderFactory.createEmptyBorder());
 
         var initialRtc = icarus.core.ReportTemplateConfig.fromConfig(config);
@@ -226,6 +227,22 @@ public class EvidenceManagerTab {
         JScrollPane summaryScroll = new JScrollPane(txtSummary);
         summaryScroll.setPreferredSize(new Dimension(0, 80));
 
+        JPanel topPanel = new JPanel(new BorderLayout());
+        themeHelper.applyTheme(topPanel);
+
+        JButton btnToggleSummary = new JButton("▼ Executive Summary");
+        themeHelper.styleButton(btnToggleSummary);
+        
+        JPanel summaryContainer = new JPanel(new BorderLayout());
+        summaryContainer.add(summaryScroll, BorderLayout.CENTER);
+        
+        btnToggleSummary.addActionListener(e -> {
+            boolean isVisible = summaryContainer.isVisible();
+            summaryContainer.setVisible(!isVisible);
+            btnToggleSummary.setText(isVisible ? "▶ Executive Summary" : "▼ Executive Summary");
+            topPanel.revalidate();
+        });
+
         JLabel hint = new JLabel("  Select a finding on the left; manage its evidence cards on the right.");
         hint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 
@@ -238,9 +255,13 @@ public class EvidenceManagerTab {
             refreshAllRef[0].run();
         });
 
-        JPanel topPanel = new JPanel(new BorderLayout());
-        themeHelper.applyTheme(topPanel);
-        topPanel.add(summaryScroll, BorderLayout.CENTER);
+        JPanel summaryHeader = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        themeHelper.applyTheme(summaryHeader);
+        summaryHeader.add(btnToggleSummary);
+
+        topPanel.add(summaryHeader, BorderLayout.NORTH);
+        topPanel.add(summaryContainer, BorderLayout.CENTER);
+        
         JPanel bottomOfTop = new JPanel(new BorderLayout());
         themeHelper.applyTheme(bottomOfTop);
         bottomOfTop.add(chkRetest, BorderLayout.NORTH);

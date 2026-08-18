@@ -256,7 +256,7 @@ public final class EvidenceCapture {
      *  screenshot that already exists (e.g. pasted from the system clipboard) — skips Phase 1
      *  text cleanup since there's no request/response text to render. */
     public void captureInteractiveWithImage(Finding finding, BufferedImage image) {
-        SwingUtilities.invokeLater(() -> showPhase2(new JDialog(), finding, image, finding.type()));
+        SwingUtilities.invokeLater(() -> showPhase2(new JFrame(), finding, image, finding.type()));
     }
 
     // ===================================================================================
@@ -286,7 +286,8 @@ public final class EvidenceCapture {
 
     private void showPhase1(Finding finding) {
         java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
-        JDialog editor = new JDialog(parent, "ICARUS Evidence Editor - Phase 1: Text Cleanup", false);
+        JFrame editor = new JFrame("ICARUS Evidence Editor - Phase 1: Text Cleanup");
+        if (parent != null) editor.setIconImage(parent.getIconImage());
         java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
         java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
         
@@ -294,6 +295,7 @@ public final class EvidenceCapture {
         int maxHeight = Math.min(800, screenBounds.height - 100);
         editor.setSize(new Dimension(maxWidth, maxHeight));
         editor.setLocationRelativeTo(parent);
+        editor.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         editor.setLayout(new BorderLayout());
 
         // Top Metadata Bar
@@ -1256,15 +1258,16 @@ public final class EvidenceCapture {
     // PHASE 2: VISUAL ANNOTATION
     // ===================================================================================
 
-    private void showPhase2(JDialog parentEditor, Finding finding, BufferedImage snap, String finalTitle) {
+    private void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap, String finalTitle) {
         parentEditor.getContentPane().removeAll();
         parentEditor.setTitle("ICARUS Evidence — Annotation");
         parentEditor.setMinimumSize(new Dimension(640, 480));
 
-        // Owned by the Burp suite frame so it doesn't get lost behind Burp (was a
-        // top-level, owner-less JFrame before).
+        // Converted back to a top-level JFrame to allow OS-level maximization,
+        // with the Burp icon mapped for native integration.
         java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
-        JDialog frame = new JDialog(parent, "ICARUS Evidence — Annotation", false);
+        JFrame frame = new JFrame("ICARUS Evidence — Annotation");
+        if (parent != null) frame.setIconImage(parent.getIconImage());
         java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
         java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
         

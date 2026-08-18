@@ -307,9 +307,12 @@ public class IcarusTab {
             icarus.ui.evidence.EvidenceManagerTab emTab = new icarus.ui.evidence.EvidenceManagerTab(api, config, orchestrator.getEvidenceCapture(), orchestrator, themeHelper);
             tabs.addTab("Evidence", emTab.getComponent());
             orchestrator.setShowEvidenceAction(() -> {
-                JDialog dialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Manager", false);
+                java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
+                JFrame dialog = new JFrame("ICARUS Evidence Manager");
+                if (parent != null) dialog.setIconImage(parent.getIconImage());
                 dialog.setSize(1000, 700);
-                dialog.setLocationRelativeTo(api.userInterface().swingUtils().suiteFrame());
+                dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+                dialog.setLocationRelativeTo(parent);
                 icarus.ui.evidence.EvidenceManagerTab popupTab = new icarus.ui.evidence.EvidenceManagerTab(api, config, orchestrator.getEvidenceCapture(), orchestrator, themeHelper);
                 dialog.add(popupTab.getComponent());
                 dialog.setVisible(true);

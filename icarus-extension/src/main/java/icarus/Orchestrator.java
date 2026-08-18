@@ -702,10 +702,11 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     public void showFindingsDialog(List<FindingRecord> records) {
-        JDialog dialog = new JDialog();
-        dialog.setTitle("ICARUS Scan Results");
-        dialog.setModal(false);
+        java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
+        JFrame dialog = new JFrame("ICARUS Scan Results");
+        if (parent != null) dialog.setIconImage(parent.getIconImage());
         dialog.setSize(1200, 800);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
         dialog.setLocationRelativeTo(null);
 
         String[] cols = {"Count", "Severity", "Module", "Type", "Path", "Description"};

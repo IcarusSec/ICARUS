@@ -319,7 +319,8 @@ public class EvidenceManagerTab {
         // Pop out logic
         btnPopOut.addActionListener(e -> {
             Frame parent = api.userInterface().swingUtils().suiteFrame();
-            JDialog popOutFrame = new JDialog(parent, "ICARUS Evidence Manager (Detached)", false);
+            JFrame popOutFrame = new JFrame("ICARUS Evidence Manager (Detached)");
+            if (parent != null) popOutFrame.setIconImage(parent.getIconImage());
             
             GraphicsConfiguration gc = mainPanel.getGraphicsConfiguration();
             Rectangle screenBounds = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());

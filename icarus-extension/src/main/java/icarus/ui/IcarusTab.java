@@ -97,6 +97,10 @@ public class IcarusTab {
 
         // ── Settings Tab ──
         tabs.addTab("Settings", new SettingsPanel(api, config, themeHelper, orchestrator.autoAuth(), mcpServer).getComponent());
+        
+        if (icarus.Icarus.HTML_and_PDF_REPORT) {
+            tabs.addTab("Report Template", new ReportingSettingsTab(api, config, themeHelper).getComponent());
+        }
 
         // ── Results Tab ──
         JPanel resultsPanel = new JPanel(new BorderLayout());

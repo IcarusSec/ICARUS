@@ -244,23 +244,103 @@ public class EvidenceManagerTab {
             refreshAllRef[0].run();
         });
 
+        JCheckBox chkCompactMode = new JCheckBox("Compact Mode (Tabbed View for small screens)", config.getBool("ui.compact", false));
+        themeHelper.applyTheme(chkCompactMode);
+
+        JButton btnPopOut = new JButton("Pop Out Evidence Manager");
+        themeHelper.styleButton(btnPopOut);
+
         JPanel summaryHeader = new JPanel(new FlowLayout(FlowLayout.LEFT));
         themeHelper.applyTheme(summaryHeader);
         summaryHeader.add(btnToggleSummary);
+        summaryHeader.add(btnPopOut);
 
         topPanel.add(summaryHeader, BorderLayout.NORTH);
         topPanel.add(summaryContainer, BorderLayout.CENTER);
         
         JPanel bottomOfTop = new JPanel(new BorderLayout());
         themeHelper.applyTheme(bottomOfTop);
-        bottomOfTop.add(chkRetest, BorderLayout.NORTH);
+        JPanel chkPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        themeHelper.applyTheme(chkPanel);
+        chkPanel.add(chkRetest);
+        chkPanel.add(Box.createRigidArea(new Dimension(15, 0)));
+        chkPanel.add(chkCompactMode);
+        bottomOfTop.add(chkPanel, BorderLayout.NORTH);
         bottomOfTop.add(hint, BorderLayout.SOUTH);
         topPanel.add(bottomOfTop, BorderLayout.SOUTH);
 
         JPanel evidenceTab = new JPanel(new BorderLayout());
         themeHelper.applyTheme(evidenceTab);
         evidenceTab.add(topPanel, BorderLayout.NORTH);
-        evidenceTab.add(split, BorderLayout.CENTER);
+
+        JTabbedPane compactTabs = new JTabbedPane();
+        themeHelper.applyTheme(compactTabs);
+
+        Runnable updateLayoutMode = () -> {
+            evidenceTab.remove(split);
+            evidenceTab.remove(compactTabs);
+            if (config.getBool("ui.compact", false)) {
+                compactTabs.addTab("1. Findings List", masterPanel);
+                compactTabs.addTab("2. Evidence Details", detailScroll);
+                evidenceTab.add(compactTabs, BorderLayout.CENTER);
+            } else {
+                split.setLeftComponent(masterPanel);
+                split.setRightComponent(detailScroll);
+                evidenceTab.add(split, BorderLayout.CENTER);
+            }
+            evidenceTab.revalidate();
+            evidenceTab.repaint();
+        };
+
+        chkCompactMode.addActionListener(e -> {
+            config.set("ui.compact", chkCompactMode.isSelected());
+            api.persistence().extensionData().setString("config", config.serialize());
+            updateLayoutMode.run();
+        });
+        updateLayoutMode.run(); // Apply initial layout
+
+        // When a finding is double clicked in compact mode, auto-switch to Evidence Details tab
+        masterList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && config.getBool("ui.compact", false)) {
+                    compactTabs.setSelectedIndex(1);
+                }
+            }
+        });
+
+        // Pop out logic
+        btnPopOut.addActionListener(e -> {
+            JDialog popOutFrame = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Manager (Detached)", false);
+            Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+            popOutFrame.setSize(Math.min(1200, screenSize.width - 50), Math.min(800, screenSize.height - 100));
+            popOutFrame.setLocationRelativeTo(null);
+            popOutFrame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+
+            // Re-parent the evidenceTab to the detached window
+            popOutFrame.add(evidenceTab);
+            
+            popOutFrame.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override
+                public void windowClosed(java.awt.event.WindowEvent e) {
+                    // When closed, re-parent the evidenceTab back to the main GUI
+                    JTabbedPane parentTabs = (JTabbedPane) mainPanel.getComponent(0);
+                    parentTabs.setComponentAt(0, evidenceTab);
+                }
+            });
+
+            // Replace the evidence tab content with a placeholder button to pop it back in
+            JPanel placeholder = new JPanel(new GridBagLayout());
+            JButton btnRestore = new JButton("Restore Evidence Manager to Tab");
+            themeHelper.styleButton(btnRestore);
+            btnRestore.addActionListener(ev -> popOutFrame.dispose()); // will trigger windowClosed
+            placeholder.add(btnRestore);
+            
+            JTabbedPane parentTabs = (JTabbedPane) mainPanel.getComponent(0);
+            parentTabs.setComponentAt(0, placeholder);
+
+            popOutFrame.setVisible(true);
+        });
 
         JTabbedPane tabs = new JTabbedPane();
         themeHelper.applyTheme(tabs);

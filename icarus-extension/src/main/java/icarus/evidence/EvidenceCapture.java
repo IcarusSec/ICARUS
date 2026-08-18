@@ -1494,7 +1494,12 @@ public final class EvidenceCapture {
         bar.add(sendToReportBtn);
         bar.add(saveBtn);
         bar.add(copyBtn);
-        root.add(bar, BorderLayout.EAST);
+        
+        JScrollPane barScroll = new JScrollPane(bar);
+        barScroll.setBorder(BorderFactory.createEmptyBorder());
+        barScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        barScroll.getVerticalScrollBar().setUnitIncrement(16);
+        root.add(barScroll, BorderLayout.EAST);
 
         // Flameshot-style shortcuts. Routed through doClick() on the existing toolbar
         // buttons so the ButtonGroup selection state and mode[0]/cursor side effects in

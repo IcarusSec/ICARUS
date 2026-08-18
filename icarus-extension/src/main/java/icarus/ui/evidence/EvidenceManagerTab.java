@@ -97,11 +97,14 @@ public class EvidenceManagerTab {
                 empty.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
                 detailPanel.add(empty);
             } else {
+                List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+                detailPanel.add(buildFindingHeader(hash, group, groups, refreshAllRef));
+                detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+                
                 if (config.getBool("retest.enabled", false)) {
                     detailPanel.add(buildRetestStatusRow(hash));
                     detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
                 }
-                List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
                 for (int i = 0; i < group.size(); i++) {
                     detailPanel.add(buildEvidenceCard(group, i, hashOrder, groups, () -> refreshAllRef[0].run()));
                     detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
@@ -138,19 +141,6 @@ public class EvidenceManagerTab {
                 refreshAllRef[0].run();
             }
         });
-        JButton btnEditFinding = new JButton("Edit Finding…");
-        themeHelper.styleButton(btnEditFinding);
-        btnEditFinding.addActionListener(e -> editSelectedFinding(masterList, hashOrder, groups, refreshAllRef));
-        masterList.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mouseClicked(MouseEvent e) {
-                if (e.getClickCount() != 2) return;
-                int idx = masterList.locationToIndex(e.getPoint());
-                if (idx < 0) return;
-                masterList.setSelectedIndex(idx);
-                editSelectedFinding(masterList, hashOrder, groups, refreshAllRef);
-            }
-        });
 
         masterList.setDropMode(DropMode.ON);
         masterList.setTransferHandler(new TransferHandler() {
@@ -179,11 +169,10 @@ public class EvidenceManagerTab {
             }
         });
 
-        JPanel masterButtons = new JPanel(new GridLayout(3, 1, 0, 4));
+        JPanel masterButtons = new JPanel(new GridLayout(2, 1, 0, 4));
         themeHelper.applyTheme(masterButtons);
         masterButtons.add(btnGroupUp);
         masterButtons.add(btnGroupDown);
-        masterButtons.add(btnEditFinding);
 
         JPanel masterPanel = new JPanel(new BorderLayout(0, 4));
         themeHelper.applyTheme(masterPanel);
@@ -385,45 +374,39 @@ public class EvidenceManagerTab {
         return field;
     }
 
-    private void editSelectedFinding(JList<String> masterList, List<String> hashOrder,
+    private JPanel buildFindingHeader(String hash, List<EvidenceCapture.CapturedEvidence> group,
                                       Map<String, List<EvidenceCapture.CapturedEvidence>> groups, Runnable[] refreshAllRef) {
-        int idx = masterList.getSelectedIndex();
-        if (idx < 0) return;
-        String hash = hashOrder.get(idx);
-        List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
         Finding current = group.get(group.size() - 1).finding(); // freshest edit
 
-        Frame parentFrame = api.userInterface().swingUtils().suiteFrame();
-        JDialog editor = new JDialog(parentFrame, "Edit Finding", true);
-        editor.setLayout(new BorderLayout(8, 8));
+        JPanel header = new JPanel(new BorderLayout(8, 8));
+        header.setBorder(BorderFactory.createTitledBorder("Finding Metadata (auto-saves)"));
+        themeHelper.applyTheme(header);
 
-        JPanel form = new JPanel(new GridLayout(0, 2, 8, 8));
-        form.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        JPanel form = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
+        themeHelper.applyTheme(form);
 
         form.add(new JLabel("Title:"));
-        JTextField txtTitle = new JTextField(current.type());
+        JTextField txtTitle = new JTextField(current.type(), 25);
+        themeHelper.applyTheme(txtTitle);
         form.add(txtTitle);
 
         form.add(new JLabel("Severity:"));
         JComboBox<Severity> comboSeverity = new JComboBox<>(Severity.values());
         comboSeverity.setSelectedItem(current.severity());
+        themeHelper.applyTheme(comboSeverity);
         form.add(comboSeverity);
 
-        form.add(new JLabel("CWE IDs (comma-separated):"));
-        JTextField txtCwe = new JTextField(String.join(", ", current.cweIds()));
+        form.add(new JLabel("CWEs:"));
+        JTextField txtCwe = new JTextField(String.join(", ", current.cweIds()), 10);
+        themeHelper.applyTheme(txtCwe);
         form.add(txtCwe);
 
-        editor.add(form, BorderLayout.CENTER);
+        header.add(form, BorderLayout.CENTER);
 
-        JButton btnOk = new JButton("Save");
-        JButton btnCancel = new JButton("Cancel");
-        btnCancel.addActionListener(e -> editor.dispose());
-        btnOk.addActionListener(e -> {
+        // Auto-save logic
+        Runnable save = () -> {
             String newTitle = txtTitle.getText().strip();
-            if (newTitle.isEmpty()) {
-                JOptionPane.showMessageDialog(editor, "Title can't be empty.");
-                return;
-            }
+            if (newTitle.isEmpty()) return;
             Severity newSeverity = (Severity) comboSeverity.getSelectedItem();
             List<String> newCweIds = java.util.Arrays.stream(txtCwe.getText().split(","))
                     .map(String::strip).filter(s -> !s.isEmpty()).toList();
@@ -438,21 +421,29 @@ public class EvidenceManagerTab {
             newCweIds.forEach(builder::cwe);
             Finding updated = builder.build();
 
+            // Check if there was an actual change
+            if (updated.type().equals(current.type()) && updated.severity() == current.severity() && updated.cweIds().equals(current.cweIds())) {
+                return;
+            }
+
             for (var ce : group) {
                 evidenceCapture.moveToFinding(ce, updated);
             }
             orchestrator.updateFinding(updated);
             refreshAllRef[0].run();
-            editor.dispose();
-        });
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        buttons.add(btnCancel);
-        buttons.add(btnOk);
-        editor.add(buttons, BorderLayout.SOUTH);
+        };
 
-        editor.pack();
-        editor.setLocationRelativeTo(mainPanel);
-        editor.setVisible(true);
+        txtTitle.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) { save.run(); }
+        });
+        txtTitle.addActionListener(e -> save.run());
+        comboSeverity.addActionListener(e -> save.run());
+        txtCwe.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) { save.run(); }
+        });
+        txtCwe.addActionListener(e -> save.run());
+
+        return header;
     }
 
     private String findingLabel(String hash, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {

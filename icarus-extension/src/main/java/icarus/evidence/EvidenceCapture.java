@@ -1429,7 +1429,7 @@ public final class EvidenceCapture {
                         api.persistence().extensionData().setString("config", config.serialize());
                     }
                     JOptionPane.showMessageDialog(frame, "Saved: " + f.getAbsolutePath());
-                    frame.dispose();
+                    // frame.dispose(); // User requested not to close immediately
                 }
             } catch (Exception ex) {
                 ex.printStackTrace();
@@ -1447,7 +1447,8 @@ public final class EvidenceCapture {
                     public Object getTransferData(DataFlavor flavor) { return out; }
                 };
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(transferable, null);
-                JOptionPane.showMessageDialog(frame, "Image copied to clipboard.");
+                // JOptionPane.showMessageDialog(frame, "Image copied to clipboard.");
+                frame.dispose(); // User requested to close when copying
             } catch (Exception ex) {
                 ex.printStackTrace();
             }
@@ -1458,7 +1459,8 @@ public final class EvidenceCapture {
         sendToReportBtn.addActionListener(a -> {
             BufferedImage out = renderFinalImage(snap, shapes, kinds, cols);
             saveAndRegisterEvidence(finding, out);
-            frame.dispose();
+            JOptionPane.showMessageDialog(frame, "Sent to report generator!");
+            // frame.dispose(); // User requested not to close immediately
         });
 
         bar.add(panBtn);

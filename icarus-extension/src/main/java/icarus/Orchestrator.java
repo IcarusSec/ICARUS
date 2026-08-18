@@ -566,78 +566,92 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         if (requestResponses.isEmpty()) return items;
 
-        var runAll = new JMenuItem("ICARUS → Run All Modules");
+        JMenu mainMenu = new JMenu("ICARUS");
+
+        var runAll = new JMenuItem("Run All Modules");
         runAll.addActionListener(e -> {
             for (var rr : requestResponses) {
                 scanRunner.runScan(rr, true);
             }
         });
-        items.add(runAll);
+        mainMenu.add(runAll);
 
-        var createEvidence = new JMenuItem("ICARUS → Send to Reporter Creation");
+        JMenu modulesMenu = new JMenu("Modules");
+        for (var module : modules) {
+            var item = new JMenuItem(module.name());
+            item.addActionListener(e -> {
+                for (var rr : requestResponses) {
+                    scanRunner.runModule(module, rr, true);
+                }
+            });
+            modulesMenu.add(item);
+        }
+        mainMenu.add(modulesMenu);
+
+        JMenu evidenceMenu = new JMenu("Evidence & Reporting");
+        var createEvidence = new JMenuItem("Send to Reporter Creation");
         createEvidence.addActionListener(e -> {
             for (var rr : requestResponses) {
                 createManualEvidence(rr);
             }
         });
-        items.add(createEvidence);
+        evidenceMenu.add(createEvidence);
 
-        var pasteEvidence = new JMenuItem("ICARUS → Paste Screenshot as Evidence");
+        var pasteEvidence = new JMenuItem("Paste Screenshot as Evidence");
         pasteEvidence.addActionListener(e -> pasteEvidenceFromClipboard(requestResponses.get(0)));
-        items.add(pasteEvidence);
+        evidenceMenu.add(pasteEvidence);
+
+        var evidenceManager = new JMenuItem("Manage Report Evidence");
+        evidenceManager.addActionListener(e -> {
+            if (showEvidenceAction != null) showEvidenceAction.run();
+        });
+        evidenceMenu.add(evidenceManager);
+        
+        if (icarus.Icarus.HTML_and_PDF_REPORT) {
+            mainMenu.add(evidenceMenu);
+        }
 
         // AutoAuth: only shown when the user actually highlighted text in a message editor —
         // these need selection offsets that scan-style modules never receive.
         event.messageEditorRequestResponse().ifPresent(selection -> {
+            JMenu authMenu = new JMenu("AutoAuth");
+            
             // Quick toggle so users can disable AutoAuth for manual JWT manipulation
             // without digging into Settings.
             boolean enabled = autoAuth.isEnabled();
-            var toggleAuth = new JMenuItem("ICARUS → " + (enabled ? "✓" : "✗") + " AutoAuth " + (enabled ? "ON" : "OFF"));
+            var toggleAuth = new JMenuItem((enabled ? "✓" : "✗") + " AutoAuth " + (enabled ? "ON" : "OFF"));
             toggleAuth.addActionListener(e -> autoAuth.toggleEnabled());
-            items.add(toggleAuth);
+            authMenu.add(toggleAuth);
 
             // Montoya's HttpHandler only controls what goes out on the wire — it has no hook
             // back into an already-open editor pane (e.g. a Repeater tab), so the injected
             // token never appears there on its own. setRequest() is the one API that can push
             // an update into the pane the user is looking at, so offer it as an explicit action.
             if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.REQUEST) {
-                var syncToken = new JMenuItem("ICARUS → Sync AutoAuth Token");
+                var syncToken = new JMenuItem("Sync AutoAuth Token to Editor");
                 syncToken.addActionListener(e -> {
                     HttpRequest current = selection.requestResponse().request();
                     HttpRequest updated = autoAuth.injectIfApplicable(current);
                     if (updated != current) selection.setRequest(updated);
                 });
-                items.add(syncToken);
+                authMenu.add(syncToken);
             }
 
-            if (selection.selectionOffsets().isEmpty()) return;
-            if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.RESPONSE) {
-                var setSource = new JMenuItem("ICARUS → Set as Auth Token Source");
-                setSource.addActionListener(e -> autoAuth.setSourceFromSelection(selection));
-                items.add(setSource);
-            } else {
-                var addDestination = new JMenuItem("ICARUS → Add Auth Token Destination");
-                addDestination.addActionListener(e -> autoAuth.addDestinationFromSelection(selection));
-                items.add(addDestination);
-            }
-        });
-
-        for (var module : modules) {
-            var item = new JMenuItem("ICARUS → " + module.name());
-            item.addActionListener(e -> {
-                for (var rr : requestResponses) {
-                    scanRunner.runModule(module, rr, true);
+            if (!selection.selectionOffsets().isEmpty()) {
+                if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.RESPONSE) {
+                    var setSource = new JMenuItem("Set Selection as Auth Token Source");
+                    setSource.addActionListener(e -> autoAuth.setSourceFromSelection(selection));
+                    authMenu.add(setSource);
+                } else {
+                    var addDestination = new JMenuItem("Add Selection as Auth Token Destination");
+                    addDestination.addActionListener(e -> autoAuth.addDestinationFromSelection(selection));
+                    authMenu.add(addDestination);
                 }
-            });
-            items.add(item);
-        }
-
-        var evidenceManager = new JMenuItem("ICARUS → Manage Report Evidence");
-        evidenceManager.addActionListener(e -> {
-            if (showEvidenceAction != null) showEvidenceAction.run();
+            }
+            mainMenu.add(authMenu);
         });
-        items.add(evidenceManager);
 
+        items.add(mainMenu);
         return items;
     }
 

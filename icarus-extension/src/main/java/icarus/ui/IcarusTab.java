@@ -195,8 +195,8 @@ public class IcarusTab {
             }
         });
         
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("control E"), "sendToEvidence");
-        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("meta E"), "sendToEvidence");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("control shift E"), "sendToEvidence");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT).put(KeyStroke.getKeyStroke("meta shift E"), "sendToEvidence");
         table.getActionMap().put("sendToEvidence", new AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
@@ -289,52 +289,12 @@ public class IcarusTab {
             }
         });
 
-        JButton btnPreviewReport = new JButton("Preview");
-        themeHelper.styleButton(btnPreviewReport);
-        btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
-
-        JButton btnGenerateReport = new JButton("Generate HTML Report");
-        btnGenerateReport.setBackground(new Color(62, 123, 184)); // Primary accent
-        btnGenerateReport.setForeground(Color.WHITE);
-        btnGenerateReport.setFocusPainted(false);
-        // We keep themeHelper from overriding background by styling it partially.
-        // Wait, themeHelper.styleButton overrides background and foreground.
-        // We do it after themeHelper.styleButton.
-        themeHelper.styleButton(btnGenerateReport);
-        btnGenerateReport.setBackground(new Color(62, 123, 184));
-        btnGenerateReport.setForeground(Color.WHITE);
-        
-        btnGenerateReport.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel,
-                        "No evidence to include in a report yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
-                return;
-            }
-            orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);
-        });
-
-        JButton btnExportPdf = new JButton("Export PDF");
-        themeHelper.styleButton(btnExportPdf);
-        btnExportPdf.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel,
-                        "No evidence to include in a report yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
-                return;
-            }
-            orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
-        });
-
         dataActions.add(btnImportProxy);
         dataActions.add(btnPassiveLogs);
         dataActions.add(btnClearBtn);
 
         if (icarus.Icarus.HTML_and_PDF_REPORT) {
             reportActions.add(btnEvidenceManager);
-            reportActions.add(btnPreviewReport);
-            reportActions.add(btnGenerateReport);
-            reportActions.add(btnExportPdf);
         }
 
         bottomBar.add(dataActions, BorderLayout.WEST);
@@ -347,12 +307,12 @@ public class IcarusTab {
             icarus.ui.evidence.EvidenceManagerTab emTab = new icarus.ui.evidence.EvidenceManagerTab(api, config, orchestrator.getEvidenceCapture(), orchestrator, themeHelper);
             tabs.addTab("Evidence", emTab.getComponent());
             orchestrator.setShowEvidenceAction(() -> {
-                for (int i = 0; i < tabs.getTabCount(); i++) {
-                    if ("Evidence".equals(tabs.getTitleAt(i))) {
-                        tabs.setSelectedIndex(i);
-                        return;
-                    }
-                }
+                JDialog dialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), "ICARUS Evidence Manager", false);
+                dialog.setSize(1000, 700);
+                dialog.setLocationRelativeTo(api.userInterface().swingUtils().suiteFrame());
+                icarus.ui.evidence.EvidenceManagerTab popupTab = new icarus.ui.evidence.EvidenceManagerTab(api, config, orchestrator.getEvidenceCapture(), orchestrator, themeHelper);
+                dialog.add(popupTab.getComponent());
+                dialog.setVisible(true);
             });
         }
 

@@ -266,17 +266,57 @@ public class EvidenceManagerTab {
         themeHelper.styleButton(btnExportProject);
         btnExportProject.addActionListener(e -> orchestrator.exportProjectStateInteractive(mainPanel, btnExportProject));
         
-        // Ensure actions are visible here, although they exist in Results tab as well.
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         themeHelper.applyTheme(btnPanel);
         btnPanel.add(btnImportProject);
         btnPanel.add(btnExportProject);
+
+        JButton btnPreviewReport = new JButton("Preview");
+        themeHelper.styleButton(btnPreviewReport);
+        btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
+
+        JButton btnGenerateReport = new JButton("Generate HTML Report");
+        themeHelper.styleButton(btnGenerateReport);
+        btnGenerateReport.setBackground(new Color(62, 123, 184));
+        btnGenerateReport.setForeground(Color.WHITE);
+        btnGenerateReport.addActionListener(e -> {
+            List<Finding> reportFindings = orchestrator.getReportableFindings();
+            if (reportFindings.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "No evidence to include in a report yet.");
+                return;
+            }
+            orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);
+        });
+
+        JButton btnExportPdf = new JButton("Export PDF");
+        themeHelper.styleButton(btnExportPdf);
+        btnExportPdf.addActionListener(e -> {
+            List<Finding> reportFindings = orchestrator.getReportableFindings();
+            if (reportFindings.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, "No evidence to include in a report yet.");
+                return;
+            }
+            orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
+        });
+
+        btnPanel.add(btnPreviewReport);
+        btnPanel.add(btnGenerateReport);
+        btnPanel.add(btnExportPdf);
         
         mainPanel.add(btnPanel, BorderLayout.SOUTH);
+
+        // Auto-update when findings change
+        orchestrator.addListener(records -> {
+            SwingUtilities.invokeLater(() -> refreshAllRef[0].run());
+        });
         
-        // Notice we didn't add Preview, Generate, Export PDF here since they are in Results tab, 
-        // but we can add them to avoid breaking user flow if they want to generate from here.
-        // For simplicity, we just add the import/export project buttons.
+        // Auto-update when tab is shown
+        mainPanel.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                refreshAllRef[0].run();
+            }
+        });
     }
 
     private JPanel buildReportDetailsPanel(ReportTemplateConfig initialRtc) {

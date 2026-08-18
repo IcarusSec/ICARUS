@@ -566,65 +566,15 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
         if (requestResponses.isEmpty()) return items;
 
-        var runAll = new JMenuItem("ICARUS → Run All Modules");
-        runAll.addActionListener(e -> {
-            for (var rr : requestResponses) {
-                scanRunner.runScan(rr, true);
-            }
-        });
-        items.add(runAll);
-
-        JMenu modulesMenu = new JMenu("ICARUS → Modules");
-        for (var module : modules) {
-            var item = new JMenuItem(module.name());
-            item.addActionListener(e -> {
-                for (var rr : requestResponses) {
-                    scanRunner.runModule(module, rr, true);
-                }
-            });
-            modulesMenu.add(item);
-        }
-        items.add(modulesMenu);
-
-        JMenu evidenceMenu = new JMenu("ICARUS → Evidence & Reporting");
-        var createEvidence = new JMenuItem("Send to Reporter Creation");
-        createEvidence.addActionListener(e -> {
-            for (var rr : requestResponses) {
-                createManualEvidence(rr);
-            }
-        });
-        evidenceMenu.add(createEvidence);
-
-        var pasteEvidence = new JMenuItem("Paste Screenshot as Evidence");
-        pasteEvidence.addActionListener(e -> pasteEvidenceFromClipboard(requestResponses.get(0)));
-        evidenceMenu.add(pasteEvidence);
-
-        var evidenceManager = new JMenuItem("Manage Report Evidence");
-        evidenceManager.addActionListener(e -> {
-            if (showEvidenceAction != null) showEvidenceAction.run();
-        });
-        evidenceMenu.add(evidenceManager);
-        
-        if (icarus.Icarus.HTML_and_PDF_REPORT) {
-            items.add(evidenceMenu);
-        }
-
-        // AutoAuth: only shown when the user actually highlighted text in a message editor —
-        // these need selection offsets that scan-style modules never receive.
+        // 1. AutoAuth: Context-sensitive actions at the top if applicable
         event.messageEditorRequestResponse().ifPresent(selection -> {
             JMenu authMenu = new JMenu("ICARUS → AutoAuth");
             
-            // Quick toggle so users can disable AutoAuth for manual JWT manipulation
-            // without digging into Settings.
             boolean enabled = autoAuth.isEnabled();
             var toggleAuth = new JMenuItem((enabled ? "✓" : "✗") + " AutoAuth " + (enabled ? "ON" : "OFF"));
             toggleAuth.addActionListener(e -> autoAuth.toggleEnabled());
             authMenu.add(toggleAuth);
 
-            // Montoya's HttpHandler only controls what goes out on the wire — it has no hook
-            // back into an already-open editor pane (e.g. a Repeater tab), so the injected
-            // token never appears there on its own. setRequest() is the one API that can push
-            // an update into the pane the user is looking at, so offer it as an explicit action.
             if (selection.selectionContext() == MessageEditorHttpRequestResponse.SelectionContext.REQUEST) {
                 var syncToken = new JMenuItem("Sync AutoAuth Token to Editor");
                 syncToken.addActionListener(e -> {
@@ -648,6 +598,51 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             }
             items.add(authMenu);
         });
+
+        // 2. Evidence & Reporting: High usage for manual testing
+        if (icarus.Icarus.HTML_and_PDF_REPORT) {
+            JMenu evidenceMenu = new JMenu("ICARUS → Evidence & Reporting");
+            var createEvidence = new JMenuItem("Send to Reporter Creation");
+            createEvidence.addActionListener(e -> {
+                for (var rr : requestResponses) {
+                    createManualEvidence(rr);
+                }
+            });
+            evidenceMenu.add(createEvidence);
+
+            var pasteEvidence = new JMenuItem("Paste Screenshot as Evidence");
+            pasteEvidence.addActionListener(e -> pasteEvidenceFromClipboard(requestResponses.get(0)));
+            evidenceMenu.add(pasteEvidence);
+
+            var evidenceManager = new JMenuItem("Manage Report Evidence");
+            evidenceManager.addActionListener(e -> {
+                if (showEvidenceAction != null) showEvidenceAction.run();
+            });
+            evidenceMenu.add(evidenceManager);
+            
+            items.add(evidenceMenu);
+        }
+
+        // 3. Active Scanning Actions
+        var runAll = new JMenuItem("ICARUS → Run All Modules");
+        runAll.addActionListener(e -> {
+            for (var rr : requestResponses) {
+                scanRunner.runScan(rr, true);
+            }
+        });
+        items.add(runAll);
+
+        JMenu modulesMenu = new JMenu("ICARUS → Modules");
+        for (var module : modules) {
+            var item = new JMenuItem(module.name());
+            item.addActionListener(e -> {
+                for (var rr : requestResponses) {
+                    scanRunner.runModule(module, rr, true);
+                }
+            });
+            modulesMenu.add(item);
+        }
+        items.add(modulesMenu);
 
         return items;
     }

@@ -3,9 +3,9 @@ package icarus.mcp;
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.TypeRef;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpServerSession;
-import io.modelcontextprotocol.spec.McpServerTransport;
-import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import io.modelcontextprotocol.spec.McpStreamableServerSession;
+import io.modelcontextprotocol.spec.McpStreamableServerTransport;
+import io.modelcontextprotocol.spec.McpStreamableServerTransportProvider;
 
 import reactor.core.publisher.Mono;
 
@@ -18,60 +18,51 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Hand-rolled MCP legacy-SSE transport against a raw {@link ServerSocket}, modeled on
- * mcp-core's own {@code HttpServletSseServerTransportProvider} for matching wire behavior
- * (same endpoint/event shape) without needing a servlet container (Jetty) just to run one
- * servlet inside a Burp extension.
+ * Hand-rolled MCP Streamable HTTP transport (spec revision 2025-03-26) against a raw
+ * {@link ServerSocket}, single {@code /mcp} endpoint. Every JSON-RPC request is answered
+ * synchronously as a plain {@code application/json} POST response — no server-initiated
+ * requests are needed by this extension's tool surface, so the optional SSE-stream response
+ * mode and the standalone GET listening stream are not implemented.
  *
  * <p>Deliberately does NOT use JDK's built-in {@code com.sun.net.httpserver.HttpServer}: that
  * class lives in the {@code jdk.httpserver} platform module, which Burp's extension classloader
  * does not resolve (extensions are loaded via a plain {@code URLClassLoader} whose delegation
  * doesn't reach it), producing {@code ClassNotFoundException} at runtime despite compiling fine.
- * A raw socket server needs only {@code java.base}, which is always resolvable.
+ * A raw socket server needs only {@code java.base}, which is always resolvable. Same reasoning
+ * rules out the SDK's own {@code HttpServletStreamableServerTransportProvider}: it's a
+ * {@code jakarta.servlet.HttpServlet}, which would need an embedded servlet container (Jetty)
+ * just to run one servlet inside a Burp extension.
  *
  * <p>Every connection is handled as exactly one request/response with {@code Connection: close}
- * — no keep-alive, no chunked encoding, no persistent-connection request pipelining — since this
- * is a local, low-volume, single-user loopback server; the SSE response is close-delimited (no
- * {@code Content-Length}, body read until the socket closes), which is valid framing per RFC 7230
- * §3.3.3 and handled natively by every HTTP client tested against it, including
- * {@code java.net.http.HttpClient}.
- *
- * <p>GET {@code ssePath} opens an SSE stream, mints a session, and emits an {@code endpoint}
- * event carrying the POST URL for that session; POST {@code messagePath}{@code ?sessionId=...}
- * accepts one JSON-RPC message per request and hands it to that session (returning 202
- * immediately) — the actual JSON-RPC response/notifications flow back asynchronously over the
- * still-open SSE stream via {@link SseSessionTransport#sendMessage}.
+ * — no keep-alive, no chunked encoding — since this is a local, low-volume, single-user loopback
+ * server.
  */
-final class IcarusMcpTransportProvider implements McpServerTransportProvider {
+final class IcarusMcpTransportProvider implements McpStreamableServerTransportProvider {
 
     private final Consumer<String> errorLog;
     private final McpJsonMapper jsonMapper;
-    private final String ssePath;
-    private final String messagePath;
-    private final String apiKey;
+    private final String mcpPath;
 
-    private final Map<String, McpServerSession> sessions = new ConcurrentHashMap<>();
-    private volatile McpServerSession.Factory sessionFactory;
+    private final Map<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+    private volatile McpStreamableServerSession.Factory sessionFactory;
     private ServerSocket serverSocket;
     private ExecutorService executor;
     private volatile boolean running;
 
-    IcarusMcpTransportProvider(Consumer<String> errorLog, McpJsonMapper jsonMapper, String ssePath, String messagePath, String apiKey) {
+    IcarusMcpTransportProvider(Consumer<String> errorLog, McpJsonMapper jsonMapper, String mcpPath) {
         this.errorLog = errorLog;
         this.jsonMapper = jsonMapper;
-        this.ssePath = ssePath;
-        this.messagePath = messagePath;
-        this.apiKey = apiKey;
+        this.mcpPath = mcpPath;
     }
 
     /** Binds and starts the HTTP server on 127.0.0.1. {@code port} 0 picks an ephemeral port. Returns the bound port. */
@@ -79,10 +70,6 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         serverSocket = new ServerSocket();
         serverSocket.bind(new InetSocketAddress("127.0.0.1", port));
         running = true;
-        // GET /sse blocks its handler thread for the lifetime of the session (see
-        // SseSessionTransport#awaitClose) — a single-threaded executor would let one open SSE
-        // connection starve every other request, including the POSTs that session needs to
-        // receive. Daemon threads so a stuck connection can't block extensionUnloaded.
         executor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "icarus-mcp");
             t.setDaemon(true);
@@ -117,13 +104,13 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
     }
 
     @Override
-    public void setSessionFactory(McpServerSession.Factory sessionFactory) {
+    public void setSessionFactory(McpStreamableServerSession.Factory sessionFactory) {
         this.sessionFactory = sessionFactory;
     }
 
     @Override
     public Mono<Void> notifyClients(String method, Object params) {
-        for (McpServerSession session : sessions.values()) {
+        for (McpStreamableServerSession session : sessions.values()) {
             session.sendNotification(method, params)
                     .subscribe(v -> {}, e -> errorLog.accept("ICARUS MCP notify failed: " + e));
         }
@@ -133,7 +120,7 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
     @Override
     public Mono<Void> closeGracefully() {
         return Mono.fromRunnable(() -> {
-            sessions.values().forEach(McpServerSession::close);
+            sessions.values().forEach(McpStreamableServerSession::close);
             sessions.clear();
         });
     }
@@ -152,7 +139,9 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
                 return;
             }
             String method = parts[0];
-            String rawTarget = parts[1];
+            String path = parts[1];
+            int q = path.indexOf('?');
+            if (q >= 0) path = path.substring(0, q);
 
             Map<String, String> headers = new HashMap<>();
             String line;
@@ -161,20 +150,13 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
                 if (idx > 0) headers.put(line.substring(0, idx).trim().toLowerCase(), line.substring(idx + 1).trim());
             }
 
-            String path = rawTarget;
-            String query = null;
-            int q = rawTarget.indexOf('?');
-            if (q >= 0) {
-                path = rawTarget.substring(0, q);
-                query = rawTarget.substring(q + 1);
+            if (!mcpPath.equals(path)) {
+                sendSimpleResponse(socket, 404);
+                socket.close();
+                return;
             }
 
-            String authHeader = headers.get("authorization");
-            boolean authorized = authHeader != null && authHeader.equals("Bearer " + apiKey);
-
-            if (ssePath.equals(path) && "GET".equalsIgnoreCase(method)) {
-                handleSse(socket, authorized);
-            } else if (messagePath.equals(path) && "POST".equalsIgnoreCase(method)) {
+            if ("POST".equalsIgnoreCase(method)) {
                 int contentLength = 0;
                 try {
                     contentLength = Integer.parseInt(headers.getOrDefault("content-length", "0"));
@@ -182,9 +164,11 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
                     // treat as empty body
                 }
                 byte[] body = in.readNBytes(contentLength);
-                handleMessage(socket, authorized, query, body);
+                handlePost(socket, headers.get("mcp-session-id"), body);
             } else {
-                sendSimpleResponse(socket, 404);
+                // GET (standalone listening stream) and DELETE (session termination) are legal
+                // per spec to omit; this extension has no server-initiated requests to push.
+                sendSimpleResponse(socket, 405);
                 socket.close();
             }
         } catch (IOException e) {
@@ -197,61 +181,35 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         }
     }
 
-    private void handleSse(Socket socket, boolean authorized) {
-        String sessionId = null;
+    private void handlePost(Socket socket, String sessionId, byte[] body) {
         try {
-            if (!authorized) {
-                sendSimpleResponse(socket, 401);
-                return;
+            McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, new String(body, StandardCharsets.UTF_8));
+
+            if (message instanceof McpSchema.JSONRPCRequest request) {
+                if ("initialize".equals(request.method())) {
+                    handleInitialize(socket, request);
+                } else {
+                    handleRequest(socket, sessionId, request);
+                }
+            } else if (message instanceof McpSchema.JSONRPCNotification notification) {
+                McpStreamableServerSession session = sessions.get(sessionId);
+                if (session == null) {
+                    sendSimpleResponse(socket, 404);
+                    return;
+                }
+                session.accept(notification).block();
+                sendSimpleResponse(socket, 202);
+            } else if (message instanceof McpSchema.JSONRPCResponse response) {
+                McpStreamableServerSession session = sessions.get(sessionId);
+                if (session == null) {
+                    sendSimpleResponse(socket, 404);
+                    return;
+                }
+                session.accept(response).block();
+                sendSimpleResponse(socket, 202);
+            } else {
+                sendSimpleResponse(socket, 400);
             }
-
-            sessionId = UUID.randomUUID().toString();
-            OutputStream out = socket.getOutputStream();
-            out.write(("HTTP/1.1 200 OK\r\n"
-                    + "Content-Type: text/event-stream\r\n"
-                    + "Cache-Control: no-cache\r\n"
-                    + "Connection: close\r\n"
-                    + "\r\n").getBytes(StandardCharsets.US_ASCII));
-            out.flush();
-
-            SseSessionTransport transport = new SseSessionTransport(sessionId, out);
-            sessions.put(sessionId, sessionFactory.create(transport));
-            transport.writeEvent("endpoint", messagePath + "?sessionId=" + sessionId);
-
-            // Blocks this pooled thread for the session's lifetime — see start()'s comment on
-            // why the executor must support many concurrent threads.
-            transport.awaitClose();
-        } catch (IOException e) {
-            errorLog.accept("ICARUS MCP SSE handling failed: " + e);
-        } finally {
-            if (sessionId != null) sessions.remove(sessionId);
-            try {
-                socket.close();
-            } catch (IOException ignored) {
-                // already closed/broken
-            }
-        }
-    }
-
-    private void handleMessage(Socket socket, boolean authorized, String query, byte[] body) {
-        try {
-            if (!authorized) {
-                sendSimpleResponse(socket, 401);
-                return;
-            }
-
-            String sessionId = queryParam(query, "sessionId");
-            McpServerSession session = sessionId != null ? sessions.get(sessionId) : null;
-            if (session == null) {
-                sendSimpleResponse(socket, 404);
-                return;
-            }
-
-            String bodyStr = new String(body, StandardCharsets.UTF_8);
-            McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(jsonMapper, bodyStr);
-            session.handle(message).block();
-
-            sendSimpleResponse(socket, 202);
         } catch (Exception e) {
             errorLog.accept("ICARUS MCP message handling failed: " + e);
             try {
@@ -268,6 +226,73 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         }
     }
 
+    private void handleInitialize(Socket socket, McpSchema.JSONRPCRequest request) throws IOException {
+        McpSchema.InitializeRequest initRequest = jsonMapper.convertValue(request.params(), McpSchema.InitializeRequest.class);
+        McpStreamableServerSession.McpStreamableServerSessionInit init = sessionFactory.startSession(initRequest);
+        McpSchema.InitializeResult result = init.initResult().block();
+
+        String sessionId = UUID.randomUUID().toString();
+        sessions.put(sessionId, init.session());
+
+        McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null);
+        sendJson(socket, 200, jsonMapper.writeValueAsString(response), sessionId);
+    }
+
+    private void handleRequest(Socket socket, String sessionId, McpSchema.JSONRPCRequest request) throws Exception {
+        McpStreamableServerSession session = sessionId != null ? sessions.get(sessionId) : null;
+        if (session == null) {
+            sendSimpleResponse(socket, 404);
+            return;
+        }
+
+        CompletableFuture<McpSchema.JSONRPCMessage> captured = new CompletableFuture<>();
+        McpStreamableServerTransport captureTransport = new McpStreamableServerTransport() {
+            @Override
+            public Mono<Void> sendMessage(McpSchema.JSONRPCMessage msg, String eventId) {
+                return Mono.fromRunnable(() -> captured.complete(msg));
+            }
+
+            @Override
+            public Mono<Void> sendMessage(McpSchema.JSONRPCMessage msg) {
+                return sendMessage(msg, null);
+            }
+
+            @Override
+            public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
+                return jsonMapper.convertValue(data, typeRef);
+            }
+
+            @Override
+            public Mono<Void> closeGracefully() {
+                return Mono.empty();
+            }
+
+            @Override
+            public void close() {
+                // nothing to release: this transport only ever captures one response
+            }
+        };
+
+        session.responseStream(request, captureTransport).block();
+        McpSchema.JSONRPCMessage response = captured.get(30, TimeUnit.SECONDS);
+        sendJson(socket, 200, jsonMapper.writeValueAsString(response), null);
+    }
+
+    private static void sendJson(Socket socket, int status, String json, String sessionId) throws IOException {
+        byte[] bodyBytes = json.getBytes(StandardCharsets.UTF_8);
+        StringBuilder response = new StringBuilder()
+                .append("HTTP/1.1 ").append(status).append(' ').append(statusPhrase(status)).append("\r\n")
+                .append("Content-Type: application/json\r\n")
+                .append("Content-Length: ").append(bodyBytes.length).append("\r\n");
+        if (sessionId != null) response.append("Mcp-Session-Id: ").append(sessionId).append("\r\n");
+        response.append("Connection: close\r\n\r\n");
+
+        OutputStream out = socket.getOutputStream();
+        out.write(response.toString().getBytes(StandardCharsets.US_ASCII));
+        out.write(bodyBytes);
+        out.flush();
+    }
+
     private static void sendSimpleResponse(Socket socket, int status) throws IOException {
         String response = "HTTP/1.1 " + status + " " + statusPhrase(status) + "\r\n"
                 + "Content-Length: 0\r\n"
@@ -282,7 +307,7 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         return switch (status) {
             case 200 -> "OK";
             case 202 -> "Accepted";
-            case 401 -> "Unauthorized";
+            case 400 -> "Bad Request";
             case 404 -> "Not Found";
             case 405 -> "Method Not Allowed";
             case 500 -> "Internal Server Error";
@@ -304,90 +329,15 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         return buf.toString(StandardCharsets.ISO_8859_1);
     }
 
-    private static String queryParam(String rawQuery, String name) {
-        if (rawQuery == null) return null;
-        for (String pair : rawQuery.split("&")) {
-            int eq = pair.indexOf('=');
-            if (eq >= 0 && pair.substring(0, eq).equals(name)) return pair.substring(eq + 1);
-        }
-        return null;
-    }
-
-    /** Per-connection transport: one open SSE stream, bound to one {@link McpServerSession}. */
-    private final class SseSessionTransport implements McpServerTransport {
-        private final String sessionId;
-        private final OutputStream out;
-        private final Object writeLock = new Object();
-        private final CountDownLatch closeLatch = new CountDownLatch(1);
-        private volatile boolean closed = false;
-
-        SseSessionTransport(String sessionId, OutputStream out) {
-            this.sessionId = sessionId;
-            this.out = out;
-        }
-
-        void writeEvent(String event, String data) throws IOException {
-            synchronized (writeLock) {
-                out.write(("event: " + event + "\ndata: " + data + "\n\n").getBytes(StandardCharsets.UTF_8));
-                out.flush();
-            }
-        }
-
-        /** ponytail: no idle keep-alive ping — this is a local, single-user loopback server, so
-         *  a dead connection is only noticed on the next write attempt. Add a periodic ping if
-         *  intermediary timeouts or multi-client use ever make that noticeable. */
-        void awaitClose() {
-            try {
-                closeLatch.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        private void markClosed() {
-            if (closed) return;
-            closed = true;
-            sessions.remove(sessionId);
-            closeLatch.countDown();
-        }
-
-        @Override
-        public Mono<Void> sendMessage(McpSchema.JSONRPCMessage message) {
-            return Mono.fromRunnable(() -> {
-                try {
-                    writeEvent("message", jsonMapper.writeValueAsString(message));
-                } catch (IOException e) {
-                    markClosed();
-                }
-            });
-        }
-
-        @Override
-        public <T> T unmarshalFrom(Object data, TypeRef<T> typeRef) {
-            return jsonMapper.convertValue(data, typeRef);
-        }
-
-        @Override
-        public Mono<Void> closeGracefully() {
-            return Mono.fromRunnable(this::markClosed);
-        }
-
-        @Override
-        public void close() {
-            markClosed();
-        }
-    }
-
     /** `java -cp build_manual/libs/icarus-<version>.jar icarus.mcp.IcarusMcpTransportProvider`
-     *  — end-to-end self-check: real HTTP+SSE client against a real McpSyncServer built on this
+     *  — end-to-end self-check: real HTTP client against a real McpSyncServer built on this
      *  transport, driving initialize -> notifications/initialized -> tools/call over the wire. */
     public static void main(String[] args) throws Exception {
         var jsonMapper = new io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
-        String apiKey = "test-key";
-        var provider = new IcarusMcpTransportProvider(System.err::println, jsonMapper, "/sse", "/message", apiKey);
+        var provider = new IcarusMcpTransportProvider(System.err::println, jsonMapper, "/mcp");
 
         var tool = new McpSchema.Tool("echo", "Echo", "Echoes back the given text",
-                new McpSchema.JsonSchema("object", Map.of("text", Map.of("type", "string")), List.of("text"), false, null, null),
+                new McpSchema.JsonSchema("object", Map.of("text", Map.of("type", "string")), java.util.List.of("text"), false, null, null),
                 null, null, null);
         var toolSpec = new io.modelcontextprotocol.server.McpServerFeatures.SyncToolSpecification(tool,
                 (exchange, request) -> McpSchema.CallToolResult.builder()
@@ -404,43 +354,19 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
 
         int port = provider.start(0);
         try {
-            var events = new java.util.concurrent.LinkedBlockingQueue<String>();
             var client = java.net.http.HttpClient.newHttpClient();
-            var sseRequest = java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:" + port + "/sse"))
-                    .header("Authorization", "Bearer " + apiKey).GET().build();
+            String url = "http://127.0.0.1:" + port + "/mcp";
 
-            Thread sseThread = new Thread(() -> {
-                try {
-                    var response = client.send(sseRequest, java.net.http.HttpResponse.BodyHandlers.ofLines());
-                    String pendingEvent = null;
-                    var it = response.body().iterator();
-                    while (it.hasNext()) {
-                        String line = it.next();
-                        if (line.startsWith("event: ")) pendingEvent = line.substring(7);
-                        else if (line.startsWith("data: ")) events.offer(pendingEvent + "|" + line.substring(6));
-                    }
-                } catch (Exception ignored) {
-                    // connection closed at test teardown
-                }
-            }, "sse-test-reader");
-            sseThread.setDaemon(true);
-            sseThread.start();
-
-            String endpointEvent = events.poll(5, java.util.concurrent.TimeUnit.SECONDS);
-            assert endpointEvent != null && endpointEvent.startsWith("endpoint|") : "did not receive endpoint event";
-            String messageUrl = "http://127.0.0.1:" + port + endpointEvent.substring("endpoint|".length());
-
-            postJson(client, messageUrl, apiKey,
+            var initResp = postJson(client, url, null,
                     "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"0\"}}}");
-            String initResponse = events.poll(5, java.util.concurrent.TimeUnit.SECONDS);
-            assert initResponse != null && initResponse.startsWith("message|") : "no initialize response";
+            String sessionId = initResp.headers().firstValue("Mcp-Session-Id").orElseThrow();
+            assert initResp.body().contains("\"protocolVersion\"") : "no initialize result: " + initResp.body();
 
-            postJson(client, messageUrl, apiKey, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+            postJson(client, url, sessionId, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
 
-            postJson(client, messageUrl, apiKey,
+            var callResp = postJson(client, url, sessionId,
                     "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"echo\",\"arguments\":{\"text\":\"hi\"}}}");
-            String callResponse = events.poll(5, java.util.concurrent.TimeUnit.SECONDS);
-            assert callResponse != null && callResponse.contains("echo:hi") : "tools/call did not echo back: " + callResponse;
+            assert callResp.body().contains("echo:hi") : "tools/call did not echo back: " + callResp.body();
 
             System.out.println("IcarusMcpTransportProvider self-check passed (run with -ea to enforce).");
         } finally {
@@ -449,15 +375,15 @@ final class IcarusMcpTransportProvider implements McpServerTransportProvider {
         }
     }
 
-    private static void postJson(java.net.http.HttpClient client, String url, String apiKey, String body) throws Exception {
-        var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                .header("Authorization", "Bearer " + apiKey)
+    private static java.net.http.HttpResponse<String> postJson(java.net.http.HttpClient client, String url, String sessionId, String body) throws Exception {
+        var builder = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
                 .header("Content-Type", "application/json")
-                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
-                .build();
-        var response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 202) {
+                .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body));
+        if (sessionId != null) builder.header("Mcp-Session-Id", sessionId);
+        var response = client.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() / 100 != 2) {
             throw new RuntimeException("POST " + url + " failed: " + response.statusCode() + " " + response.body());
         }
+        return response;
     }
 }

@@ -12,6 +12,7 @@ import icarus.Orchestrator;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
+import icarus.evidence.EvidenceCapture;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -20,8 +21,13 @@ import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -94,7 +100,8 @@ public final class IcarusMcpServer {
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
                     .tools(listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
                             getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
-                            getReportableFindingsTool(), triggerScanTool(), generateReportTool())
+                            getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
+                            getEvidenceTool(), captureEvidenceTool())
                     .build();
 
             port = transportProvider.start(requestedPort);
@@ -293,6 +300,105 @@ public final class IcarusMcpServer {
                         : McpSchema.CallToolResult.builder().addTextContent("No report was written — nothing to report, or that format is disabled in Settings.").isError(true).build();
             } catch (Exception e) {
                 return McpSchema.CallToolResult.builder().addTextContent("Report generation failed: " + e.getMessage()).isError(true).build();
+            }
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getEvidenceTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("get_evidence",
+                "Get ICARUS evidence images",
+                "Returns the captured evidence screenshots (base64-encoded PNG, with captions) already attached to a finding, so they can be viewed or re-annotated with capture_evidence.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            List<Object> evidence = new ArrayList<>();
+            try {
+                for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
+                    if (!hash.equals(ce.finding().similarityHash())) continue;
+                    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+                    ImageIO.write(ce.image(), "png", buf);
+                    Map<String, Object> e = new LinkedHashMap<>();
+                    e.put("caption", ce.caption());
+                    e.put("width", ce.image().getWidth());
+                    e.put("height", ce.image().getHeight());
+                    e.put("image_base64", Base64.getEncoder().encodeToString(buf.toByteArray()));
+                    evidence.add(e);
+                }
+            } catch (IOException e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Failed to read evidence: " + e.getMessage()).isError(true).build();
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(evidence)).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification captureEvidenceTool() {
+        Map<String, Object> annotationItemSchema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "kind", Map.of("type", "string", "description", "BOX, ARROW, HIGHLIGHT, REDACT, or CROP"),
+                        "x", Map.of("type", "integer"),
+                        "y", Map.of("type", "integer"),
+                        "width", Map.of("type", "integer", "description", "For ARROW, the end point's x offset from x"),
+                        "height", Map.of("type", "integer", "description", "For ARROW, the end point's y offset from y")),
+                "required", List.of("kind", "x", "y", "width", "height"));
+
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
+                        "image_base64", Map.of("type", "string", "description", "Base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence"),
+                        "caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"),
+                        "annotations", Map.of(
+                                "type", "array",
+                                "description", "Optional shapes to draw before saving, in image pixel coordinates. BOX/HIGHLIGHT/REDACT are rectangles at (x,y) sized width x height; "
+                                        + "ARROW runs from (x,y) to (x+width,y+height); CROP truncates the final image to that rectangle and should be listed last.",
+                                "items", annotationItemSchema)),
+                List.of("hash", "image_base64"), false, null, null);
+        var tool = new McpSchema.Tool("capture_evidence",
+                "Capture and annotate ICARUS evidence",
+                "Attaches a screenshot to a finding as reportable evidence, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
+                        + "the headless equivalent of the Evidence Manager's annotation editor. Call get_evidence first to re-annotate an existing screenshot.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            String imageBase64 = (String) request.arguments().get("image_base64");
+            Object rawCaption = request.arguments().get("caption");
+            String caption = rawCaption instanceof String s ? s : "";
+
+            try {
+                byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
+                BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                if (image == null) {
+                    return McpSchema.CallToolResult.builder().addTextContent("image_base64 did not decode to a readable image").isError(true).build();
+                }
+
+                Object rawAnnotations = request.arguments().get("annotations");
+                if (rawAnnotations instanceof List<?> list && !list.isEmpty()) {
+                    List<EvidenceCapture.Annotation> annotations = new ArrayList<>();
+                    for (Object o : list) {
+                        Map<?, ?> m = (Map<?, ?>) o;
+                        annotations.add(new EvidenceCapture.Annotation(
+                                (String) m.get("kind"),
+                                ((Number) m.get("x")).intValue(),
+                                ((Number) m.get("y")).intValue(),
+                                ((Number) m.get("width")).intValue(),
+                                ((Number) m.get("height")).intValue()));
+                    }
+                    image = orchestrator.getEvidenceCapture().applyAnnotations(image, annotations);
+                }
+
+                orchestrator.captureEvidence(finding, image, caption);
+                return McpSchema.CallToolResult.builder().addTextContent("Evidence captured for " + hash).build();
+            } catch (Exception e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Failed to capture evidence: " + e.getMessage()).isError(true).build();
             }
         });
     }

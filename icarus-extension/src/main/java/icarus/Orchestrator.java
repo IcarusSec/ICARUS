@@ -23,6 +23,8 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Consumer;
 
 /**
@@ -268,6 +271,26 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             case "pdf" -> pdfReportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
             default -> throw new IllegalArgumentException("Unknown report format: " + format + " (expected html or pdf)");
         };
+    }
+
+    /**
+     * Non-interactive counterpart to {@link EvidenceCapture#captureInteractiveWithImage} for
+     * callers with no mouse/dialog (the MCP tool surface): saves {@code image} to disk and folds
+     * it into {@code finding}'s evidence exactly like accepting the annotation editor's "Apply"
+     * would — same {@code restoreCaptured} + {@link #updateFinding} pairing used to replay
+     * evidence non-interactively in {@link #importProjectStateInteractive}. Annotate {@code image}
+     * first via {@link EvidenceCapture#applyAnnotations} if desired; this method only persists.
+     */
+    public void captureEvidence(Finding finding, BufferedImage image, String caption) throws IOException {
+        Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
+        Files.createDirectories(dir);
+        String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_")
+                + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".png";
+        Path imagePath = dir.resolve(filename);
+        ImageIO.write(image, "png", imagePath.toFile());
+        var ce = new EvidenceCapture.CapturedEvidence(finding, imagePath, image, caption);
+        evidenceCapture.restoreCaptured(ce, true);
+        updateFinding(finding);
     }
 
     private void exportReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings,

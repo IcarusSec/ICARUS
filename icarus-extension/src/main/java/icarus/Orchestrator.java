@@ -247,6 +247,23 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
                 (findings, cfg, capture, out) -> pdfReportGenerator.generate(findings, cfg, capture, out));
     }
 
+    /**
+     * Non-interactive counterpart to {@link #generateHtmlReportInteractive}/{@link #exportPdfReportInteractive}
+     * for callers with no {@link Component} to anchor a file chooser (the MCP tool surface) —
+     * writes straight to {@code outputFile}, overwriting it if it already exists.
+     *
+     * @param format {@code "html"} or {@code "pdf"}
+     * @return true if a report was written (false if there was nothing to report, e.g. HTML reports disabled)
+     */
+    public boolean generateReport(String format, Path outputFile) throws Exception {
+        List<Finding> reportFindings = getReportableFindings();
+        return switch (format.toLowerCase()) {
+            case "html" -> reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+            case "pdf" -> pdfReportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+            default -> throw new IllegalArgumentException("Unknown report format: " + format + " (expected html or pdf)");
+        };
+    }
+
     private void exportReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings,
                                           String extension, String defaultFileName, String formatLabel, ReportWriter writer) {
         JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));

@@ -94,7 +94,7 @@ public final class IcarusMcpServer {
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
                     .tools(listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
                             getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
-                            getReportableFindingsTool(), triggerScanTool())
+                            getReportableFindingsTool(), triggerScanTool(), generateReportTool())
                     .build();
 
             port = transportProvider.start(requestedPort);
@@ -268,6 +268,31 @@ public final class IcarusMcpServer {
             }
             orchestrator.runScan(result, true);
             return McpSchema.CallToolResult.builder().addTextContent("Scan triggered for " + url).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification generateReportTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "format", Map.of("type", "string", "description", "Report format: html or pdf"),
+                        "output_path", Map.of("type", "string", "description", "Absolute filesystem path to write the report to")),
+                List.of("format", "output_path"), false, null, null);
+        var tool = new McpSchema.Tool("generate_report",
+                "Generate ICARUS report",
+                "Writes an HTML or PDF report of ICARUS's reportable findings (see get_reportable_findings) to the given path, overwriting it if it exists.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String format = (String) request.arguments().get("format");
+            String outputPath = (String) request.arguments().get("output_path");
+            try {
+                boolean written = orchestrator.generateReport(format, java.nio.file.Path.of(outputPath));
+                return written
+                        ? McpSchema.CallToolResult.builder().addTextContent("Report written to " + outputPath).build()
+                        : McpSchema.CallToolResult.builder().addTextContent("No report was written — nothing to report, or that format is disabled in Settings.").isError(true).build();
+            } catch (Exception e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Report generation failed: " + e.getMessage()).isError(true).build();
+            }
         });
     }
 

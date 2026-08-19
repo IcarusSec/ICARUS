@@ -12,6 +12,7 @@ import icarus.Orchestrator;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
+import icarus.core.ReportTemplateConfig;
 import icarus.evidence.EvidenceCapture;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
@@ -101,7 +102,10 @@ public final class IcarusMcpServer {
                     .tools(listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
                             getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
                             getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
-                            getEvidenceTool(), captureEvidenceTool())
+                            getEvidenceTool(), captureEvidenceTool(),
+                            listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
+                            moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
+                            getReportConfigTool(), updateReportConfigTool())
                     .build();
 
             port = transportProvider.start(requestedPort);
@@ -322,7 +326,9 @@ public final class IcarusMcpServer {
                     ByteArrayOutputStream buf = new ByteArrayOutputStream();
                     ImageIO.write(ce.image(), "png", buf);
                     Map<String, Object> e = new LinkedHashMap<>();
+                    e.put("image_path", ce.imagePath().toString());
                     e.put("caption", ce.caption());
+                    e.put("included", orchestrator.getEvidenceCapture().isIncluded(ce));
                     e.put("width", ce.image().getWidth());
                     e.put("height", ce.image().getHeight());
                     e.put("image_base64", Base64.getEncoder().encodeToString(buf.toByteArray()));
@@ -401,6 +407,234 @@ public final class IcarusMcpServer {
                 return McpSchema.CallToolResult.builder().addTextContent("Failed to capture evidence: " + e.getMessage()).isError(true).build();
             }
         });
+    }
+
+    private McpServerFeatures.SyncToolSpecification listEvidenceTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("list_evidence",
+                "List all ICARUS evidence",
+                "Lists every captured evidence screenshot across all findings, in report order, with its image_path identifier "
+                        + "(used by set_evidence_caption, set_evidence_included, move_evidence, remove_evidence, and reorder_evidence).",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            List<Object> items = new ArrayList<>();
+            EvidenceCapture ec = orchestrator.getEvidenceCapture();
+            for (var ce : ec.getCaptured()) {
+                Map<String, Object> e = new LinkedHashMap<>();
+                e.put("image_path", ce.imagePath().toString());
+                e.put("hash", ce.finding().similarityHash());
+                e.put("type", ce.finding().type());
+                e.put("caption", ce.caption());
+                e.put("included", ec.isIncluded(ce));
+                items.add(e);
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(items)).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification setEvidenceCaptionTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "image_path", Map.of("type", "string", "description", "The evidence's image_path, as returned by list_evidence or get_evidence"),
+                        "caption", Map.of("type", "string", "description", "New caption text")),
+                List.of("image_path", "caption"), false, null, null);
+        var tool = new McpSchema.Tool("set_evidence_caption",
+                "Set ICARUS evidence caption",
+                "Updates the caption shown under an evidence screenshot in reports.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String imagePath = (String) request.arguments().get("image_path");
+            String caption = (String) request.arguments().get("caption");
+            var ce = findEvidence(imagePath);
+            if (ce == null) return evidenceNotFound(imagePath);
+            orchestrator.getEvidenceCapture().setCaption(ce, caption);
+            return McpSchema.CallToolResult.builder().addTextContent("Caption updated.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification setEvidenceIncludedTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "image_path", Map.of("type", "string", "description", "The evidence's image_path, as returned by list_evidence or get_evidence"),
+                        "included", Map.of("type", "boolean", "description", "Whether this evidence should appear in the next generated report")),
+                List.of("image_path", "included"), false, null, null);
+        var tool = new McpSchema.Tool("set_evidence_included",
+                "Set ICARUS evidence inclusion",
+                "Toggles whether an evidence screenshot is included in the next generated report, without deleting it.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String imagePath = (String) request.arguments().get("image_path");
+            boolean included = Boolean.TRUE.equals(request.arguments().get("included"));
+            var ce = findEvidence(imagePath);
+            if (ce == null) return evidenceNotFound(imagePath);
+            orchestrator.getEvidenceCapture().setIncluded(ce, included);
+            return McpSchema.CallToolResult.builder().addTextContent("Inclusion updated.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification moveEvidenceTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "image_path", Map.of("type", "string", "description", "The evidence's image_path, as returned by list_evidence or get_evidence"),
+                        "target_hash", Map.of("type", "string", "description", "similarityHash of the finding to move this evidence to")),
+                List.of("image_path", "target_hash"), false, null, null);
+        var tool = new McpSchema.Tool("move_evidence",
+                "Move ICARUS evidence to another finding",
+                "Re-assigns an evidence screenshot to a different finding, moving it between groups in the Evidence Manager and repainting its header banner to match.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String imagePath = (String) request.arguments().get("image_path");
+            String targetHash = (String) request.arguments().get("target_hash");
+            var ce = findEvidence(imagePath);
+            if (ce == null) return evidenceNotFound(imagePath);
+            Finding target = orchestrator.getFindingByHash(targetHash);
+            if (target == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + targetHash).isError(true).build();
+            }
+            orchestrator.getEvidenceCapture().moveToFinding(ce, target);
+            return McpSchema.CallToolResult.builder().addTextContent("Moved.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification removeEvidenceTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("image_path", Map.of("type", "string", "description", "The evidence's image_path, as returned by list_evidence or get_evidence")),
+                List.of("image_path"), false, null, null);
+        var tool = new McpSchema.Tool("remove_evidence",
+                "Remove ICARUS evidence",
+                "Permanently deletes a captured evidence screenshot.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String imagePath = (String) request.arguments().get("image_path");
+            var ce = findEvidence(imagePath);
+            if (ce == null) return evidenceNotFound(imagePath);
+            orchestrator.getEvidenceCapture().removeCaptured(ce);
+            return McpSchema.CallToolResult.builder().addTextContent("Removed.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification reorderEvidenceTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("image_paths", Map.of(
+                        "type", "array",
+                        "description", "Every evidence item's image_path (from list_evidence), in the desired report order. Must include every current item exactly once.",
+                        "items", Map.of("type", "string"))),
+                List.of("image_paths"), false, null, null);
+        var tool = new McpSchema.Tool("reorder_evidence",
+                "Reorder ICARUS evidence",
+                "Sets the report order of all captured evidence, same as dragging rows in the Evidence Manager.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            Object raw = request.arguments().get("image_paths");
+            if (!(raw instanceof List<?> paths)) {
+                return McpSchema.CallToolResult.builder().addTextContent("image_paths is required").isError(true).build();
+            }
+            EvidenceCapture ec = orchestrator.getEvidenceCapture();
+            List<EvidenceCapture.CapturedEvidence> current = ec.getCaptured();
+            List<EvidenceCapture.CapturedEvidence> newOrder = new ArrayList<>();
+            for (Object p : paths) {
+                var ce = findEvidence(String.valueOf(p));
+                if (ce == null) return evidenceNotFound(String.valueOf(p));
+                newOrder.add(ce);
+            }
+            if (newOrder.size() != current.size()) {
+                return McpSchema.CallToolResult.builder().addTextContent(
+                        "image_paths must include every current evidence item exactly once (got " + newOrder.size()
+                                + ", expected " + current.size() + ")").isError(true).build();
+            }
+            ec.reorderCaptured(newOrder);
+            return McpSchema.CallToolResult.builder().addTextContent("Reordered.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getReportConfigTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("get_report_config",
+                "Get ICARUS report config",
+                "Returns the current report template: title/author/etc. variables, custom sections, theme colors, and table-of-contents setting.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) ->
+                McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(reportConfigToMap(orchestrator.getReportTemplateConfig()))).build());
+    }
+
+    private McpServerFeatures.SyncToolSpecification updateReportConfigTool() {
+        Map<String, Object> sectionItemSchema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "title", Map.of("type", "string"),
+                        "content", Map.of("type", "string", "description", "Markdown content")),
+                "required", List.of("title", "content"));
+
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "variables", Map.of("type", "object", "description", "Template variables to set/merge in, e.g. projectName, author, revisor, ambient, reportDate"),
+                        "sections", Map.of("type", "array", "description", "Full replacement list of custom report sections, in order", "items", sectionItemSchema),
+                        "primary_color", Map.of("type", "string", "description", "Hex accent color, e.g. #3e7bb8"),
+                        "secondary_color", Map.of("type", "string", "description", "Hex secondary color"),
+                        "theme_name", Map.of("type", "string", "description", "light or dark"),
+                        "toc_enabled", Map.of("type", "boolean", "description", "Whether the report includes a table of contents")),
+                List.of(), false, null, null);
+        var tool = new McpSchema.Tool("update_report_config",
+                "Update ICARUS report config",
+                "Updates report template settings. Only provided fields are changed. variables are merged into the existing set; "
+                        + "sections, if provided, fully replaces the current section list.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            ReportTemplateConfig rtc = orchestrator.getReportTemplateConfig();
+
+            if (request.arguments().get("variables") instanceof Map<?, ?> vars) {
+                Map<String, String> merged = new LinkedHashMap<>(rtc.variables());
+                vars.forEach((k, v) -> merged.put(String.valueOf(k), String.valueOf(v)));
+                rtc.setVariables(merged);
+            }
+            if (request.arguments().get("sections") instanceof List<?> sections) {
+                List<ReportTemplateConfig.Section> parsed = new ArrayList<>();
+                for (Object o : sections) {
+                    Map<?, ?> m = (Map<?, ?>) o;
+                    parsed.add(new ReportTemplateConfig.Section(String.valueOf(m.get("title")), String.valueOf(m.get("content"))));
+                }
+                rtc.setSections(parsed);
+            }
+            if (request.arguments().get("primary_color") instanceof String s) rtc.setPrimaryColor(s);
+            if (request.arguments().get("secondary_color") instanceof String s) rtc.setSecondaryColor(s);
+            if (request.arguments().get("theme_name") instanceof String s) rtc.setThemeName(s);
+            if (request.arguments().get("toc_enabled") instanceof Boolean b) rtc.setTocEnabled(b);
+
+            orchestrator.saveReportTemplateConfig(rtc);
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(reportConfigToMap(rtc))).build();
+        });
+    }
+
+    private EvidenceCapture.CapturedEvidence findEvidence(String imagePath) {
+        for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
+            if (ce.imagePath().toString().equals(imagePath)) return ce;
+        }
+        return null;
+    }
+
+    private static McpSchema.CallToolResult evidenceNotFound(String imagePath) {
+        return McpSchema.CallToolResult.builder().addTextContent("No evidence found for image_path: " + imagePath).isError(true).build();
+    }
+
+    private static Map<String, Object> reportConfigToMap(ReportTemplateConfig rtc) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("variables", rtc.variables());
+        List<Object> sections = new ArrayList<>();
+        for (var s : rtc.sections()) sections.add(Map.of("title", s.title(), "content", s.content()));
+        m.put("sections", sections);
+        m.put("primaryColor", rtc.primaryColor());
+        m.put("secondaryColor", rtc.secondaryColor());
+        m.put("themeName", rtc.themeName());
+        m.put("tocEnabled", rtc.tocEnabled());
+        return m;
     }
 
     private static Map<String, Object> findingToMap(Finding finding, FindingRecord record) {

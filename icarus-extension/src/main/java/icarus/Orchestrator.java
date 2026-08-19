@@ -273,6 +273,19 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         };
     }
 
+    /** Current report template settings (title/author/sections/theme/etc.), same source the
+     *  Settings → Reporting panel and every report generator read from. */
+    public ReportTemplateConfig getReportTemplateConfig() {
+        return ReportTemplateConfig.fromConfig(config);
+    }
+
+    /** Persists {@code rtc} as the active report template, same as the Settings → Reporting
+     *  panel's own save path. */
+    public void saveReportTemplateConfig(ReportTemplateConfig rtc) {
+        rtc.saveTo(config);
+        api.persistence().extensionData().setString("config", config.serialize());
+    }
+
     /**
      * Non-interactive counterpart to {@link EvidenceCapture#captureInteractiveWithImage} for
      * callers with no mouse/dialog (the MCP tool surface): saves {@code image} to disk and folds

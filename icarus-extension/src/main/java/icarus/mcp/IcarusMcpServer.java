@@ -1,12 +1,15 @@
 package icarus.mcp;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import icarus.Icarus;
 import icarus.Orchestrator;
+import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
 
@@ -42,9 +45,9 @@ import java.util.Map;
  * jackson-dataformat-yaml, snakeyaml, and itu just to validate JSON Schema); see
  * {@link IcarusJsonSchemaValidator}.
  *
- * <p>First shippable slice is intentionally one tool ({@code list_findings}) to prove the
- * custom transport end-to-end before growing the tool surface (trigger_active_scan, finding
- * detail lookup, report generation, etc.).
+ * <p>Tool surface mirrors what {@link Orchestrator} exposes non-interactively (everything else
+ * on that facade drives a Swing dialog/file-chooser, which has no meaning to a headless MCP
+ * client).
  */
 public final class IcarusMcpServer {
 
@@ -89,7 +92,9 @@ public final class IcarusMcpServer {
                     .jsonMapper(jsonMapper)
                     .jsonSchemaValidator(new IcarusJsonSchemaValidator())
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-                    .tools(listFindingsTool())
+                    .tools(listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
+                            getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
+                            getReportableFindingsTool(), triggerScanTool())
                     .build();
 
             port = transportProvider.start(requestedPort);
@@ -126,24 +131,160 @@ public final class IcarusMcpServer {
 
             List<Object> findings = new ArrayList<>();
             for (FindingRecord record : orchestrator.getAllFindingRecords()) {
-                var finding = record.getFinding();
-                if (severityFilter != null && !finding.severity().name().equalsIgnoreCase(severityFilter)) continue;
-
-                Map<String, Object> f = new LinkedHashMap<>();
-                f.put("module", finding.module());
-                f.put("type", finding.type());
-                f.put("description", finding.description());
-                f.put("severity", finding.severity().name());
-                f.put("category", finding.category().name());
-                f.put("path", finding.path());
-                f.put("similarityHash", finding.similarityHash());
-                f.put("cweIds", finding.cweIds());
-                f.put("count", record.getCount());
-                f.put("suppressed", record.isSuppressed());
-                findings.add(f);
+                if (severityFilter != null && !record.getFinding().severity().name().equalsIgnoreCase(severityFilter)) continue;
+                findings.add(findingToMap(record.getFinding(), record));
             }
 
             return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findings)).build();
         });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("get_finding",
+                "Get ICARUS finding detail",
+                "Looks up one ICARUS finding by its similarityHash, returning its full detail.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findingToMap(finding, null))).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification suppressFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
+                        "reason", Map.of("type", "string", "description", "Why this finding is being suppressed")),
+                List.of("hash", "reason"), false, null, null);
+        var tool = new McpSchema.Tool("suppress_finding",
+                "Suppress ICARUS finding",
+                "Marks an ICARUS finding as suppressed, hiding it from reports and the default findings view.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            String reason = (String) request.arguments().get("reason");
+            orchestrator.suppressFinding(hash, reason);
+            return McpSchema.CallToolResult.builder().addTextContent("Suppressed " + hash).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification unsuppressFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("unsuppress_finding",
+                "Unsuppress ICARUS finding",
+                "Reverses suppress_finding, making the finding visible in reports and the default findings view again.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            orchestrator.unsuppressFinding(hash);
+            return McpSchema.CallToolResult.builder().addTextContent("Unsuppressed " + hash).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getAuditLogTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("get_audit_log",
+                "Get ICARUS audit log",
+                "Returns the audit log of finding lifecycle events (suppressions, deduplication, etc.) for this Burp project.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) ->
+                McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(orchestrator.getAuditLog())).build());
+    }
+
+    private McpServerFeatures.SyncToolSpecification getPassiveFindingsTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("get_passive_findings",
+                "Get ICARUS passive findings",
+                "Lists findings detected by ICARUS's always-on passive scanning only (not manual evidence or active scans).",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            List<Object> findings = new ArrayList<>();
+            for (FindingRecord record : orchestrator.getPassiveFindings()) {
+                findings.add(findingToMap(record.getFinding(), record));
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findings)).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification clearPassiveFindingsTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("clear_passive_findings",
+                "Clear ICARUS passive findings",
+                "Clears all passively-detected findings from this Burp project. Does not affect manual evidence or reportable findings.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            orchestrator.clearPassiveFindings();
+            return McpSchema.CallToolResult.builder().addTextContent("Passive findings cleared.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getReportableFindingsTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("get_reportable_findings",
+                "Get ICARUS reportable findings",
+                "Lists the findings that would be included in a generated report: manually captured/applied evidence, not every passive detection.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            List<Object> findings = new ArrayList<>();
+            for (Finding finding : orchestrator.getReportableFindings()) {
+                findings.add(findingToMap(finding, null));
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findings)).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification triggerScanTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("url", Map.of("type", "string", "description", "URL to fetch and scan, e.g. https://example.com/api/users")),
+                List.of("url"), false, null, null);
+        var tool = new McpSchema.Tool("trigger_scan",
+                "Trigger ICARUS active scan",
+                "Sends a live GET request to the given URL and runs ICARUS's active scan modules against the response. Runs asynchronously; poll list_findings for results.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String url = (String) request.arguments().get("url");
+            HttpRequestResponse result;
+            try {
+                result = api.http().sendRequest(HttpRequest.httpRequestFromUrl(url));
+            } catch (Exception e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Failed to fetch " + url + ": " + e.getMessage()).isError(true).build();
+            }
+            orchestrator.runScan(result, true);
+            return McpSchema.CallToolResult.builder().addTextContent("Scan triggered for " + url).build();
+        });
+    }
+
+    private static Map<String, Object> findingToMap(Finding finding, FindingRecord record) {
+        Map<String, Object> f = new LinkedHashMap<>();
+        f.put("module", finding.module());
+        f.put("type", finding.type());
+        f.put("description", finding.description());
+        f.put("severity", finding.severity().name());
+        f.put("category", finding.category().name());
+        f.put("path", finding.path());
+        f.put("similarityHash", finding.similarityHash());
+        f.put("cweIds", finding.cweIds());
+        if (record != null) {
+            f.put("count", record.getCount());
+            f.put("suppressed", record.isSuppressed());
+        }
+        return f;
     }
 }

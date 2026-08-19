@@ -250,13 +250,19 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     /**
      * Non-interactive counterpart to {@link #generateHtmlReportInteractive}/{@link #exportPdfReportInteractive}
      * for callers with no {@link Component} to anchor a file chooser (the MCP tool surface) —
-     * writes straight to {@code outputFile}, overwriting it if it already exists.
+     * writes straight to {@code outputFile}, overwriting it if it already exists. Defaults to
+     * every non-suppressed finding rather than {@link #getReportableFindings()}: that method
+     * only returns findings with manual evidence applied via the Evidence Manager UI, which an
+     * MCP client has no way to do.
      *
      * @param format {@code "html"} or {@code "pdf"}
      * @return true if a report was written (false if there was nothing to report, e.g. HTML reports disabled)
      */
     public boolean generateReport(String format, Path outputFile) throws Exception {
-        List<Finding> reportFindings = getReportableFindings();
+        List<Finding> reportFindings = new ArrayList<>();
+        for (FindingRecord record : getAllFindingRecords()) {
+            if (!record.isSuppressed()) reportFindings.add(record.getFinding());
+        }
         return switch (format.toLowerCase()) {
             case "html" -> reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
             case "pdf" -> pdfReportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);

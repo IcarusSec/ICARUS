@@ -279,7 +279,8 @@ public final class IcarusMcpServer {
                 List.of("format", "output_path"), false, null, null);
         var tool = new McpSchema.Tool("generate_report",
                 "Generate ICARUS report",
-                "Writes an HTML or PDF report of ICARUS's reportable findings (see get_reportable_findings) to the given path, overwriting it if it exists.",
+                "Writes an HTML or PDF report of every non-suppressed ICARUS finding to the given path, overwriting it if it exists. "
+                        + "Suppress false positives first with suppress_finding so they're excluded.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {

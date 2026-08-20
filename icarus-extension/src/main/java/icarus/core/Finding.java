@@ -91,6 +91,27 @@ public final class Finding {
         return "[%s] %s | %s | %s | %s".formatted(severity, module, type, path, description);
     }
 
+    /**
+     * Same finding with one metadata key dropped — for values that served their purpose
+     * elsewhere (e.g. RateLimitModule's {@code blast_log}, consumed once by
+     * {@link icarus.evidence.RateLimitTableRenderer} to build the evidence image) and have no
+     * reason to keep riding along afterward into every place that later displays a finding's
+     * metadata (report meta-tables, MCP's get_finding). Returns {@code this} unchanged if the
+     * key wasn't present, so callers can call it unconditionally.
+     */
+    public Finding withoutMeta(String key) {
+        if (!metadata.containsKey(key)) return this;
+        Builder builder = new Builder(module, type)
+                .description(description)
+                .severity(severity)
+                .category(category)
+                .path(path)
+                .evidence(evidence);
+        metadata.forEach((k, v) -> { if (!k.equals(key)) builder.meta(k, v); });
+        cweIds.forEach(builder::cwe);
+        return builder.build();
+    }
+
     // ── Builder ─────────────────────────────────────────────────
 
     public static Builder builder(String module, String type) {

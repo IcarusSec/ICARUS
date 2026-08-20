@@ -281,7 +281,7 @@ public class EvidencePhase1Dialog {
                 renderedText = EvidenceImageRenderer.renderTextToImage(owner.api, owner.config, reqArea.getText(), resArea.getText(),
                         updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
             }
-            owner.saveAndRegisterEvidence(updatedFinding, renderedText);
+            owner.saveAndRegisterEvidence(updatedFinding.withoutMeta("blast_log"), renderedText);
             editor.dispose();
         });
 
@@ -294,7 +294,8 @@ public class EvidencePhase1Dialog {
                 renderedText = EvidenceImageRenderer.renderTextToImage(owner.api, owner.config, reqArea.getText(), resArea.getText(),
                         updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
             }
-            new EvidencePhase2Dialog(owner).showPhase2(editor, updatedFinding, renderedText, updatedFinding.type());
+            Finding forEvidenceManager = updatedFinding.withoutMeta("blast_log");
+            new EvidencePhase2Dialog(owner).showPhase2(editor, forEvidenceManager, renderedText, forEvidenceManager.type());
         });
 
         pnlBottom.add(btnCleanNoise);

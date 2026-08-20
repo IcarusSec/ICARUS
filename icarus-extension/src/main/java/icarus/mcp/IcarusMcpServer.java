@@ -502,7 +502,7 @@ public final class IcarusMcpServer {
                     image = EvidenceAnnotator.applyAnnotations(image, annotations);
                 }
 
-                orchestrator.captureEvidence(finding, image, caption);
+                orchestrator.captureEvidence(finding.withoutMeta("blast_log"), image, caption);
                 String anchorNote = anchors.isEmpty() ? "" : " (available anchors were: " + anchors.keySet() + ")";
                 return McpSchema.CallToolResult.builder().addTextContent("Evidence captured for " + hash + anchorNote).build();
             } catch (Exception e) {

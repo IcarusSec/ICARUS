@@ -99,18 +99,20 @@ public final class IcarusMcpServer {
             whenever the tool's response lists one available — dynamically positioned text (e.g. a \
             rate-limit RPS badge) has pixel coordinates you cannot predict from outside the renderer. \
             An ARROW pointing at the specific line/value that matters does more for a reader than any \
-            box — add one whenever you can name the target coordinates, instead of only outlining or \
-            highlighting a whole pane. Never HIGHLIGHT a full request_column/response_column (it just \
-            washes the whole pane in translucent yellow and hides the text); reserve HIGHLIGHT for a \
-            small anchor or a tight custom rectangle around the few lines that matter. Prefer the \
-            tightest available anchor over a full column — request_payload/response_payload circles \
-            just the finding's own injected/reflected value (the right choice for almost every \
-            injection finding), request_header:<name>/response_header:<name> circles exactly one \
+            box — add one whenever you can name the target coordinates, instead of only outlining a \
+            whole pane. There is no fill/wash annotation kind (HIGHLIGHT was removed — it always read \
+            as a muddy smear rather than a pointer); use a BOX outline instead, an ARROW pointing at \
+            it, or both. Prefer the tightest available anchor over a full column — \
+            request_payload/response_payload circles just the finding's own injected/reflected value \
+            (the right choice for almost every injection finding — note the payload for a body \
+            parameter, e.g. STRING_SQLI, lives in the REQUEST, so use request_payload there, not \
+            response_payload), request_header:<name>/response_header:<name> circles exactly one \
             header line, request_status_line/response_status_line circles just the request/status \
-            line, request_headers/response_headers boxes only the header block. A box or highlight \
-            is supposed to point at something specific, not outline half the image. When the traffic \
-            around the interesting part is cluttered (long cookies, unrelated headers, a huge body), \
-            CROP the image down to the relevant region instead of leaving the noise in.
+            line, request_headers/response_headers boxes only the header block. A box is supposed to \
+            point at something specific, not outline half the image. Boilerplate request/response \
+            headers unrelated to the finding are already collapsed into a single truncation marker \
+            by the renderer, so the payload/body is visible by default without a CROP for that — CROP \
+            is still useful for a large or noisy body.
 
             VALIDATION — read-only, no approval needed, safe to call unattended (e.g. in CI/CD): \
             validate_finding re-sends a finding's captured request and re-checks whether the same \
@@ -421,26 +423,29 @@ public final class IcarusMcpServer {
         Map<String, Object> annotationItemSchema = Map.of(
                 "type", "object",
                 "properties", Map.of(
-                        "kind", Map.of("type", "string", "description", "BOX, ARROW, HIGHLIGHT, REDACT, or CROP"),
+                        "kind", Map.of("type", "string", "description", "BOX, ARROW, REDACT, or CROP. There is no fill/wash kind — a translucent HIGHLIGHT wash reliably read "
+                                + "as a muddy smear rather than a pointer to something specific, so it was removed; use a BOX outline (optionally with an ARROW pointing at "
+                                + "it) instead, which is what an unrecognized kind renders as anyway."),
                         "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — prefer this whenever "
-                                + "one applies (BOX/HIGHLIGHT/REDACT/CROP only, not ARROW). Guessed x/y for text whose position depends on rendered string width (e.g. a "
-                                + "badge after a variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available "
-                                + "on any server-rendered image (image_base64 omitted), from tightest to loosest — always prefer the tightest one that covers what you're "
-                                + "pointing at: \"request_payload\" / \"response_payload\" circles the finding's own injected/reflected value and nothing else (present "
-                                + "whenever the finding has a payload — e.g. STRING_SQLI, STRING_XSS, STRING_CMDI — and that exact text was found verbatim in the "
-                                + "rendered traffic) — this is the right anchor almost every time an injection finding needs annotating, not a header or a column. "
-                                + "\"request_header:<name>\" / \"response_header:<name>\" circles exactly one header's line (e.g. \"response_header:server\" for a "
-                                + "VERSION_DISCLOSURE finding — lowercase the header name); \"request_status_line\" / \"response_status_line\" circles just the request "
-                                + "line or HTTP status line (use this for a SERVER_ERROR finding, to point at the 500 itself); \"request_headers\" / \"response_headers\" "
-                                + "boxes the whole header block only, still far tighter than a column — the right choice for a MISSING_* header finding, where there's no "
-                                + "single line to point at since the header is absent. \"request_column\" / \"response_column\" are the full panes — use these only with "
-                                + "CROP, never HIGHLIGHT/BOX for pointing at something specific: a box or wash around an entire pane doesn't tell the reader where to look. "
-                                + "On RATE_LIMIT/NO_RATE_LIMIT findings specifically, also: \"rps\" (the colored requests-per-second badge) and \"blocked\" (the "
-                                + "\"← BLOCKED\" marker on the row that tripped the limit, if any). If a request/response has a lot of irrelevant noise around the part "
-                                + "that matters (a long cookie, unrelated headers, a huge body), add a CROP (listed last, after every other annotation) to cut the image "
-                                + "down to just the relevant region instead of leaving the clutter in — a tight annotation inside a cluttered image still reads as messy. "
-                                + "capture_evidence's result echoes back exactly which anchors this particular render had (they vary with what headers/payload were "
-                                + "actually present) — check that list rather than guessing names."),
+                                + "one applies (BOX/REDACT/CROP only, not ARROW). Guessed x/y for text whose position depends on rendered string width (e.g. a badge after a "
+                                + "variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available on any "
+                                + "server-rendered image (image_base64 omitted), from tightest to loosest — always prefer the tightest one that covers what you're pointing "
+                                + "at: \"request_payload\" / \"response_payload\" circles the finding's own injected/reflected value and nothing else (present whenever the "
+                                + "finding has a payload — e.g. STRING_SQLI, STRING_XSS, STRING_CMDI — and that exact text was found verbatim in the rendered traffic) — "
+                                + "this is the right anchor almost every time an injection finding needs annotating, not a header or a column. Note the payload for a body "
+                                + "parameter lives in the REQUEST, not the response — use \"request_payload\" for those (STRING_SQLI etc. inject into the request body; "
+                                + "\"response_payload\" only matters for something reflected back, like STRING_XSS). \"request_header:<name>\" / \"response_header:<name>\" "
+                                + "circles exactly one header's line (e.g. \"response_header:server\" for a VERSION_DISCLOSURE finding — lowercase the header name); "
+                                + "\"request_status_line\" / \"response_status_line\" circles just the request line or HTTP status line (use this for a SERVER_ERROR "
+                                + "finding, to point at the 500 itself); \"request_headers\" / \"response_headers\" boxes the whole header block only, still far tighter "
+                                + "than a column — the right choice for a MISSING_* header finding, where there's no single line to point at since the header is absent. "
+                                + "\"request_column\" / \"response_column\" are the full panes — use these only with CROP, never BOX for pointing at something specific: a "
+                                + "box around an entire pane doesn't tell the reader where to look. Boilerplate request/response headers not relevant to the finding (a dozen "
+                                + "sec-ch-ua*/Sec-Fetch-*/User-Agent/Cookie lines, etc.) are already collapsed into a single truncation marker by the renderer, so the "
+                                + "payload is visible without a CROP for that — CROP is still useful for a large or noisy body. On RATE_LIMIT/NO_RATE_LIMIT findings "
+                                + "specifically, also: \"rps\" (the colored requests-per-second badge) and \"blocked\" (the \"← BLOCKED\" marker on the row that tripped "
+                                + "the limit, if any). capture_evidence's result echoes back exactly which anchors this particular render had (they vary with what "
+                                + "headers/payload were actually present) — check that list rather than guessing names."),
                         "x", Map.of("type", "integer", "description", "Ignored if anchor is set."),
                         "y", Map.of("type", "integer", "description", "Ignored if anchor is set."),
                         "width", Map.of("type", "integer", "description", "For ARROW, the end point's x offset from x. Ignored if anchor is set."),
@@ -454,11 +459,12 @@ public final class IcarusMcpServer {
                                 + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
                                 + "no screenshot is required."),
                         "request_text", Map.of("type", "string", "description", "Leave unset unless redaction is actually required — the default (the finding's real captured "
-                                + "request) is what a report needs. If you must set this, start from get_finding/get_evidence's request text and change only what's necessary "
-                                + "(e.g. blank out a session token's value in place); keep every header, Host, and line exactly as captured. Never omit headers or replace the "
-                                + "request with a summary — that destroys the evidentiary value of the capture."),
-                        "response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only — "
-                                + "keep all response headers (Server, Date, Content-Type, etc.) intact. Never summarize or shorten the response."),
+                                + "request, with boilerplate headers already collapsed to a truncation marker) is what a report needs. If you must set this, start from "
+                                + "get_finding/get_evidence's request text and change only what's necessary (e.g. blank out a session token's value in place); keep every "
+                                + "line exactly as captured otherwise. Never replace the request with a summary — that destroys the evidentiary value of the capture. Note: "
+                                + "this override text is used exactly as given, with no automatic header collapsing applied to it."),
+                        "response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only, "
+                                + "and note it also skips the automatic header collapsing. Never summarize or shorten the response."),
                         "title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."),
                         "description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."),
                         "severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."),
@@ -468,8 +474,8 @@ public final class IcarusMcpServer {
                                 "type", "array",
                                 "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
                                         + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
-                                        + "Without an anchor: BOX/HIGHLIGHT/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); "
-                                        + "CROP truncates the final image to that rectangle and should be listed last.",
+                                        + "Without an anchor: BOX/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
+                                        + "truncates the final image to that rectangle and should be listed last.",
                                 "items", annotationItemSchema)),
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("capture_evidence",

@@ -8,19 +8,24 @@ import java.util.List;
 
 public final class EvidenceAnnotator {
 
-    /** One annotation op: BOX/HIGHLIGHT/REDACT/CROP are a rectangle at ({@code x},{@code y})
-     *  sized {@code width}x{@code height}; ARROW runs from ({@code x},{@code y}) to
+    /** One annotation op: BOX/REDACT/CROP are a rectangle at ({@code x},{@code y}) sized
+     *  {@code width}x{@code height}; ARROW runs from ({@code x},{@code y}) to
      *  ({@code x+width},{@code y+height}). Kinds match the annotation editor's mouse modes
      *  ({@code mode[0]} in {@link #showPhase2}), so headless and interactive annotations render
-     *  identically — CROP is the one addition, truncating the image to that rectangle. */
+     *  identically — CROP is the one addition, truncating the image to that rectangle. There is
+     *  deliberately no fill/wash kind ("HIGHLIGHT") — {@link #paintAnnotation} has no branch for
+     *  one, so passing that kind renders as a plain BOX outline instead: a translucent-yellow
+     *  wash over anything but a tiny, precisely-placed target reliably read as a muddy smear
+     *  rather than a pointer to something specific, and a guessed rectangle from an unattended
+     *  caller (the MCP tool surface, or the reporting agent's own default) is never that precise. */
     public record Annotation(String kind, int x, int y, int width, int height) {}
 
     /**
      * Headless counterpart to the mouse-driven annotation canvas in {@link #showPhase2}, for
-     * callers with no mouse to drive it (the MCP tool surface): draws the same BOX/ARROW/
-     * HIGHLIGHT/REDACT shapes via {@link #createArrow} and the editor's own paint rules, plus
-     * CROP (applied last, after every other annotation is drawn, so its coordinates stay in the
-     * original image's space) to truncate what isn't relevant to the finding.
+     * callers with no mouse to drive it (the MCP tool surface): draws the same BOX/ARROW/REDACT
+     * shapes via {@link #createArrow} and the editor's own paint rules, plus CROP (applied last,
+     * after every other annotation is drawn, so its coordinates stay in the original image's
+     * space) to truncate what isn't relevant to the finding.
      */
     public static BufferedImage applyAnnotations(BufferedImage source, List<Annotation> annotations) {
         BufferedImage out = new BufferedImage(source.getWidth(), source.getHeight(), BufferedImage.TYPE_INT_ARGB);
@@ -29,7 +34,6 @@ public final class EvidenceAnnotator {
         g2.drawImage(source, 0, 0, null);
         g2.setStroke(new BasicStroke(3f));
 
-        double imageArea = (double) source.getWidth() * source.getHeight();
         Rectangle crop = null;
         for (Annotation a : annotations) {
             if ("CROP".equals(a.kind())) {
@@ -39,18 +43,7 @@ public final class EvidenceAnnotator {
             Shape shape = "ARROW".equals(a.kind())
                     ? createArrow(new Point(a.x(), a.y()), new Point(a.x() + a.width(), a.y() + a.height()))
                     : new Rectangle2D.Double(a.x(), a.y(), a.width(), a.height());
-            // A translucent-yellow HIGHLIGHT wash over anything but a small target (a header
-            // line, a payload value) reads as a muddy, illegible smear rather than a pointer to
-            // something specific — downgrade to an outline instead, same as BOX, once it covers
-            // more than a tenth of the image. A guessed rectangle covering, say, a header block
-            // plus a chunk of body (well under the old full-column size) still looked bad in
-            // practice, hence the tight cutoff. REDACT is exempt: blacking out a large area is
-            // often the actual intent (redacting a big block of sensitive body).
-            String kind = a.kind();
-            if ("HIGHLIGHT".equals(kind) && (a.width() * (double) a.height()) / imageArea > 0.10) {
-                kind = "BOX";
-            }
-            paintAnnotation(g2, shape, kind, Color.RED);
+            paintAnnotation(g2, shape, a.kind(), Color.RED);
         }
         g2.dispose();
 
@@ -60,13 +53,11 @@ public final class EvidenceAnnotator {
     }
 
     /** Shared paint rules with the annotation canvas's own {@code drawAnnotation} (a local class
-     *  method there, so not directly reachable) — HIGHLIGHT is a translucent yellow fill, REDACT
-     *  an opaque black fill, ARROW a filled+stroked shape, everything else (BOX) stroke-only. */
+     *  method there, so not directly reachable) — REDACT is an opaque black fill, ARROW a
+     *  filled+stroked shape, everything else (BOX, and any unrecognized kind such as the retired
+     *  "HIGHLIGHT") is stroke-only — there is no fill/wash option by construction. */
     public static void paintAnnotation(Graphics2D g2, Shape s, String kind, Color c) {
-        if ("HIGHLIGHT".equals(kind)) {
-            g2.setColor(new Color(255, 255, 0, 80));
-            g2.fill(s);
-        } else if ("REDACT".equals(kind)) {
+        if ("REDACT".equals(kind)) {
             g2.setColor(Color.BLACK);
             g2.fill(s);
         } else if ("ARROW".equals(kind)) {
@@ -109,17 +100,10 @@ public final class EvidenceAnnotator {
         g2.drawImage(snap, 0, 0, null);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setStroke(new BasicStroke(3f));
-        double imageArea = (double) snap.getWidth() * snap.getHeight();
         for (int i = 0; i < shapes.size(); i++) {
             String kind = kinds.get(i);
             Shape s = shapes.get(i);
-            if ("HIGHLIGHT".equals(kind) && s.getBounds2D().getWidth() * s.getBounds2D().getHeight() / imageArea > 0.10) {
-                kind = "BOX";
-            }
-            if ("HIGHLIGHT".equals(kind)) {
-                g2.setColor(new Color(255, 255, 0, 80));
-                g2.fill(s);
-            } else if ("REDACT".equals(kind)) {
+            if ("REDACT".equals(kind)) {
                 g2.setColor(Color.BLACK);
                 g2.fill(s);
             } else if ("ARROW".equals(kind)) {

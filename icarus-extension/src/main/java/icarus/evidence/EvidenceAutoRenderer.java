@@ -66,11 +66,17 @@ public final class EvidenceAutoRenderer {
         anchors.put("request_column", new Rectangle(0, 70, imgWidth / 2 - 5, imgHeight - 70));
         anchors.put("response_column", new Rectangle(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70));
 
+        // Structural headers plus whatever single header this finding is actually about (so a
+        // VERSION_DISCLOSURE finding's Server header, say, always survives the collapse below).
+        java.util.Set<String> keepHeaders = new java.util.HashSet<>(java.util.List.of("host", "content-type", "content-length"));
+        String relevantHeader = headerNameFromDescription(finalDescription);
+        if (relevantHeader != null) keepHeaders.add(relevantHeader);
+
         int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(imgWidth);
         String reqText = EvidenceImageRenderer.wrapEvidenceText(
-                requestTextOverride != null ? requestTextOverride : requestText(api, finding.evidence()), wrapWidth);
+                requestTextOverride != null ? requestTextOverride : filterNoisyHeaders(requestText(api, finding.evidence()), keepHeaders), wrapWidth);
         String resText = EvidenceImageRenderer.wrapEvidenceText(
-                responseTextOverride != null ? responseTextOverride : responseText(api, finding.evidence()), wrapWidth);
+                responseTextOverride != null ? responseTextOverride : filterNoisyHeaders(responseText(api, finding.evidence()), keepHeaders), wrapWidth);
 
         int startY = 90 + 22; // matches colLabelY + 22 in EvidenceImageRenderer.renderTextToImage
         int colWidth = imgWidth / 2 - 40;
@@ -109,12 +115,12 @@ public final class EvidenceAutoRenderer {
      */
     private static EvidenceAnnotator.Annotation pickDefaultAnnotation(Finding finding, Map<String, Rectangle> anchors) {
         Rectangle payloadRect = anchors.getOrDefault("response_payload", anchors.get("request_payload"));
-        if (payloadRect != null) return toAnnotation("HIGHLIGHT", payloadRect);
+        if (payloadRect != null) return toAnnotation("BOX", payloadRect);
 
         String headerName = headerNameFromDescription(finding.description());
         if (headerName != null) {
             Rectangle headerRect = anchors.getOrDefault("response_header:" + headerName, anchors.get("request_header:" + headerName));
-            if (headerRect != null) return toAnnotation("HIGHLIGHT", headerRect);
+            if (headerRect != null) return toAnnotation("BOX", headerRect);
         }
 
         if (finding.type() != null && finding.type().startsWith("MISSING_")) {
@@ -208,6 +214,45 @@ public final class EvidenceAutoRenderer {
         } finally {
             g.dispose();
         }
+    }
+
+    /**
+     * Collapses everything except a small structural allowlist — Host, Content-Type,
+     * Content-Length, and whatever single header this specific finding is about — into one
+     * "... [Truncated for Evidence] ..." marker line. A dozen browser-boilerplate headers
+     * (sec-ch-ua*, User-Agent, Accept-Language, Sec-Fetch-*, Referer, Accept-Encoding, Cookie,
+     * Connection...) routinely push the actual injected payload below the fold; this keeps every
+     * evidence image's request/response line count small and the interesting part on-screen
+     * without the caller having to CROP by hand. Only applied to the finding's own real captured
+     * traffic — never to an agent-supplied request_text/response_text override, which the report
+     * needs verbatim, unmodified.
+     */
+    private static String filterNoisyHeaders(String rawText, java.util.Set<String> keepHeaderNames) {
+        String[] lines = rawText.split("\n", -1);
+        StringBuilder out = new StringBuilder();
+        boolean inHeaders = true;
+        boolean truncated = false;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (i == 0 || !inHeaders) {
+                out.append(line).append("\n");
+                continue;
+            }
+            if (line.isEmpty()) {
+                inHeaders = false;
+                out.append(line).append("\n");
+                continue;
+            }
+            int colon = line.indexOf(':');
+            String name = colon > 0 ? line.substring(0, colon).trim().toLowerCase() : null;
+            if (name != null && keepHeaderNames.contains(name)) {
+                out.append(line).append("\n");
+            } else if (!truncated) {
+                out.append("... [Truncated for Evidence] ...\n");
+                truncated = true;
+            }
+        }
+        return out.toString();
     }
 
     /** Mirrors {@link EvidencePhase1Dialog}'s reqText build so headless and interactive renders start from identical text. */

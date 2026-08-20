@@ -147,24 +147,31 @@ public final class IcarusMcpServer {
             transportProvider = new IcarusMcpTransportProvider(
                     msg -> api.logging().logToError(msg), jsonMapper, "/mcp");
 
+            McpServerFeatures.SyncToolSpecification[] tools = {
+                    listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
+                    getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
+                    getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
+                    getEvidenceTool(), captureEvidenceTool(),
+                    listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
+                    moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
+                    getReportConfigTool(), updateReportConfigTool(),
+                    validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool()
+            };
+
             server = McpServer.sync(transportProvider)
                     .serverInfo(new McpSchema.Implementation("icarus", Icarus.VERSION))
                     .instructions(MCP_INSTRUCTIONS)
                     .jsonMapper(jsonMapper)
                     .jsonSchemaValidator(new IcarusJsonSchemaValidator())
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())
-                    .tools(listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
-                            getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
-                            getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
-                            getEvidenceTool(), captureEvidenceTool(),
-                            listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
-                            moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
-                            getReportConfigTool(), updateReportConfigTool(),
-                            validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool())
+                    .tools(tools)
                     .build();
 
             port = transportProvider.start(requestedPort);
             api.logging().logToOutput("ICARUS MCP server listening on http://127.0.0.1:" + port + "/mcp");
+            api.logging().logToOutput("ICARUS MCP tools (" + tools.length + "): " + java.util.Arrays.stream(tools)
+                    .map(t -> t.tool().name())
+                    .collect(java.util.stream.Collectors.joining(", ")));
         } catch (IOException e) {
             api.logging().logToError("Failed to start ICARUS MCP server: " + e);
             server = null;

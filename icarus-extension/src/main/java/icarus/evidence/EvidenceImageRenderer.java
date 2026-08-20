@@ -20,7 +20,10 @@ public final class EvidenceImageRenderer {
     public static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 14);
     public static final int BINARY_TRUNCATE_BYTES = 2048;
 
-    public static void drawHeaderBanner(Graphics2D g, int imgWidth, EvidenceColorScheme cs, String title, String subtitle) {
+    private static final Color FIXED_COLOR = new Color(0x2f, 0x9e, 0x44);
+    private static final Color NOT_FIXED_COLOR = new Color(0xe0, 0x3e, 0x3e);
+
+    public static void drawHeaderBanner(Graphics2D g, int imgWidth, EvidenceColorScheme cs, String title, String severity, String desc) {
         g.setColor(cs.headerBg());
         g.fillRect(0, 0, imgWidth, 70);
         g.setColor(cs.divider());
@@ -30,9 +33,16 @@ public final class EvidenceImageRenderer {
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
         g.drawString(title, 20, 30);
 
-        g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-        g.drawString(subtitle, 20, 55);
+        Color severityColor = "FIXED".equals(severity) ? FIXED_COLOR
+                : "NOT_FIXED".equals(severity) ? NOT_FIXED_COLOR
+                : cs.dim();
+        g.setColor(severityColor);
+        g.drawString(severity, 20, 55);
+        int severityWidth = g.getFontMetrics().stringWidth(severity);
+
+        g.setColor(cs.dim());
+        g.drawString("  ·  " + desc, 20 + severityWidth, 55);
     }
 
     public static BufferedImage renderTextToImage(MontoyaApi api, ModuleConfig config, String req, String res, String title, String desc, String severity, boolean force1080) {
@@ -64,7 +74,7 @@ public final class EvidenceImageRenderer {
         g.fillRect(0, 0, imgWidth, imgHeight);
 
         // Header Banner
-        drawHeaderBanner(g, imgWidth, cs, "ICARUS  ·  " + title + projectNameSuffix(api, config), severity + "  ·  " + desc);
+        drawHeaderBanner(g, imgWidth, cs, "ICARUS  ·  " + title + projectNameSuffix(api, config), severity, desc);
 
         // Column labels + divider
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));

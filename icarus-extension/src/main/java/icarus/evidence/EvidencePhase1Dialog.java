@@ -52,12 +52,33 @@ public class EvidencePhase1Dialog {
         txtDesc.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
         owner.api.userInterface().applyThemeToComponent(txtDesc);
 
-        JLabel lblSev = new JLabel("Severity:");
+        JLabel lblSev = new JLabel("Status:");
         lblSev.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 14));
         owner.api.userInterface().applyThemeToComponent(lblSev);
-        JComboBox<Severity> cbSev = new JComboBox<>(Severity.values());
+        Severity[] normalSeverities = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO};
+        Severity[] retestSeverities = {Severity.FIXED, Severity.NOT_FIXED};
+        boolean startsAsRetest = finding.severity() == Severity.FIXED || finding.severity() == Severity.NOT_FIXED;
+        JComboBox<Severity> cbSev = new JComboBox<>(startsAsRetest ? retestSeverities : normalSeverities);
         cbSev.setSelectedItem(finding.severity());
         cbSev.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+
+        JCheckBox chkRetest = new JCheckBox("Retest", startsAsRetest);
+        chkRetest.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        owner.api.userInterface().applyThemeToComponent(chkRetest);
+        // Remembers the severity picked before switching into Retest mode, so unchecking
+        // the box restores it instead of always resetting to CRITICAL.
+        Severity[] lastNormalSeverity = {startsAsRetest ? Severity.MEDIUM : finding.severity()};
+        chkRetest.addActionListener(e -> {
+            if (chkRetest.isSelected()) {
+                Object current = cbSev.getSelectedItem();
+                if (current instanceof Severity s && s != Severity.FIXED && s != Severity.NOT_FIXED) lastNormalSeverity[0] = s;
+                cbSev.setModel(new DefaultComboBoxModel<>(retestSeverities));
+                cbSev.setSelectedItem(Severity.FIXED);
+            } else {
+                cbSev.setModel(new DefaultComboBoxModel<>(normalSeverities));
+                cbSev.setSelectedItem(lastNormalSeverity[0]);
+            }
+        });
 
         pnlTop.add(lblTitle);
         pnlTop.add(txtName);
@@ -67,8 +88,10 @@ public class EvidencePhase1Dialog {
         pnlTop.add(cbSev);
         owner.api.userInterface().applyThemeToComponent(pnlTop);
 
-        // CWE gets its own row — cramming it onto the title/description/severity row let
-        // FlowLayout wrap it out of sight on anything less than a very wide dialog.
+        // CWE (and Retest) get their own row — cramming them onto the title/description/status
+        // row let FlowLayout wrap them out of sight on anything less than a very wide dialog:
+        // BoxLayout sizes pnlTop by its single-row preferred height, so a wrapped second line
+        // renders underneath/behind the next row instead of pushing it down.
         JPanel pnlCweRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 4));
         pnlCweRow.setBorder(new EmptyBorder(0, 10, 0, 10));
         JLabel lblCwe = new JLabel("CWE:");
@@ -79,6 +102,7 @@ public class EvidencePhase1Dialog {
         owner.api.userInterface().applyThemeToComponent(txtCwe);
         pnlCweRow.add(lblCwe);
         pnlCweRow.add(txtCwe);
+        pnlCweRow.add(chkRetest);
         owner.api.userInterface().applyThemeToComponent(pnlCweRow);
 
         // CWE typeahead + tag chips — search-as-you-type against the bundled offline dataset,

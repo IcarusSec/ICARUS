@@ -81,7 +81,9 @@ public class ReportingSettingsTab {
         JList<ReportTemplateConfig.Section> sectionList = new JList<>(sectionModel);
         sectionList.setVisibleRowCount(6);
         sectionList.setCellRenderer((list, value, index, isSelected, hasFocus) -> {
-            JLabel l = new JLabel((index + 1) + ". " + (value.title().isBlank() ? "(untitled)" : value.title()));
+            boolean isFindings = value.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER);
+            String label = isFindings ? "⚑ Findings (placement marker)" : (value.title().isBlank() ? "(untitled)" : value.title());
+            JLabel l = new JLabel((index + 1) + ". " + label);
             l.setOpaque(true);
             l.setBackground(isSelected ? themeHelper.getSelectionBackgroundColor() : themeHelper.getBackgroundColor());
             l.setForeground(themeHelper.getForegroundColor());
@@ -126,10 +128,11 @@ public class ReportingSettingsTab {
                 txtSectionContent.setEnabled(false);
             } else {
                 ReportTemplateConfig.Section s = sectionModel.get(idx);
+                boolean isFindings = s.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER);
                 txtSectionTitle.setText(s.title());
-                txtSectionContent.setText(s.content());
-                txtSectionTitle.setEnabled(true);
-                txtSectionContent.setEnabled(true);
+                txtSectionContent.setText(isFindings ? "(this marker has no content — it renders the Findings summary and finding cards in place)" : s.content());
+                txtSectionTitle.setEnabled(!isFindings);
+                txtSectionContent.setEnabled(!isFindings);
             }
             syncingSelection[0] = false;
         });
@@ -147,7 +150,9 @@ public class ReportingSettingsTab {
         });
         btnRemoveSection.addActionListener(e -> {
             int idx = sectionList.getSelectedIndex();
-            if (idx >= 0) sectionModel.remove(idx);
+            if (idx >= 0 && !sectionModel.get(idx).title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
+                sectionModel.remove(idx);
+            }
         });
         btnMoveUp.addActionListener(e -> {
             int idx = sectionList.getSelectedIndex();

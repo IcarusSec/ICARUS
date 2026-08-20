@@ -172,7 +172,7 @@ public final class EvidenceCapture {
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
         int imgWidth = image.getWidth();
 
-        EvidenceImageRenderer.drawHeaderBanner(g, imgWidth, cs, "ICARUS  ·  " + newFinding.type() + EvidenceImageRenderer.projectNameSuffix(api, config), newFinding.severity().name() + "  ·  " + newFinding.description());
+        EvidenceImageRenderer.drawHeaderBanner(g, imgWidth, cs, "ICARUS  ·  " + newFinding.type() + EvidenceImageRenderer.projectNameSuffix(api, config), newFinding.severity().name(), newFinding.description());
 
         g.dispose();
         return out;

@@ -90,9 +90,11 @@ public final class ReportGenerator {
             StringBuilder sb = new StringBuilder();
             appendHeader(sb, reportDir.getFileName().toString(), projectName, rtc);
             if (rtc.tocEnabled()) appendToc(sb, rtc, findings, retest);
-            appendSections(sb, rtc, retest);
-            appendSummary(sb, findings);
-            appendFindings(sb, findings, evidenceByHash, config, retest);
+            boolean findingsPlaced = appendSections(sb, rtc, retest, findings, evidenceByHash, config);
+            if (!findingsPlaced) {
+                appendSummary(sb, findings);
+                appendFindings(sb, findings, evidenceByHash, config, retest);
+            }
             appendFooter(sb);
             html = sb.toString();
         } catch (RuntimeException e) {
@@ -154,6 +156,8 @@ public final class ReportGenerator {
                         --medium: #b38f00;
                         --low: #2f7a77;
                         --info: #6e6e6e;
+                        --fixed: #2f9e44;
+                        --not-fixed: #cc2e2e;
                     }
                     body {
                         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -220,6 +224,8 @@ public final class ReportGenerator {
                     .badge.MEDIUM { background-color: var(--medium); }
                     .badge.LOW { background-color: var(--low); }
                     .badge.INFO { background-color: var(--info); }
+                    .badge.FIXED { background-color: var(--fixed); }
+                    .badge.NOT_FIXED { background-color: var(--not-fixed); }
 
                     .finding-body { padding: 1.5rem; }
                     .meta-table {
@@ -291,12 +297,25 @@ public final class ReportGenerator {
     }
 
     /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,
-     *  with {{variable}} interpolation. Empty if the user has no sections configured. */
-    private void appendSections(StringBuilder html, ReportTemplateConfig rtc, boolean retest) {
+     *  with {{variable}} interpolation. Empty if the user has no sections configured.
+     *  A section titled {@link ReportTemplateConfig#FINDINGS_MARKER} renders the Findings
+     *  block (summary + finding cards) in its place instead of Markdown content.
+     *  @return true if the Findings block was rendered here (caller must not append it again). */
+    private boolean appendSections(StringBuilder html, ReportTemplateConfig rtc, boolean retest,
+                                    List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config) {
         int i = 0;
+        boolean findingsPlaced = false;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
             if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
+            if (section.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
+                html.append("<div id=\"section-").append(i).append("\">\n");
+                appendSummary(html, findings);
+                appendFindings(html, findings, evidenceByHash, config, retest);
+                html.append("</div>\n");
+                findingsPlaced = true;
+                continue;
+            }
             String bodyHtml = markdownRenderer.render(markdownParser.parse(rtc.interpolate(section.content())));
             html.append("""
                     <div class="exec-summary" id="section-%d">
@@ -305,6 +324,7 @@ public final class ReportGenerator {
                     </div>
                 """.formatted(i, escapeHtml(section.title()), bodyHtml));
         }
+        return findingsPlaced;
     }
 
     private void appendToc(StringBuilder html, ReportTemplateConfig rtc, List<Finding> findings, boolean retest) {

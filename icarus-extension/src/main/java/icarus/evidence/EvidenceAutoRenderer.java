@@ -56,10 +56,15 @@ public final class EvidenceAutoRenderer {
         }
 
         int imgHeight = force1080 ? 1080 : 800;
-        if (outAnchors != null) {
-            outAnchors.put("request_column", new Rectangle(0, 70, imgWidth / 2 - 5, imgHeight - 70));
-            outAnchors.put("response_column", new Rectangle(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70));
-        }
+        // Computed unconditionally (not just when the caller wants outAnchors) — used below to
+        // pick a default annotation baked into every auto-rendered image, not only ones a caller
+        // explicitly annotates. ReportGenerator/PdfReportGenerator call this via the 4-arg
+        // overload (outAnchors=null) to silently fill in evidence for any reportable finding
+        // nobody ran capture_evidence on — that path used to render completely unannotated raw
+        // traffic, which is what kept showing up as "still not annotating anything" in reports.
+        Map<String, Rectangle> anchors = new java.util.LinkedHashMap<>();
+        anchors.put("request_column", new Rectangle(0, 70, imgWidth / 2 - 5, imgHeight - 70));
+        anchors.put("response_column", new Rectangle(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70));
 
         int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(imgWidth);
         String reqText = EvidenceImageRenderer.wrapEvidenceText(
@@ -67,24 +72,74 @@ public final class EvidenceAutoRenderer {
         String resText = EvidenceImageRenderer.wrapEvidenceText(
                 responseTextOverride != null ? responseTextOverride : responseText(api, finding.evidence()), wrapWidth);
 
-        if (outAnchors != null) {
-            int startY = 90 + 22; // matches colLabelY + 22 in EvidenceImageRenderer.renderTextToImage
-            int colWidth = imgWidth / 2 - 40;
-            String[] reqLines = reqText.split("\n");
-            String[] resLines = resText.split("\n");
-            outAnchors.putAll(lineAnchors(reqLines, 20, startY, colWidth, "request"));
-            outAnchors.putAll(lineAnchors(resLines, imgWidth / 2 + 20, startY, colWidth, "response"));
+        int startY = 90 + 22; // matches colLabelY + 22 in EvidenceImageRenderer.renderTextToImage
+        int colWidth = imgWidth / 2 - 40;
+        String[] reqLines = reqText.split("\n");
+        String[] resLines = resText.split("\n");
+        anchors.putAll(lineAnchors(reqLines, 20, startY, colWidth, "request"));
+        anchors.putAll(lineAnchors(resLines, imgWidth / 2 + 20, startY, colWidth, "response"));
 
-            String payload = finding.metadata().get("payload");
-            if (payload != null && !payload.isBlank()) {
-                Rectangle reqRect = findTextRect(reqLines, payload, 20, startY);
-                if (reqRect != null) outAnchors.put("request_payload", reqRect);
-                Rectangle resRect = findTextRect(resLines, payload, imgWidth / 2 + 20, startY);
-                if (resRect != null) outAnchors.put("response_payload", resRect);
-            }
+        String payload = finding.metadata().get("payload");
+        if (payload != null && !payload.isBlank()) {
+            Rectangle reqRect = findTextRect(reqLines, payload, 20, startY);
+            if (reqRect != null) anchors.put("request_payload", reqRect);
+            Rectangle resRect = findTextRect(resLines, payload, imgWidth / 2 + 20, startY);
+            if (resRect != null) anchors.put("response_payload", resRect);
         }
 
-        return EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
+        if (outAnchors != null) outAnchors.putAll(anchors);
+
+        java.awt.image.BufferedImage rendered = EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
+        EvidenceAnnotator.Annotation defaultAnnotation = pickDefaultAnnotation(finding, anchors);
+        return defaultAnnotation == null ? rendered : EvidenceAnnotator.applyAnnotations(rendered, java.util.List.of(defaultAnnotation));
+    }
+
+    /**
+     * Chooses one sensible default annotation so every auto-rendered image points at something
+     * specific, even when nobody called capture_evidence to annotate it by hand — the report's
+     * own silent auto-fill (ReportGenerator/PdfReportGenerator, for any reportable finding with
+     * no manually-captured evidence) goes through this same render() and used to come out with
+     * zero annotation at all. Priority: the finding's own payload (almost every injection type)
+     * &gt; the specific header it's about (VERSION_DISCLOSURE and similar single-header findings,
+     * parsed from "&lt;Header&gt; header ..." in the description) &gt; the header block as a whole
+     * (MISSING_* — there's no single line to point at since the header is absent) &gt; the response
+     * status line (SERVER_ERROR, to point at the 500 itself). Returns null when none apply (e.g.
+     * a finding with no captured traffic at all), leaving the image unannotated rather than
+     * boxing something arbitrary.
+     */
+    private static EvidenceAnnotator.Annotation pickDefaultAnnotation(Finding finding, Map<String, Rectangle> anchors) {
+        Rectangle payloadRect = anchors.getOrDefault("response_payload", anchors.get("request_payload"));
+        if (payloadRect != null) return toAnnotation("HIGHLIGHT", payloadRect);
+
+        String headerName = headerNameFromDescription(finding.description());
+        if (headerName != null) {
+            Rectangle headerRect = anchors.getOrDefault("response_header:" + headerName, anchors.get("request_header:" + headerName));
+            if (headerRect != null) return toAnnotation("HIGHLIGHT", headerRect);
+        }
+
+        if (finding.type() != null && finding.type().startsWith("MISSING_")) {
+            Rectangle block = anchors.get("response_headers");
+            if (block != null) return toAnnotation("BOX", block);
+        }
+
+        if ("SERVER_ERROR".equals(finding.type())) {
+            Rectangle statusLine = anchors.get("response_status_line");
+            if (statusLine != null) return toAnnotation("BOX", statusLine);
+        }
+
+        return null;
+    }
+
+    private static EvidenceAnnotator.Annotation toAnnotation(String kind, Rectangle r) {
+        return new EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height);
+    }
+
+    /** Pulls the header name out of a description shaped like "Server header contains version: ..."
+     *  or "X-Frame-Options header is missing" — the phrasing SensitiveHeaderModule's findings use. */
+    private static String headerNameFromDescription(String description) {
+        if (description == null) return null;
+        var m = java.util.regex.Pattern.compile("^([A-Za-z0-9-]+)\\s+header", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(description.trim());
+        return m.find() ? m.group(1).toLowerCase() : null;
     }
 
     /**

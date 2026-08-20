@@ -57,10 +57,13 @@ public final class EvidenceImageRenderer {
         int colLabelY = 90;
         int y = colLabelY + 22;
 
-        // Capped at defaultHeight rather than growing to fit — an unbounded height produced
-        // multi-thousand-pixel-tall images for long JSON bodies. Whatever doesn't fit gets a
-        // truncation marker instead (see drawColumnLines) rather than silently vanishing.
-        int imgHeight = defaultHeight;
+        // Shrunk to fit the shorter of the two columns' actual content rather than always
+        // allocating the full defaultHeight — a MISSING_* finding's few header lines used to
+        // render inside a mostly-empty 1080px-tall image. Still capped at defaultHeight for long
+        // JSON bodies: whatever doesn't fit gets a truncation marker (see drawColumnLines)
+        // instead of the image growing unbounded or the caller having to guess a height upfront.
+        int contentLines = Math.max(reqLines.length, resLines.length);
+        int imgHeight = Math.max(300, Math.min(defaultHeight, y + contentLines * LINE_HEIGHT + 20));
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
 

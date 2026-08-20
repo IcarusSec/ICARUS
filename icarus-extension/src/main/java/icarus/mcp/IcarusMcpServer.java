@@ -782,7 +782,7 @@ public final class IcarusMcpServer {
     /** Finding types exploit_finding will act on — resending a live payload only makes sense for
      *  ParamValidator's injection detectors, never for a passive header/cookie check. */
     private static final List<String> EXPLOITABLE_TYPES = List.of(
-            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
+            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
             "Missing Input Validation", "NO_RATE_LIMIT");
 
     /** Finding types validate_finding can give a real reproduced=true/false for — the exploitable
@@ -790,7 +790,7 @@ public final class IcarusMcpServer {
      *  (see {@link SensitiveHeaderModule#isNowPresent}). Everything else returns the fresh
      *  response for manual review rather than a fabricated verdict. */
     private static final List<String> VALIDATABLE_TYPES = List.of(
-            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
+            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
             "Missing Input Validation", "NO_RATE_LIMIT",
             "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
             "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE");
@@ -852,6 +852,20 @@ public final class IcarusMcpServer {
             case "STRING_SSRF" -> new RecheckResult(null,
                     "This was confirmed via a one-time Burp Collaborator payload — it can't be replayed to reconfirm. Re-run a fresh ParamValidator "
                             + "scan against this endpoint for a new out-of-band confirmation.", fresh);
+            case "STRING_SQLI" -> {
+                String baselineLengthStr = finding.metadata().get("baselineLength");
+                if (baselineLengthStr == null) {
+                    yield new RecheckResult(null, "No baseline length was captured with this finding — can't re-diff. Review the fresh response manually.", fresh);
+                } else {
+                    int baselineLength = Integer.parseInt(baselineLengthStr);
+                    int freshLength = fresh.response().body().length();
+                    double diffRatio = baselineLength <= 0 ? 0 : Math.abs(freshLength - baselineLength) / (double) baselineLength;
+                    boolean hit = diffRatio > 0.20;
+                    yield new RecheckResult(hit,
+                            hit ? "Still diverges from baseline (" + freshLength + " bytes vs baseline " + baselineLength + " bytes)."
+                                : "No longer diverges from baseline (" + freshLength + " bytes vs baseline " + baselineLength + " bytes) — may have been fixed.", fresh);
+                }
+            }
             case "STRING_SQLI_TIME" -> {
                 int threshold = orchestrator.getConfig().getInt("pv.payload_sqli_time_delay_ms", 10000);
                 boolean hit = elapsedMs >= threshold;

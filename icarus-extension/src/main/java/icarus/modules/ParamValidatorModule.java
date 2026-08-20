@@ -506,6 +506,7 @@ public final class ParamValidatorModule implements IcarusModule {
                         .meta("responseTime", String.valueOf(responseTime))
                         .meta("context", extractedContext)
                         .meta("payload", String.valueOf(mutation.value()))
+                        .meta("baselineLength", String.valueOf(baselineLength))
                         .build());
                 logger.accept("[FINDING] " + shortPath(mutation.path()) + " → " + mutation.type() + " (HTTP " + status + ")");
                 continue; // Skip adding to the grouped validation bucket

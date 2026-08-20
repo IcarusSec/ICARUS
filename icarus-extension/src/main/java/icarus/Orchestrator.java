@@ -161,6 +161,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         projectStateService.importProjectStateInteractive(parent, triggerButton, onImported);
     }
 
+    public ModuleConfig getConfig() {
+        return config;
+    }
+
     // Delegates for EvidenceTriggerService
     public void captureEvidence(Finding finding, BufferedImage image, String caption) throws IOException {
         evidenceTriggerService.captureEvidence(finding, image, caption);

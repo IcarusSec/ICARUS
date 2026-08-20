@@ -9,12 +9,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import icarus.Icarus;
 import icarus.Orchestrator;
+import icarus.core.Category;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
+import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
+import icarus.core.Severity;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.EvidenceAnnotator;
+import icarus.evidence.EvidenceImageRenderer;
+import icarus.evidence.RateLimitTableRenderer;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -356,18 +361,30 @@ public final class IcarusMcpServer {
         var inputSchema = new McpSchema.JsonSchema("object",
                 Map.of(
                         "hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
-                        "image_base64", Map.of("type", "string", "description", "Base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence"),
+                        "image_base64", Map.of("type", "string", "description", "Optional base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence. "
+                                + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
+                                + "no screenshot is required."),
+                        "request_text", Map.of("type", "string", "description", "Overrides the request text used when rendering (image_base64 omitted). "
+                                + "Defaults to the finding's actual captured request. Edit/redact this to control exactly what appears in the rendered evidence."),
+                        "response_text", Map.of("type", "string", "description", "Overrides the response text used when rendering (image_base64 omitted). "
+                                + "Defaults to the finding's actual captured response."),
+                        "title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."),
+                        "description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."),
+                        "severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."),
+                        "force_1080", Map.of("type", "boolean", "description", "Render at 1920x1080 (true, default) or a narrower size (false), when image_base64 is omitted."),
                         "caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"),
                         "annotations", Map.of(
                                 "type", "array",
                                 "description", "Optional shapes to draw before saving, in image pixel coordinates. BOX/HIGHLIGHT/REDACT are rectangles at (x,y) sized width x height; "
                                         + "ARROW runs from (x,y) to (x+width,y+height); CROP truncates the final image to that rectangle and should be listed last.",
                                 "items", annotationItemSchema)),
-                List.of("hash", "image_base64"), false, null, null);
+                List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("capture_evidence",
                 "Capture and annotate ICARUS evidence",
-                "Attaches a screenshot to a finding as reportable evidence, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
-                        + "the headless equivalent of the Evidence Manager's annotation editor. Call get_evidence first to re-annotate an existing screenshot.",
+                "Attaches evidence to a finding for the report, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
+                        + "the headless equivalent of the Evidence Manager's annotation editor. Pass image_base64 to attach a screenshot you already have, or omit "
+                        + "it to have ICARUS render the evidence image itself from the finding's captured traffic (optionally overridden via request_text/response_text "
+                        + "for a fully autonomous, screenshot-free workflow). Call get_evidence first to re-annotate an existing screenshot.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
@@ -381,10 +398,15 @@ public final class IcarusMcpServer {
             String caption = rawCaption instanceof String s ? s : "";
 
             try {
-                byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
-                BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
-                if (image == null) {
-                    return McpSchema.CallToolResult.builder().addTextContent("image_base64 did not decode to a readable image").isError(true).build();
+                BufferedImage image;
+                if (imageBase64 != null && !imageBase64.isBlank()) {
+                    byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
+                    image = ImageIO.read(new ByteArrayInputStream(imageBytes));
+                    if (image == null) {
+                        return McpSchema.CallToolResult.builder().addTextContent("image_base64 did not decode to a readable image").isError(true).build();
+                    }
+                } else {
+                    image = renderEvidenceImage(finding, request.arguments());
                 }
 
                 Object rawAnnotations = request.arguments().get("annotations");
@@ -408,6 +430,59 @@ public final class IcarusMcpServer {
                 return McpSchema.CallToolResult.builder().addTextContent("Failed to capture evidence: " + e.getMessage()).isError(true).build();
             }
         });
+    }
+
+    /** Headless counterpart to {@link icarus.evidence.EvidencePhase1Dialog}'s "Apply"/"Annotate" render step:
+     *  builds the same styled evidence image from the finding's actual captured traffic (or request_text/
+     *  response_text overrides), so an MCP client with no way to take a screenshot can still capture evidence. */
+    private BufferedImage renderEvidenceImage(Finding finding, Map<String, Object> args) {
+        ModuleConfig config = orchestrator.getConfig();
+        String title = args.get("title") instanceof String s && !s.isBlank() ? s : finding.type();
+        String description = args.get("description") instanceof String s && !s.isBlank() ? s : finding.description();
+        String severity = args.get("severity") instanceof String s && !s.isBlank() ? s : finding.severity().name();
+        boolean force1080 = !(args.get("force_1080") instanceof Boolean b) || b;
+
+        if (finding.category() == Category.RATE_LIMIT && finding.metadata().containsKey("blast_log")) {
+            Finding.Builder builder = Finding.builder(finding.module(), title)
+                    .description(description)
+                    .severity(Severity.valueOf(severity))
+                    .category(finding.category())
+                    .path(finding.path())
+                    .evidence(finding.evidence());
+            finding.metadata().forEach(builder::meta);
+            finding.cweIds().forEach(builder::cwe);
+            return RateLimitTableRenderer.renderRateLimitTable(api, config, builder.build(), force1080);
+        }
+
+        int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(force1080 ? 1920 : 1200);
+        String reqText = args.get("request_text") instanceof String s
+                ? EvidenceImageRenderer.wrapEvidenceText(s, wrapWidth)
+                : EvidenceImageRenderer.wrapEvidenceText(requestText(finding.evidence()), wrapWidth);
+        String resText = args.get("response_text") instanceof String s
+                ? EvidenceImageRenderer.wrapEvidenceText(s, wrapWidth)
+                : EvidenceImageRenderer.wrapEvidenceText(responseText(finding.evidence()), wrapWidth);
+
+        return EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, title, description, severity, force1080);
+    }
+
+    /** Mirrors {@link icarus.evidence.EvidencePhase1Dialog}'s reqText build so headless and interactive
+     *  renders start from identical text. */
+    private String requestText(HttpRequestResponse rr) {
+        String reqContentType = rr.request().headerValue("Content-Type");
+        String reqLine = rr.request().method() + " " + rr.request().path() + " " + rr.request().httpVersion() + "\n";
+        return reqLine + rr.request().headers().stream()
+                .map(h -> h.name() + ": " + h.value() + "\n")
+                .reduce("", String::concat) + EvidenceImageRenderer.formatBody(api, rr.request().body().getBytes(), reqContentType);
+    }
+
+    /** Mirrors {@link icarus.evidence.EvidencePhase1Dialog}'s resText build. Empty if there's no response. */
+    private String responseText(HttpRequestResponse rr) {
+        if (rr.response() == null) return "";
+        String resContentType = rr.response().headerValue("Content-Type");
+        String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
+        return statusLine + rr.response().headers().stream()
+                .map(h -> h.name() + ": " + h.value() + "\n")
+                .reduce("", String::concat) + EvidenceImageRenderer.formatBody(api, rr.response().body().getBytes(), resContentType);
     }
 
     private McpServerFeatures.SyncToolSpecification listEvidenceTool() {

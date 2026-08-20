@@ -297,6 +297,18 @@ public class SensitiveHeaderModule implements IcarusModule {
         };
     }
 
+    /** Reused by validate_finding to re-check VERSION_DISCLOSURE without a second hand-copied
+     *  pattern list — same header set and regex as the live check above. */
+    public static boolean hasVersionDisclosure(HttpResponse response) {
+        for (HttpHeader h : response.headers()) {
+            String lowerName = h.name().toLowerCase();
+            if (lowerName.equals("server") && VERSION_PATTERN.matcher(h.value()).find()) return true;
+            if (lowerName.equals("x-powered-by") || lowerName.equals("x-aspnet-version")
+                    || lowerName.equals("x-aspnetmvc-version") || lowerName.equals("x-generator")) return true;
+        }
+        return false;
+    }
+
     /** Luhn checksum validation to filter credit-card-shaped digit runs before raising a finding. */
     private static boolean isValidLuhn(String candidate) {
         String digits = candidate.replaceAll("[^0-9]", "");

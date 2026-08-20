@@ -14,6 +14,7 @@ import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
 import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
+import icarus.core.VerboseErrorDetector;
 import icarus.evidence.EvidenceAutoRenderer;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.EvidenceAnnotator;
@@ -793,7 +794,8 @@ public final class IcarusMcpServer {
             "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
             "Missing Input Validation", "NO_RATE_LIMIT",
             "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
-            "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE");
+            "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE",
+            "SERVER_ERROR", "VERBOSE_ERROR_LEAK", "VERSION_DISCLOSURE");
 
     private static boolean isBlockedStatus(int status) {
         return status == 429 || status == 403 || status == 503;
@@ -909,6 +911,22 @@ public final class IcarusMcpServer {
                 yield new RecheckResult(stillNoLimit,
                         stillNoLimit ? "Sent " + sample + " requests with no blocking observed — still no rate limiting."
                                      : finalBlocked + "/" + sample + " requests were blocked (429/403/503) — rate limiting now appears to be in place.", fresh);
+            }
+            case "SERVER_ERROR" -> {
+                int freshStatus = fresh.response().statusCode();
+                boolean hit = freshStatus >= 500;
+                yield new RecheckResult(hit,
+                        hit ? "Still returns HTTP " + freshStatus + "." : "Now returns HTTP " + freshStatus + " — may have been fixed.", fresh);
+            }
+            case "VERBOSE_ERROR_LEAK" -> {
+                String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(bodyStr);
+                yield new RecheckResult(verboseMatch != null,
+                        verboseMatch != null ? "Still leaking: " + verboseMatch : "No verbose error pattern found on the fresh response.", fresh);
+            }
+            case "VERSION_DISCLOSURE" -> {
+                boolean hit = SensitiveHeaderModule.hasVersionDisclosure(fresh.response());
+                yield new RecheckResult(hit,
+                        hit ? "Version-disclosing header still present." : "No version-disclosing header found on the fresh response — may have been fixed.", fresh);
             }
             case "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
                  "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE" -> {

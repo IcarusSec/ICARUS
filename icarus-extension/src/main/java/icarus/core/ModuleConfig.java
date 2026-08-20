@@ -62,13 +62,6 @@ public final class ModuleConfig {
         catch (NumberFormatException e) { return defaultValue; }
     }
 
-    public long getLong(String key, long defaultValue) {
-        String v = values.get(key);
-        if (v == null) return defaultValue;
-        try { return Long.parseLong(v); }
-        catch (NumberFormatException e) { return defaultValue; }
-    }
-
     /**
      * Reads a JSON-valued key (e.g. a structured config blob like
      * {@code report.template_config.json}) and parses it via {@link Json}.
@@ -96,11 +89,6 @@ public final class ModuleConfig {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
-    }
-
-    /** Returns an unmodifiable snapshot of all key-value pairs. */
-    public Map<String, String> snapshot() {
-        return Collections.unmodifiableMap(new LinkedHashMap<>(values));
     }
 
     /** Removes all entries. Used by "Reset to Default" before re-applying defaults. */

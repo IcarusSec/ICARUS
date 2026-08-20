@@ -257,42 +257,6 @@ public class SettingsPanel {
         }
     }
 
-    private void addLabeledCombo(JPanel parent, String label, JComboBox<String> combo) {
-        JPanel row = new JPanel(new BorderLayout(4, 0));
-        themeHelper.applyTheme(row);
-        JLabel lbl = new JLabel(label);
-        themeHelper.applyTheme(lbl);
-        row.add(lbl, BorderLayout.WEST);
-        row.add(combo, BorderLayout.CENTER);
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        ((JPanel) parent.getComponent(0)).add(row);
-    }
-
-    private void addLabeledField(JPanel parent, String label, JTextField field) {
-        JPanel row = new JPanel(new BorderLayout(4, 0));
-        themeHelper.applyTheme(row);
-        JLabel lbl = new JLabel(label);
-        themeHelper.applyTheme(lbl);
-        themeHelper.applyTheme(field);
-        row.add(lbl, BorderLayout.WEST);
-        row.add(field, BorderLayout.CENTER);
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        ((JPanel) parent.getComponent(0)).add(row);
-    }
-
-    private static String blankToNull(String s) {
-        return s == null || s.isBlank() ? null : s.strip();
-    }
-
-    private static List<String> nonBlankLines(String text) {
-        List<String> out = new ArrayList<>();
-        for (String line : text.split("\n")) {
-            String t = line.strip();
-            if (!t.isEmpty()) out.add(t);
-        }
-        return out;
-    }
-
     private JPanel createSection(String title) {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));

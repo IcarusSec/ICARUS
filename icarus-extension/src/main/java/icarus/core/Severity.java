@@ -8,9 +8,5 @@ public enum Severity {
     HIGH,
     MEDIUM,
     LOW,
-    INFO;
-
-    public boolean isAtLeast(Severity threshold) {
-        return this.ordinal() <= threshold.ordinal();
-    }
+    INFO
 }

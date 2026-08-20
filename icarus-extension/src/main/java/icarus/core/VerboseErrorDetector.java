@@ -66,20 +66,6 @@ public class VerboseErrorDetector {
         Pattern.compile("(?i)Whitelabel Error Page")
     );
 
-    /** Checks if the response body contains any verbose error leaks. */
-    public static boolean hasVerboseError(String body) {
-        if (body == null || body.isBlank()) return false;
-
-        for (Pattern p : DB_ERROR_PATTERNS) {
-            if (p.matcher(body).find()) return true;
-        }
-        for (Pattern p : FRAMEWORK_AND_LANG_PATTERNS) {
-            if (p.matcher(body).find()) return true;
-        }
-
-        return false;
-    }
-
     /** Returns the matched string for reporting, or null if no match. */
     public static String getVerboseErrorMatch(String body) {
         if (body == null || body.isBlank()) return null;

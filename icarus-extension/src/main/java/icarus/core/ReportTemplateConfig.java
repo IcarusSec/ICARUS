@@ -14,6 +14,11 @@ public final class ReportTemplateConfig {
 
     public record Section(String title, String content) {}
 
+    /** Sentinel title marking where the Findings block (summary + finding cards) renders
+     *  among the custom sections. If no section carries this title, Findings render last,
+     *  after all custom sections — the historical default. */
+    public static final String FINDINGS_MARKER = "FINDINGS";
+
     private List<Section> sections = new ArrayList<>();
     private Map<String, String> variables = new LinkedHashMap<>();
     private String primaryColor;

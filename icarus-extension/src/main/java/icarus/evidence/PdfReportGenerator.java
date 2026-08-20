@@ -113,9 +113,11 @@ public final class PdfReportGenerator {
             doc.open();
 
             appendHeader(doc, reportDir.getFileName().toString(), projectName, rtc);
-            appendSections(doc, rtc, accent, writer, addBookmarks, retest);
-            appendSummary(doc, findings, accent);
-            appendFindings(doc, findings, evidenceByHash, writer, addBookmarks, config, retest);
+            boolean findingsPlaced = appendSections(doc, rtc, accent, writer, addBookmarks, retest, findings, evidenceByHash, config);
+            if (!findingsPlaced) {
+                appendSummary(doc, findings, accent);
+                appendFindings(doc, findings, evidenceByHash, writer, addBookmarks, config, retest);
+            }
         } catch (DocumentException e) {
             throw new IOException("PDF generation failed", e);
         } finally {
@@ -159,13 +161,31 @@ public final class PdfReportGenerator {
 
     /** Renders the configured report sections (Settings → Reporting) as Markdown, in order,
      *  with {{variable}} interpolation — one bordered card per section, matching the old
-     *  single "Executive Summary" card's look. Bookmarks added when {@code addBookmarks}. */
-    private void appendSections(Document doc, ReportTemplateConfig rtc, Color accent, PdfWriter writer, boolean addBookmarks, boolean retest) throws DocumentException {
+     *  single "Executive Summary" card's look. Bookmarks added when {@code addBookmarks}.
+     *  A section titled {@link ReportTemplateConfig#FINDINGS_MARKER} renders the Findings
+     *  block (summary + finding cards) in its place instead of Markdown content.
+     *  @return true if the Findings block was rendered here (caller must not append it again). */
+    private boolean appendSections(Document doc, ReportTemplateConfig rtc, Color accent, PdfWriter writer, boolean addBookmarks, boolean retest,
+                                    List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config) throws DocumentException {
         int i = 0;
+        boolean findingsPlaced = false;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
             if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
             String destName = "section-" + i;
+
+            if (section.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
+                if (addBookmarks) {
+                    Chunk anchor = new Chunk("");
+                    anchor.setLocalDestination(destName);
+                    doc.add(new Paragraph(anchor));
+                    new PdfOutline(writer.getRootOutline(), PdfAction.gotoLocalPage(destName, false), section.title());
+                }
+                appendSummary(doc, findings, accent);
+                appendFindings(doc, findings, evidenceByHash, writer, addBookmarks, config, retest);
+                findingsPlaced = true;
+                continue;
+            }
 
             PdfPTable box = new PdfPTable(1);
             box.setWidthPercentage(100);
@@ -191,6 +211,7 @@ public final class PdfReportGenerator {
                 new PdfOutline(writer.getRootOutline(), PdfAction.gotoLocalPage(destName, false), section.title());
             }
         }
+        return findingsPlaced;
     }
 
     private void appendSummary(Document doc, List<Finding> findings, Color accent) throws DocumentException {

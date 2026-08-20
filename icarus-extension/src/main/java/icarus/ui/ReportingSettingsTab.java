@@ -81,7 +81,9 @@ public class ReportingSettingsTab {
         JList<ReportTemplateConfig.Section> sectionList = new JList<>(sectionModel);
         sectionList.setVisibleRowCount(6);
         sectionList.setCellRenderer((list, value, index, isSelected, hasFocus) -> {
-            JLabel l = new JLabel((index + 1) + ". " + (value.title().isBlank() ? "(untitled)" : value.title()));
+            boolean isFindings = value.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER);
+            String label = isFindings ? "⚑ Findings (placement marker)" : (value.title().isBlank() ? "(untitled)" : value.title());
+            JLabel l = new JLabel((index + 1) + ". " + label);
             l.setOpaque(true);
             l.setBackground(isSelected ? themeHelper.getSelectionBackgroundColor() : themeHelper.getBackgroundColor());
             l.setForeground(themeHelper.getForegroundColor());
@@ -126,23 +128,35 @@ public class ReportingSettingsTab {
                 txtSectionContent.setEnabled(false);
             } else {
                 ReportTemplateConfig.Section s = sectionModel.get(idx);
+                boolean isFindings = s.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER);
                 txtSectionTitle.setText(s.title());
-                txtSectionContent.setText(s.content());
-                txtSectionTitle.setEnabled(true);
-                txtSectionContent.setEnabled(true);
+                txtSectionContent.setText(isFindings ? "(this marker has no content — it renders the Findings summary and finding cards in place)" : s.content());
+                txtSectionTitle.setEnabled(!isFindings);
+                txtSectionContent.setEnabled(!isFindings);
             }
             syncingSelection[0] = false;
         });
 
-        JPanel sectionListButtons = new JPanel(new GridLayout(1, 4, 4, 0));
+        JPanel sectionListButtons = new JPanel(new GridLayout(2, 3, 4, 4));
         themeHelper.applyTheme(sectionListButtons);
         JButton btnAddSection = new JButton("Add");
+        JButton btnAddFindingsMarker = new JButton("Insert Findings Here");
         JButton btnRemoveSection = new JButton("Remove");
         JButton btnMoveUp = new JButton("Up");
         JButton btnMoveDown = new JButton("Down");
-        for (JButton b : List.of(btnAddSection, btnRemoveSection, btnMoveUp, btnMoveDown)) themeHelper.styleButton(b);
+        for (JButton b : List.of(btnAddSection, btnAddFindingsMarker, btnRemoveSection, btnMoveUp, btnMoveDown)) themeHelper.styleButton(b);
         btnAddSection.addActionListener(e -> {
             sectionModel.addElement(new ReportTemplateConfig.Section("New Section", ""));
+            sectionList.setSelectedIndex(sectionModel.size() - 1);
+        });
+        btnAddFindingsMarker.addActionListener(e -> {
+            for (int i = 0; i < sectionModel.size(); i++) {
+                if (sectionModel.get(i).title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
+                    sectionList.setSelectedIndex(i);
+                    return;
+                }
+            }
+            sectionModel.addElement(new ReportTemplateConfig.Section(ReportTemplateConfig.FINDINGS_MARKER, ""));
             sectionList.setSelectedIndex(sectionModel.size() - 1);
         });
         btnRemoveSection.addActionListener(e -> {
@@ -166,6 +180,7 @@ public class ReportingSettingsTab {
             }
         });
         sectionListButtons.add(btnAddSection);
+        sectionListButtons.add(btnAddFindingsMarker);
         sectionListButtons.add(btnRemoveSection);
         sectionListButtons.add(btnMoveUp);
         sectionListButtons.add(btnMoveDown);

@@ -86,11 +86,12 @@ public class EvidencePhase1Dialog {
         pnlTop.add(txtDesc);
         pnlTop.add(lblSev);
         pnlTop.add(cbSev);
-        pnlTop.add(chkRetest);
         owner.api.userInterface().applyThemeToComponent(pnlTop);
 
-        // CWE gets its own row — cramming it onto the title/description/severity row let
-        // FlowLayout wrap it out of sight on anything less than a very wide dialog.
+        // CWE (and Retest) get their own row — cramming them onto the title/description/status
+        // row let FlowLayout wrap them out of sight on anything less than a very wide dialog:
+        // BoxLayout sizes pnlTop by its single-row preferred height, so a wrapped second line
+        // renders underneath/behind the next row instead of pushing it down.
         JPanel pnlCweRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 4));
         pnlCweRow.setBorder(new EmptyBorder(0, 10, 0, 10));
         JLabel lblCwe = new JLabel("CWE:");
@@ -101,6 +102,7 @@ public class EvidencePhase1Dialog {
         owner.api.userInterface().applyThemeToComponent(txtCwe);
         pnlCweRow.add(lblCwe);
         pnlCweRow.add(txtCwe);
+        pnlCweRow.add(chkRetest);
         owner.api.userInterface().applyThemeToComponent(pnlCweRow);
 
         // CWE typeahead + tag chips — search-as-you-type against the bundled offline dataset,

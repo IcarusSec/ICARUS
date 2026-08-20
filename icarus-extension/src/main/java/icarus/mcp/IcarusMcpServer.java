@@ -29,6 +29,7 @@ import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.spec.McpSchema;
 
 import javax.imageio.ImageIO;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -352,11 +353,18 @@ public final class IcarusMcpServer {
                 "type", "object",
                 "properties", Map.of(
                         "kind", Map.of("type", "string", "description", "BOX, ARROW, HIGHLIGHT, REDACT, or CROP"),
-                        "x", Map.of("type", "integer"),
-                        "y", Map.of("type", "integer"),
-                        "width", Map.of("type", "integer", "description", "For ARROW, the end point's x offset from x"),
-                        "height", Map.of("type", "integer", "description", "For ARROW, the end point's y offset from y")),
-                "required", List.of("kind", "x", "y", "width", "height"));
+                        "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — prefer this whenever "
+                                + "one applies (BOX/HIGHLIGHT/REDACT/CROP only, not ARROW). Guessed x/y for text whose position depends on rendered string width (e.g. a "
+                                + "badge after a variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available "
+                                + "on any server-rendered image (image_base64 omitted): \"request_column\", \"response_column\" (the full left/right traffic panes). On "
+                                + "RATE_LIMIT/NO_RATE_LIMIT findings specifically, also: \"rps\" (the colored requests-per-second badge next to the description) and \"blocked\" "
+                                + "(the \"← BLOCKED\" marker on the row that tripped the limit, if any). capture_evidence's result also echoes back exactly which anchors this "
+                                + "particular render had, for findings where availability varies."),
+                        "x", Map.of("type", "integer", "description", "Ignored if anchor is set."),
+                        "y", Map.of("type", "integer", "description", "Ignored if anchor is set."),
+                        "width", Map.of("type", "integer", "description", "For ARROW, the end point's x offset from x. Ignored if anchor is set."),
+                        "height", Map.of("type", "integer", "description", "For ARROW, the end point's y offset from y. Ignored if anchor is set.")),
+                "required", List.of("kind"));
 
         var inputSchema = new McpSchema.JsonSchema("object",
                 Map.of(
@@ -377,8 +385,10 @@ public final class IcarusMcpServer {
                         "caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"),
                         "annotations", Map.of(
                                 "type", "array",
-                                "description", "Optional shapes to draw before saving, in image pixel coordinates. BOX/HIGHLIGHT/REDACT are rectangles at (x,y) sized width x height; "
-                                        + "ARROW runs from (x,y) to (x+width,y+height); CROP truncates the final image to that rectangle and should be listed last.",
+                                "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
+                                        + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
+                                        + "Without an anchor: BOX/HIGHLIGHT/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); "
+                                        + "CROP truncates the final image to that rectangle and should be listed last.",
                                 "items", annotationItemSchema)),
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("capture_evidence",
@@ -402,6 +412,7 @@ public final class IcarusMcpServer {
 
             try {
                 BufferedImage image;
+                Map<String, Rectangle> anchors = new LinkedHashMap<>();
                 if (imageBase64 != null && !imageBase64.isBlank()) {
                     byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
                     image = ImageIO.read(new ByteArrayInputStream(imageBytes));
@@ -409,7 +420,7 @@ public final class IcarusMcpServer {
                         return McpSchema.CallToolResult.builder().addTextContent("image_base64 did not decode to a readable image").isError(true).build();
                     }
                 } else {
-                    image = renderEvidenceImage(finding, request.arguments());
+                    image = renderEvidenceImage(finding, request.arguments(), anchors);
                 }
 
                 Object rawAnnotations = request.arguments().get("annotations");
@@ -417,18 +428,32 @@ public final class IcarusMcpServer {
                     List<EvidenceAnnotator.Annotation> annotations = new ArrayList<>();
                     for (Object o : list) {
                         Map<?, ?> m = (Map<?, ?>) o;
-                        annotations.add(new EvidenceAnnotator.Annotation(
-                                (String) m.get("kind"),
-                                ((Number) m.get("x")).intValue(),
-                                ((Number) m.get("y")).intValue(),
-                                ((Number) m.get("width")).intValue(),
-                                ((Number) m.get("height")).intValue()));
+                        String kind = (String) m.get("kind");
+                        Object anchorName = m.get("anchor");
+                        if (anchorName instanceof String name) {
+                            Rectangle r = anchors.get(name);
+                            if (r == null) {
+                                return McpSchema.CallToolResult.builder().addTextContent(
+                                        "Unknown anchor '" + name + "'. Available anchors for this render: " + anchors.keySet()
+                                                + (anchors.isEmpty() ? " (none — anchors are only available when ICARUS renders the image itself, i.e. image_base64 was omitted)" : "")
+                                ).isError(true).build();
+                            }
+                            annotations.add(new EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
+                        } else {
+                            annotations.add(new EvidenceAnnotator.Annotation(
+                                    kind,
+                                    ((Number) m.get("x")).intValue(),
+                                    ((Number) m.get("y")).intValue(),
+                                    ((Number) m.get("width")).intValue(),
+                                    ((Number) m.get("height")).intValue()));
+                        }
                     }
                     image = EvidenceAnnotator.applyAnnotations(image, annotations);
                 }
 
                 orchestrator.captureEvidence(finding, image, caption);
-                return McpSchema.CallToolResult.builder().addTextContent("Evidence captured for " + hash).build();
+                String anchorNote = anchors.isEmpty() ? "" : " (available anchors were: " + anchors.keySet() + ")";
+                return McpSchema.CallToolResult.builder().addTextContent("Evidence captured for " + hash + anchorNote).build();
             } catch (Exception e) {
                 return McpSchema.CallToolResult.builder().addTextContent("Failed to capture evidence: " + e.getMessage()).isError(true).build();
             }
@@ -437,13 +462,16 @@ public final class IcarusMcpServer {
 
     /** Headless counterpart to {@link icarus.evidence.EvidencePhase1Dialog}'s "Apply"/"Annotate" render step:
      *  builds the same styled evidence image from the finding's actual captured traffic (or request_text/
-     *  response_text overrides), so an MCP client with no way to take a screenshot can still capture evidence. */
-    private BufferedImage renderEvidenceImage(Finding finding, Map<String, Object> args) {
+     *  response_text overrides), so an MCP client with no way to take a screenshot can still capture evidence.
+     *  Also fills {@code outAnchors} with the pixel regions of anything dynamically positioned, so a caller
+     *  can target an annotation by name instead of guessing coordinates it has no way to predict. */
+    private BufferedImage renderEvidenceImage(Finding finding, Map<String, Object> args, Map<String, Rectangle> outAnchors) {
         ModuleConfig config = orchestrator.getConfig();
         String title = args.get("title") instanceof String s && !s.isBlank() ? s : finding.type();
         String description = args.get("description") instanceof String s && !s.isBlank() ? s : finding.description();
         String severity = args.get("severity") instanceof String s && !s.isBlank() ? s : finding.severity().name();
         boolean force1080 = !(args.get("force_1080") instanceof Boolean b) || b;
+        int imgWidth = force1080 ? 1920 : 1200;
 
         if (finding.category() == Category.RATE_LIMIT && finding.metadata().containsKey("blast_log")) {
             Finding.Builder builder = Finding.builder(finding.module(), title)
@@ -454,10 +482,14 @@ public final class IcarusMcpServer {
                     .evidence(finding.evidence());
             finding.metadata().forEach(builder::meta);
             finding.cweIds().forEach(builder::cwe);
-            return RateLimitTableRenderer.renderRateLimitTable(api, config, builder.build(), force1080);
+            return RateLimitTableRenderer.renderRateLimitTable(api, config, builder.build(), force1080, outAnchors);
         }
 
-        int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(force1080 ? 1920 : 1200);
+        int imgHeight = force1080 ? 1080 : 800;
+        outAnchors.put("request_column", new Rectangle(0, 70, imgWidth / 2 - 5, imgHeight - 70));
+        outAnchors.put("response_column", new Rectangle(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70));
+
+        int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(imgWidth);
         String reqText = args.get("request_text") instanceof String s
                 ? EvidenceImageRenderer.wrapEvidenceText(s, wrapWidth)
                 : EvidenceImageRenderer.wrapEvidenceText(requestText(finding.evidence()), wrapWidth);

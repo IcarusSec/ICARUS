@@ -8,10 +8,23 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class RateLimitTableRenderer {
 
     public static BufferedImage renderRateLimitTable(MontoyaApi api, ModuleConfig config, Finding finding, boolean force1080) {
+        return renderRateLimitTable(api, config, finding, force1080, null);
+    }
+
+    /**
+     * @param outAnchors optional — if given, filled with the pixel {@link Rectangle} of each
+     *                   dynamically-positioned element actually drawn ("rps", "blocked"), keyed
+     *                   by name. Font-metric-dependent positions (e.g. the RPS badge's x offset,
+     *                   which depends on the preceding description text's rendered width) can't
+     *                   be predicted by a caller ahead of time; this lets an MCP client target an
+     *                   annotation at "the RPS badge" by name instead of guessing pixel coordinates.
+     */
+    public static BufferedImage renderRateLimitTable(MontoyaApi api, ModuleConfig config, Finding finding, boolean force1080, Map<String, Rectangle> outAnchors) {
         int imgWidth = force1080 ? 1920 : 1200;
         int imgHeight = force1080 ? 1080 : 1200; // Gave it a bit more default vertical space to comfortably fit headers/body
 
@@ -23,7 +36,7 @@ public final class RateLimitTableRenderer {
         // user for the same body on every retry.
         String[] fullReqRes = buildFullReqRes(api, finding, imgWidth);
 
-        return drawRateLimitTable(api, config, finding, imgWidth, imgHeight, cs, !force1080, fullReqRes[0], fullReqRes[1]);
+        return drawRateLimitTable(api, config, finding, imgWidth, imgHeight, cs, !force1080, fullReqRes[0], fullReqRes[1], outAnchors);
     }
 
     public static String[] buildFullReqRes(MontoyaApi api, Finding finding, int imgWidth) {
@@ -55,6 +68,11 @@ public final class RateLimitTableRenderer {
 
     public static BufferedImage drawRateLimitTable(MontoyaApi api, ModuleConfig config, Finding finding, int imgWidth, int imgHeight, EvidenceColorScheme cs,
                                               boolean allowGrow, String fullReq, String fullRes) {
+        return drawRateLimitTable(api, config, finding, imgWidth, imgHeight, cs, allowGrow, fullReq, fullRes, null);
+    }
+
+    public static BufferedImage drawRateLimitTable(MontoyaApi api, ModuleConfig config, Finding finding, int imgWidth, int imgHeight, EvidenceColorScheme cs,
+                                              boolean allowGrow, String fullReq, String fullRes, Map<String, Rectangle> outAnchors) {
         BufferedImage img = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -98,7 +116,12 @@ public final class RateLimitTableRenderer {
             } catch (Exception ignored) {}
             
             g.setColor(rpsColor);
-            g.drawString(rps, 20 + baseWidth + pipeWidth, 55);
+            int rpsX = 20 + baseWidth + pipeWidth;
+            g.drawString(rps, rpsX, 55);
+            if (outAnchors != null) {
+                FontMetrics fm = g.getFontMetrics();
+                outAnchors.put("rps", new Rectangle(rpsX, 55 - fm.getAscent(), fm.stringWidth(rps), fm.getAscent() + fm.getDescent()));
+            }
         }
 
         String logStr = finding.metadata().get("blast_log");
@@ -180,7 +203,12 @@ public final class RateLimitTableRenderer {
 
             if (i == flipIdx) {
                 g.setColor(cs.status5xx());
-                g.drawString(" ← BLOCKED", imgWidth - 80, y);
+                String blocked = " ← BLOCKED";
+                g.drawString(blocked, imgWidth - 80, y);
+                if (outAnchors != null) {
+                    FontMetrics fm = g.getFontMetrics();
+                    outAnchors.put("blocked", new Rectangle(imgWidth - 80, y - fm.getAscent(), fm.stringWidth(blocked), fm.getAscent() + fm.getDescent()));
+                }
             }
 
             y += 20;
@@ -232,7 +260,7 @@ public final class RateLimitTableRenderer {
         int requiredHeight = y + (maxLines * 18) + 40;
         if (allowGrow && requiredHeight > imgHeight) {
             g.dispose();
-            return drawRateLimitTable(api, config, finding, imgWidth, requiredHeight, cs, false, fullReq, fullRes);
+            return drawRateLimitTable(api, config, finding, imgWidth, requiredHeight, cs, false, fullReq, fullRes, outAnchors);
         }
 
         Shape clipBackup = g.getClip();

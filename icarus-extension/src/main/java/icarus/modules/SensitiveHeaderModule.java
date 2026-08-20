@@ -92,8 +92,13 @@ public class SensitiveHeaderModule implements IcarusModule {
         if (!config.getBool("sh.enabled", true) || !config.getBool("sh.passive", true)) {
             return List.of();
         }
-        
-        return analyze(responseReceived, config, null);
+
+        // Was null — passive findings carried no request/response evidence at all, which broke
+        // anything downstream that needs to resend the finding (validate_finding, evidence
+        // capture's own screenshot rendering). initiatingRequest() is right there on the passive
+        // handler's own response object, no extra round-trip needed to attach it.
+        HttpRequestResponse evidence = HttpRequestResponse.httpRequestResponse(responseReceived.initiatingRequest(), responseReceived);
+        return analyze(responseReceived, config, evidence);
     }
 
     private List<Finding> analyze(HttpResponse response, ModuleConfig config, HttpRequestResponse evidence) {

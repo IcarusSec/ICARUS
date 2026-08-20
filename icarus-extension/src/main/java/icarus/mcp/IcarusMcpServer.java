@@ -775,7 +775,8 @@ public final class IcarusMcpServer {
     /** Finding types exploit_finding will act on — resending a live payload only makes sense for
      *  ParamValidator's injection detectors, never for a passive header/cookie check. */
     private static final List<String> EXPLOITABLE_TYPES = List.of(
-            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID");
+            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
+            "Missing Input Validation", "NO_RATE_LIMIT");
 
     /** Finding types validate_finding can give a real reproduced=true/false for — the exploitable
      *  types above, plus SensitiveHeaderModule's deterministic missing-header/cookie-flag checks
@@ -783,8 +784,13 @@ public final class IcarusMcpServer {
      *  response for manual review rather than a fabricated verdict. */
     private static final List<String> VALIDATABLE_TYPES = List.of(
             "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
+            "Missing Input Validation", "NO_RATE_LIMIT",
             "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
             "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE");
+
+    private static boolean isBlockedStatus(int status) {
+        return status == 429 || status == 403 || status == 503;
+    }
 
     private record RecheckResult(Boolean reproduced, String note, HttpRequestResponse fresh) {}
 
@@ -852,6 +858,36 @@ public final class IcarusMcpServer {
                 yield new RecheckResult(ok,
                         ok ? "Still returns HTTP " + status + " for the neighboring ID (single-identity check — doesn't confirm data leakage)."
                            : "Now returns HTTP " + status + " — may have been fixed.", fresh);
+            }
+            case "Missing Input Validation" -> {
+                int min = orchestrator.getConfig().getInt("pv.finding_status_min", 200);
+                int max = orchestrator.getConfig().getInt("pv.finding_status_max", 299);
+                int status = fresh.response().statusCode();
+                boolean stillAccepted = status >= min && status <= max;
+                yield new RecheckResult(stillAccepted,
+                        stillAccepted ? "The flagged mutated request still returns HTTP " + status + " (accepted) — validation gap still present."
+                                       : "Now returns HTTP " + status + " — may have been fixed.", fresh);
+            }
+            case "NO_RATE_LIMIT" -> {
+                // Lighter than the original detection's full burst (often 50 requests) — this is
+                // meant to be safe to call unattended/repeatedly, not re-run the whole module.
+                // A clean pass here doesn't rule out a bypass technique the original scan tried
+                // and this quick probe doesn't; it only confirms the plain no-limiting condition.
+                int sample = 15;
+                int blocked = isBlockedStatus(fresh.response().statusCode()) ? 1 : 0;
+                for (int i = 1; i < sample; i++) {
+                    try {
+                        var r = api.http().sendRequest(finding.evidence().request());
+                        if (r != null && r.response() != null && isBlockedStatus(r.response().statusCode())) blocked++;
+                    } catch (Exception ignored) {
+                        // A failed resend isn't a block signal either way — just doesn't count toward either total.
+                    }
+                }
+                boolean stillNoLimit = blocked == 0;
+                int finalBlocked = blocked;
+                yield new RecheckResult(stillNoLimit,
+                        stillNoLimit ? "Sent " + sample + " requests with no blocking observed — still no rate limiting."
+                                     : finalBlocked + "/" + sample + " requests were blocked (429/403/503) — rate limiting now appears to be in place.", fresh);
             }
             case "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
                  "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE" -> {

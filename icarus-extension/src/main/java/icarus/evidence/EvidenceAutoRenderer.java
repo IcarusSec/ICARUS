@@ -70,8 +70,18 @@ public final class EvidenceAutoRenderer {
         if (outAnchors != null) {
             int startY = 90 + 22; // matches colLabelY + 22 in EvidenceImageRenderer.renderTextToImage
             int colWidth = imgWidth / 2 - 40;
-            outAnchors.putAll(lineAnchors(reqText.split("\n"), 20, startY, colWidth, "request"));
-            outAnchors.putAll(lineAnchors(resText.split("\n"), imgWidth / 2 + 20, startY, colWidth, "response"));
+            String[] reqLines = reqText.split("\n");
+            String[] resLines = resText.split("\n");
+            outAnchors.putAll(lineAnchors(reqLines, 20, startY, colWidth, "request"));
+            outAnchors.putAll(lineAnchors(resLines, imgWidth / 2 + 20, startY, colWidth, "response"));
+
+            String payload = finding.metadata().get("payload");
+            if (payload != null && !payload.isBlank()) {
+                Rectangle reqRect = findTextRect(reqLines, payload, 20, startY);
+                if (reqRect != null) outAnchors.put("request_payload", reqRect);
+                Rectangle resRect = findTextRect(resLines, payload, imgWidth / 2 + 20, startY);
+                if (resRect != null) outAnchors.put("response_payload", resRect);
+            }
         }
 
         return EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
@@ -114,6 +124,35 @@ public final class EvidenceAutoRenderer {
             anchors.put(prefix + "_headers", new Rectangle(x, top, colWidth, bottom - top));
         }
         return anchors;
+    }
+
+    /**
+     * Locates the exact pixel rectangle of {@code needle} (the finding's own injected/reflected
+     * payload) inside {@code lines} — the precise fix for "circle only the payload, not the whole
+     * box it lives in". Uses the real font-advance width of the text before/within the match
+     * (MONO_FONT — what drawLine actually draws JSON values in) rather than an assumed fixed
+     * char width, so the box lands exactly on the glyphs regardless of font quirks. Returns null
+     * if the payload isn't found verbatim (e.g. it was JSON-escaped, or landed on a wrapped line
+     * boundary) — callers should fall back to a coarser anchor in that case.
+     */
+    private static Rectangle findTextRect(String[] lines, String needle, int x, int startY) {
+        java.awt.image.BufferedImage probe = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.awt.Graphics2D g = probe.createGraphics();
+        g.setFont(EvidenceImageRenderer.MONO_FONT);
+        java.awt.FontMetrics fm = g.getFontMetrics();
+        try {
+            for (int i = 0; i < lines.length; i++) {
+                int idx = lines[i].indexOf(needle);
+                if (idx < 0) continue;
+                int rx = x + fm.stringWidth(lines[i].substring(0, idx));
+                int rw = fm.stringWidth(needle);
+                int ry = startY + i * EvidenceImageRenderer.LINE_HEIGHT - 14;
+                return new Rectangle(rx, ry, Math.max(rw, 4), EvidenceImageRenderer.LINE_HEIGHT);
+            }
+            return null;
+        } finally {
+            g.dispose();
+        }
     }
 
     /** Mirrors {@link EvidencePhase1Dialog}'s reqText build so headless and interactive renders start from identical text. */

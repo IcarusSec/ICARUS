@@ -39,13 +39,15 @@ public final class EvidenceAnnotator {
             Shape shape = "ARROW".equals(a.kind())
                     ? createArrow(new Point(a.x(), a.y()), new Point(a.x() + a.width(), a.y() + a.height()))
                     : new Rectangle2D.Double(a.x(), a.y(), a.width(), a.height());
-            // A translucent-yellow HIGHLIGHT wash over a huge area (e.g. an agent picking a
-            // whole request_column/response_column anchor) reads as a muddy, illegible smear
-            // rather than a pointer to anything — downgrade to an outline instead, same as BOX,
-            // once it covers more than a third of the image. REDACT is exempt: blacking out a
-            // large area is often the actual intent (redacting a big block of sensitive body).
+            // A translucent-yellow HIGHLIGHT wash over anything but a small target (a header
+            // line, a payload value) reads as a muddy, illegible smear rather than a pointer to
+            // something specific — downgrade to an outline instead, same as BOX, once it covers
+            // more than a tenth of the image. A guessed rectangle covering, say, a header block
+            // plus a chunk of body (well under the old full-column size) still looked bad in
+            // practice, hence the tight cutoff. REDACT is exempt: blacking out a large area is
+            // often the actual intent (redacting a big block of sensitive body).
             String kind = a.kind();
-            if ("HIGHLIGHT".equals(kind) && (a.width() * (double) a.height()) / imageArea > 0.33) {
+            if ("HIGHLIGHT".equals(kind) && (a.width() * (double) a.height()) / imageArea > 0.10) {
                 kind = "BOX";
             }
             paintAnnotation(g2, shape, kind, Color.RED);
@@ -111,7 +113,7 @@ public final class EvidenceAnnotator {
         for (int i = 0; i < shapes.size(); i++) {
             String kind = kinds.get(i);
             Shape s = shapes.get(i);
-            if ("HIGHLIGHT".equals(kind) && s.getBounds2D().getWidth() * s.getBounds2D().getHeight() / imageArea > 0.33) {
+            if ("HIGHLIGHT".equals(kind) && s.getBounds2D().getWidth() * s.getBounds2D().getHeight() / imageArea > 0.10) {
                 kind = "BOX";
             }
             if ("HIGHLIGHT".equals(kind)) {

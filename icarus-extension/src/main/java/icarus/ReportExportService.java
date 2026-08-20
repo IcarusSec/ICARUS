@@ -48,10 +48,22 @@ public class ReportExportService {
             String hash = ce.finding().similarityHash();
             if (!seenHashes.add(hash)) continue;
             var record = findings.getRecordByHash(hash);
-            if (record == null || record.isSuppressed()) continue;
+            if (record == null || record.isSuppressed() || !isConfirmed(record.getFinding())) continue;
             result.add(record.getFinding());
         }
         return result;
+    }
+
+    /**
+     * True only for a finding an MCP tool has explicitly confirmed positive — {@code lastValidatedResult}
+     * "reproduced" (set by validate_finding) or {@code exploitConfirmed} "true" (set by exploit_finding).
+     * Everything else, including findings no one has ever run validate_finding/exploit_finding against,
+     * is excluded: reports should only ever contain what's been actively confirmed, not what ICARUS's
+     * initial detection merely flagged and nobody has checked since.
+     */
+    private static boolean isConfirmed(Finding finding) {
+        return "reproduced".equals(finding.metadata().get("lastValidatedResult"))
+                || "true".equals(finding.metadata().get("exploitConfirmed"));
     }
 
     public void previewReport(Component parent, JButton triggerButton) {
@@ -130,7 +142,7 @@ public class ReportExportService {
     public boolean generateReport(String format, Path outputFile) throws Exception {
         List<Finding> reportFindings = new ArrayList<>();
         for (FindingRecord record : findings.getAllFindingRecords()) {
-            if (!record.isSuppressed()) reportFindings.add(record.getFinding());
+            if (!record.isSuppressed() && isConfirmed(record.getFinding())) reportFindings.add(record.getFinding());
         }
         return switch (format.toLowerCase()) {
             case "html" -> reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
@@ -193,7 +205,8 @@ public class ReportExportService {
                         ToastNotification.show(suiteFrame, formatLabel + " generated: " + outputFile.toAbsolutePath());
                     } else {
                         ToastNotification.show(suiteFrame,
-                                "No report was generated — HTML reports may be disabled in Settings, or there are no findings to include.");
+                                "No report was generated — HTML reports may be disabled in Settings, or no findings are confirmed yet "
+                                        + "(only findings validated/exploit-confirmed via MCP are included).");
                     }
                 } catch (Exception ex) {
                     api.logging().logToError(formatLabel + " generation failed: " + ex.getCause());

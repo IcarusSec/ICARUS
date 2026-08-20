@@ -457,13 +457,41 @@ public final class ReportGenerator {
                 }
                 html.append("                    </div>\n                </div>\n");
             } else {
-                html.append("""
-                        </table>
-                        <p style="color: var(--text-muted)">No screenshot captured for this finding.</p>
-                    </div>
-                </div>
-            """);
+                html.append("                        </table>\n                        <h4>Evidence</h4>\n");
+                String dataUri = autoRenderedDataUri(f, config);
+                if (dataUri != null) {
+                    html.append("""
+                            <div class="evidence-block">
+                                <img class="evidence-img" src="%s" alt="Evidence for %s">
+                                <div class="evidence-caption">Auto-rendered from the finding's captured traffic — no manual evidence was captured for it.</div>
+                            </div>
+                        </div>
+                    """.formatted(dataUri, escapeHtml(f.type())));
+                } else {
+                    html.append("""
+                            <p style="color: var(--text-muted)">No screenshot captured, and no evidence image could be auto-rendered for this finding.</p>
+                        </div>
+                    """);
+                }
+                html.append("                </div>\n");
             }
+        }
+    }
+
+    /** Renders the same evidence image capture_evidence would (see {@link EvidenceAutoRenderer}) for a
+     *  finding nobody captured a screenshot for, so every reportable finding gets an image either way.
+     *  {@code null} if the finding has no captured request to render from (e.g. a manually-created
+     *  finding with no evidence at all) — that case still falls back to the placeholder text. */
+    private String autoRenderedDataUri(Finding f, ModuleConfig config) {
+        if (f.evidence() == null) return null;
+        try {
+            var image = EvidenceAutoRenderer.render(api, config, f, true);
+            var out = new java.io.ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(image, "png", out);
+            return "data:image/png;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
+        } catch (Exception e) {
+            api.logging().logToError("Failed to auto-render evidence for '" + f.type() + "': " + e);
+            return null;
         }
     }
 

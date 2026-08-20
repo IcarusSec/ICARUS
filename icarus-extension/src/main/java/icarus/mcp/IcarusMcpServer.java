@@ -9,18 +9,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import icarus.Icarus;
 import icarus.Orchestrator;
-import icarus.core.Category;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
-import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
+import icarus.evidence.EvidenceAutoRenderer;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.EvidenceAnnotator;
-import icarus.evidence.EvidenceImageRenderer;
-import icarus.evidence.RateLimitTableRenderer;
 import icarus.modules.ParamValidatorModule;
+import icarus.modules.SensitiveHeaderModule;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -86,8 +84,12 @@ public final class IcarusMcpServer {
             server, so don't assume one exists for a vuln class you don't see a tool/finding type for.
 
             FINDINGS: list_findings / get_finding / get_reportable_findings / get_passive_findings \
-            return what ICARUS's modules already detected. suppress_finding false positives before \
-            generate_report — it includes every non-suppressed finding by default.
+            return what ICARUS's modules already detected. generate_report only includes findings \
+            explicitly confirmed positive via validate_finding (lastValidatedResult=reproduced) or \
+            exploit_finding (exploitConfirmed=true) — an unvalidated finding won't appear in the \
+            report even if never suppressed, so validate (or exploit-confirm) everything you want \
+            included before generating one. Every included finding gets an evidence image either way, \
+            auto-rendered from its captured traffic when nobody captured one manually.
 
             EVIDENCE: capture_evidence renders its own image from the finding's real captured \
             traffic — omit image_base64 (the normal path) rather than trying to supply a screenshot \
@@ -343,8 +345,10 @@ public final class IcarusMcpServer {
                 List.of("format", "output_path"), false, null, null);
         var tool = new McpSchema.Tool("generate_report",
                 "Generate ICARUS report",
-                "Writes an HTML or PDF report of every non-suppressed ICARUS finding to the given path, overwriting it if it exists. "
-                        + "Suppress false positives first with suppress_finding so they're excluded.",
+                "Writes an HTML or PDF report to the given path, overwriting it if it exists. Only includes findings explicitly confirmed positive — "
+                        + "call validate_finding or exploit_finding on each finding first (sets lastValidatedResult=reproduced or exploitConfirmed=true); "
+                        + "an unvalidated finding, even if never suppressed, will NOT appear in the report. Every included finding gets an evidence image "
+                        + "either way — auto-rendered from its captured traffic if nobody captured one manually.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
@@ -354,7 +358,8 @@ public final class IcarusMcpServer {
                 boolean written = orchestrator.generateReport(format, java.nio.file.Path.of(outputPath));
                 return written
                         ? McpSchema.CallToolResult.builder().addTextContent("Report written to " + outputPath).build()
-                        : McpSchema.CallToolResult.builder().addTextContent("No report was written — nothing to report, or that format is disabled in Settings.").isError(true).build();
+                        : McpSchema.CallToolResult.builder().addTextContent("No report was written — either that format is disabled in Settings, or no findings are confirmed yet "
+                                + "(call validate_finding/exploit_finding on findings first; unconfirmed findings are excluded).").isError(true).build();
             } catch (Exception e) {
                 return McpSchema.CallToolResult.builder().addTextContent("Report generation failed: " + e.getMessage()).isError(true).build();
             }
@@ -506,64 +511,18 @@ public final class IcarusMcpServer {
         });
     }
 
-    /** Headless counterpart to {@link icarus.evidence.EvidencePhase1Dialog}'s "Apply"/"Annotate" render step:
-     *  builds the same styled evidence image from the finding's actual captured traffic (or request_text/
-     *  response_text overrides), so an MCP client with no way to take a screenshot can still capture evidence.
-     *  Also fills {@code outAnchors} with the pixel regions of anything dynamically positioned, so a caller
-     *  can target an annotation by name instead of guessing coordinates it has no way to predict. */
+    /** Headless counterpart to {@link icarus.evidence.EvidencePhase1Dialog}'s "Apply"/"Annotate" render step —
+     *  delegates to {@link EvidenceAutoRenderer}, shared with report auto-rendering, so headless capture and
+     *  a report's auto-filled image never drift into two different render paths. */
     private BufferedImage renderEvidenceImage(Finding finding, Map<String, Object> args, Map<String, Rectangle> outAnchors) {
-        ModuleConfig config = orchestrator.getConfig();
-        String title = args.get("title") instanceof String s && !s.isBlank() ? s : finding.type();
-        String description = args.get("description") instanceof String s && !s.isBlank() ? s : finding.description();
-        String severity = args.get("severity") instanceof String s && !s.isBlank() ? s : finding.severity().name();
         boolean force1080 = !(args.get("force_1080") instanceof Boolean b) || b;
-        int imgWidth = force1080 ? 1920 : 1200;
-
-        if (finding.category() == Category.RATE_LIMIT && finding.metadata().containsKey("blast_log")) {
-            Finding.Builder builder = Finding.builder(finding.module(), title)
-                    .description(description)
-                    .severity(Severity.valueOf(severity))
-                    .category(finding.category())
-                    .path(finding.path())
-                    .evidence(finding.evidence());
-            finding.metadata().forEach(builder::meta);
-            finding.cweIds().forEach(builder::cwe);
-            return RateLimitTableRenderer.renderRateLimitTable(api, config, builder.build(), force1080, outAnchors);
-        }
-
-        int imgHeight = force1080 ? 1080 : 800;
-        outAnchors.put("request_column", new Rectangle(0, 70, imgWidth / 2 - 5, imgHeight - 70));
-        outAnchors.put("response_column", new Rectangle(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70));
-
-        int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(imgWidth);
-        String reqText = args.get("request_text") instanceof String s
-                ? EvidenceImageRenderer.wrapEvidenceText(s, wrapWidth)
-                : EvidenceImageRenderer.wrapEvidenceText(requestText(finding.evidence()), wrapWidth);
-        String resText = args.get("response_text") instanceof String s
-                ? EvidenceImageRenderer.wrapEvidenceText(s, wrapWidth)
-                : EvidenceImageRenderer.wrapEvidenceText(responseText(finding.evidence()), wrapWidth);
-
-        return EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, title, description, severity, force1080);
-    }
-
-    /** Mirrors {@link icarus.evidence.EvidencePhase1Dialog}'s reqText build so headless and interactive
-     *  renders start from identical text. */
-    private String requestText(HttpRequestResponse rr) {
-        String reqContentType = rr.request().headerValue("Content-Type");
-        String reqLine = rr.request().method() + " " + rr.request().path() + " " + rr.request().httpVersion() + "\n";
-        return reqLine + rr.request().headers().stream()
-                .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + EvidenceImageRenderer.formatBody(api, rr.request().body().getBytes(), reqContentType);
-    }
-
-    /** Mirrors {@link icarus.evidence.EvidencePhase1Dialog}'s resText build. Empty if there's no response. */
-    private String responseText(HttpRequestResponse rr) {
-        if (rr.response() == null) return "";
-        String resContentType = rr.response().headerValue("Content-Type");
-        String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
-        return statusLine + rr.response().headers().stream()
-                .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + EvidenceImageRenderer.formatBody(api, rr.response().body().getBytes(), resContentType);
+        return EvidenceAutoRenderer.render(api, orchestrator.getConfig(), finding,
+                args.get("title") instanceof String s1 ? s1 : null,
+                args.get("description") instanceof String s2 ? s2 : null,
+                args.get("severity") instanceof String s3 ? s3 : null,
+                args.get("request_text") instanceof String s4 ? s4 : null,
+                args.get("response_text") instanceof String s5 ? s5 : null,
+                force1080, outAnchors);
     }
 
     private McpServerFeatures.SyncToolSpecification listEvidenceTool() {
@@ -813,11 +772,19 @@ public final class IcarusMcpServer {
 
     // ── Stage 2: validation, exploitation confirmation, attack-chain correlation ──
 
-    /** Finding types validate_finding/exploit_finding can actually re-check — all from
-     *  ParamValidatorModule's real detection primitives (Stage 1). Everything else returns the
-     *  fresh response for manual review rather than a fabricated verdict. */
-    private static final List<String> RECHECKABLE_TYPES = List.of(
+    /** Finding types exploit_finding will act on — resending a live payload only makes sense for
+     *  ParamValidator's injection detectors, never for a passive header/cookie check. */
+    private static final List<String> EXPLOITABLE_TYPES = List.of(
             "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID");
+
+    /** Finding types validate_finding can give a real reproduced=true/false for — the exploitable
+     *  types above, plus SensitiveHeaderModule's deterministic missing-header/cookie-flag checks
+     *  (see {@link SensitiveHeaderModule#isNowPresent}). Everything else returns the fresh
+     *  response for manual review rather than a fabricated verdict. */
+    private static final List<String> VALIDATABLE_TYPES = List.of(
+            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
+            "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
+            "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE");
 
     private record RecheckResult(Boolean reproduced, String note, HttpRequestResponse fresh) {}
 
@@ -886,6 +853,16 @@ public final class IcarusMcpServer {
                         ok ? "Still returns HTTP " + status + " for the neighboring ID (single-identity check — doesn't confirm data leakage)."
                            : "Now returns HTTP " + status + " — may have been fixed.", fresh);
             }
+            case "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
+                 "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE" -> {
+                Boolean present = SensitiveHeaderModule.isNowPresent(finding.type(), fresh.response());
+                if (present == null) {
+                    yield new RecheckResult(null, "No Set-Cookie header on the fresh response — can't determine this cookie flag's current state.", fresh);
+                }
+                boolean stillMissing = !present;
+                yield new RecheckResult(stillMissing,
+                        stillMissing ? "Still missing on the fresh response." : "Now present on the fresh response — this finding appears fixed.", fresh);
+            }
             default -> new RecheckResult(null,
                     "No automated re-check exists for finding type '" + finding.type() + "'. The request was resent; review the fresh response manually.", fresh);
         };
@@ -915,7 +892,7 @@ public final class IcarusMcpServer {
                 "Re-check an ICARUS finding",
                 "Re-sends the finding's exact captured request live and checks whether the same signal that originally flagged it still reproduces. "
                         + "Read-only — no new payloads beyond what's already in the finding's evidence, no approval needed, safe to run unattended (e.g. "
-                        + "in a CI/CD pipeline). Only " + RECHECKABLE_TYPES + " get a definite reproduced=true/false; every other finding type returns the "
+                        + "in a CI/CD pipeline). Only " + VALIDATABLE_TYPES + " get a definite reproduced=true/false; every other finding type returns the "
                         + "fresh response with reproduced=null for manual review, since there's no shared re-check primitive for those modules to reuse "
                         + "rather than a guessed one. Updates the finding's lastValidated metadata either way.",
                 inputSchema, null, null, null);
@@ -954,7 +931,8 @@ public final class IcarusMcpServer {
                 "Re-sends the finding's exact captured payload live to confirm the same signal still fires. Unlike validate_finding, this ALWAYS blocks on "
                         + "a Swing approval dialog on the analyst's screen inside Burp, showing exactly what request is about to be sent, before sending "
                         + "anything — it does not run unattended, and will not work called from an unattended CI/CD job since there's no one there to "
-                        + "click Approve. Only supports " + RECHECKABLE_TYPES + " (ParamValidator's real detectors) — there is no generic multi-vulnerability-"
+                        + "click Approve. Only supports " + EXPLOITABLE_TYPES + " (ParamValidator's real detectors — never a passive header/cookie check, "
+                        + "use validate_finding for those) — there is no generic multi-vulnerability-"
                         + "class exploitation engine; any other finding type returns a 'not supported' error rather than a fabricated result. "
                         + "STRING_SSRF (Collaborator-confirmed) payloads are single-use and can't be meaningfully replayed.",
                 inputSchema, null, null, null);
@@ -965,10 +943,11 @@ public final class IcarusMcpServer {
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
             }
-            if (!RECHECKABLE_TYPES.contains(finding.type())) {
+            if (!EXPLOITABLE_TYPES.contains(finding.type())) {
+                String hint = VALIDATABLE_TYPES.contains(finding.type()) ? " Use validate_finding instead — it can re-check this type." : "";
                 return McpSchema.CallToolResult.builder().addTextContent(
-                        "exploit_finding does not support finding type '" + finding.type() + "' — no real exploitation-confirmation logic exists for it. "
-                                + "Supported types: " + RECHECKABLE_TYPES).isError(true).build();
+                        "exploit_finding does not support finding type '" + finding.type() + "' — no real exploitation-confirmation logic exists for it."
+                                + hint + " Supported types: " + EXPLOITABLE_TYPES).isError(true).build();
             }
             if (finding.evidence() == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("This finding has no captured request to resend.").isError(true).build();
@@ -1048,7 +1027,8 @@ public final class IcarusMcpServer {
                             "hash", r.getFinding().similarityHash(),
                             "type", r.getFinding().type(),
                             "severity", r.getFinding().severity().name(),
-                            "recheckable", RECHECKABLE_TYPES.contains(r.getFinding().type())));
+                            "exploitable", EXPLOITABLE_TYPES.contains(r.getFinding().type()),
+                            "validatable", VALIDATABLE_TYPES.contains(r.getFinding().type())));
                 }
 
                 Map<String, Object> chain = new LinkedHashMap<>();
@@ -1116,9 +1096,11 @@ public final class IcarusMcpServer {
                     Map<String, Object> step = (Map<String, Object>) stepObj;
                     Map<String, Object> planStep = new LinkedHashMap<>(step);
                     planStep.put("order", order++);
-                    planStep.put("nextAction", Boolean.TRUE.equals(step.get("recheckable"))
+                    planStep.put("nextAction", Boolean.TRUE.equals(step.get("exploitable"))
                             ? "call exploit_finding with hash=" + step.get("hash")
-                            : "no automated exploitation-confirmation exists for this type — review manually");
+                            : Boolean.TRUE.equals(step.get("validatable"))
+                                ? "call validate_finding with hash=" + step.get("hash") + " (passive check — not exploitable, but can confirm it's still present)"
+                                : "no automated re-check exists for this type — review manually");
                     plan.add(planStep);
                 }
 

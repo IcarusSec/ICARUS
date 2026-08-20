@@ -260,12 +260,12 @@ public final class PdfReportGenerator {
         for (Finding f : findings) {
             List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
             String retestStatus = retest ? config.getString("retest.status." + f.similarityHash(), "") : "";
-            appendFindingCard(doc, index, f, group, writer, addBookmarks, retestStatus);
+            appendFindingCard(doc, index, f, group, writer, addBookmarks, retestStatus, config);
             index++;
         }
     }
 
-    private void appendFindingCard(Document doc, int index, Finding f, List<CapturedEvidence> evidenceGroup, PdfWriter writer, boolean addBookmarks, String retestStatus) throws DocumentException {
+    private void appendFindingCard(Document doc, int index, Finding f, List<CapturedEvidence> evidenceGroup, PdfWriter writer, boolean addBookmarks, String retestStatus, ModuleConfig config) throws DocumentException {
         // Everything about this finding — title/badge, meta rows, and the screenshot — is
         // built as rows of ONE PdfPTable, not separate doc.add() calls. A PdfPTable's own
         // rows always render in the order added, even when the table splits across a page
@@ -321,7 +321,17 @@ public final class PdfReportGenerator {
             contentCell.setColspan(2);
             contentCell.setBorder(Rectangle.NO_BORDER);
             contentCell.setPaddingTop(6f);
-            contentCell.addElement(new Paragraph("No screenshot captured for this finding.", BODY_FONT));
+            Image autoRendered = autoRenderImage(f, config);
+            if (autoRendered != null) {
+                float maxWidth = doc.getPageSize().getWidth() - doc.leftMargin() - doc.rightMargin() - 20f;
+                autoRendered.scaleToFit(maxWidth, 700f);
+                contentCell.addElement(autoRendered);
+                Paragraph caption = new Paragraph("Auto-rendered from the finding's captured traffic — no manual evidence was captured for it.", LABEL_FONT);
+                caption.setSpacingBefore(4f);
+                contentCell.addElement(caption);
+            } else {
+                contentCell.addElement(new Paragraph("No screenshot captured, and no evidence image could be auto-rendered for this finding.", BODY_FONT));
+            }
             card.addCell(contentCell);
         } else {
             int evidenceIndex = 1;
@@ -358,6 +368,23 @@ public final class PdfReportGenerator {
 
         if (addBookmarks) {
             new PdfOutline(writer.getRootOutline(), PdfAction.gotoLocalPage(destName, false), f.type());
+        }
+    }
+
+    /** Renders the same evidence image capture_evidence would (see {@link EvidenceAutoRenderer}) for a
+     *  finding nobody captured a screenshot for, so every reportable finding gets an image either way.
+     *  {@code null} if the finding has no captured request to render from — that case still falls back
+     *  to the placeholder text. */
+    private Image autoRenderImage(Finding f, ModuleConfig config) {
+        if (f.evidence() == null) return null;
+        try {
+            var buffered = EvidenceAutoRenderer.render(api, config, f, true);
+            var out = new ByteArrayOutputStream();
+            javax.imageio.ImageIO.write(buffered, "png", out);
+            return Image.getInstance(out.toByteArray());
+        } catch (Exception e) {
+            api.logging().logToError("Failed to auto-render evidence for '" + f.type() + "': " + e);
+            return null;
         }
     }
 

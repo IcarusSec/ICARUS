@@ -248,6 +248,50 @@ public class SensitiveHeaderModule implements IcarusModule {
         return findings;
     }
 
+    /**
+     * Re-check for the deterministic MISSING_* and COOKIE_MISSING_* finding types — same header-name/
+     * value predicates as {@link #analyze}, so a re-check can't silently drift from the original
+     * detection. Returns whether the originally-flagged-missing header or cookie flag is present
+     * on {@code response} now; {@code null} if {@code findingType} isn't one of these deterministic
+     * types (the PII/leak/version checks are heuristic pattern matches, not a clean presence check,
+     * so they're deliberately not covered here). For a Set-Cookie flag, ORs across every Set-Cookie
+     * header present — coarser than the original per-header check, which can flag one specific
+     * cookie while another already has the flag; documented as a known imprecision by the caller.
+     */
+    public static Boolean isNowPresent(String findingType, HttpResponse response) {
+        boolean hasHsts = false, hasCsp = false, hasXcto = false, hasXfo = false, hasRp = false, hasPp = false;
+        Boolean cookieSecure = null, cookieHttpOnly = null, cookieSameSite = null;
+
+        for (HttpHeader h : response.headers()) {
+            String lowerName = h.name().toLowerCase();
+            String lowerValue = h.value().toLowerCase();
+            if (lowerName.equals("strict-transport-security")) hasHsts = true;
+            else if (lowerName.equals("content-security-policy")) hasCsp = true;
+            else if (lowerName.equals("x-content-type-options") && lowerValue.equals("nosniff")) hasXcto = true;
+            else if (lowerName.equals("x-frame-options")) hasXfo = true;
+            else if (lowerName.equals("referrer-policy")) hasRp = true;
+            else if (lowerName.equals("permissions-policy")) hasPp = true;
+            else if (lowerName.equals("set-cookie")) {
+                cookieSecure = Boolean.TRUE.equals(cookieSecure) || lowerValue.contains("secure");
+                cookieHttpOnly = Boolean.TRUE.equals(cookieHttpOnly) || lowerValue.contains("httponly");
+                cookieSameSite = Boolean.TRUE.equals(cookieSameSite) || lowerValue.contains("samesite");
+            }
+        }
+
+        return switch (findingType) {
+            case "MISSING_HSTS" -> hasHsts;
+            case "MISSING_CSP" -> hasCsp;
+            case "MISSING_XCTO" -> hasXcto;
+            case "MISSING_XFO" -> hasXfo;
+            case "MISSING_RP" -> hasRp;
+            case "MISSING_PP" -> hasPp;
+            case "COOKIE_MISSING_SECURE" -> cookieSecure;
+            case "COOKIE_MISSING_HTTPONLY" -> cookieHttpOnly;
+            case "COOKIE_MISSING_SAMESITE" -> cookieSameSite;
+            default -> null;
+        };
+    }
+
     /** Luhn checksum validation to filter credit-card-shaped digit runs before raising a finding. */
     private static boolean isValidLuhn(String candidate) {
         String digits = candidate.replaceAll("[^0-9]", "");

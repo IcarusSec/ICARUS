@@ -1,6 +1,9 @@
 package icarus.modules;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.collaborator.CollaboratorClient;
+import burp.api.montoya.collaborator.CollaboratorPayload;
+import burp.api.montoya.collaborator.Interaction;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.params.HttpParameter;
 import burp.api.montoya.http.message.params.HttpParameterType;
@@ -83,6 +86,21 @@ public final class ParamValidatorModule implements IcarusModule {
         // params live — silently got zero boundary specs (e.g. NUMBER_NEGATIVE) generated at all.
         // Each field is either a JSON body path (fieldPaths set, fieldUrlParam null) or a URL
         // query parameter (fieldUrlParam set, fieldPaths null) — mutually exclusive per index.
+        // Collaborator client is shared across every field so each gets its own uniquely
+        // correlatable payload from the same session; created once and reused, never per-field.
+        // Burp Collaborator is unavailable in some environments (disabled, air-gapped network)
+        // — createClient() throwing just means every SSRF spec below falls back to the
+        // response-signature heuristic instead of out-of-band callbacks.
+        CollaboratorClient collaboratorClient = null;
+        if (config.getBool("pv.ssrf", true)) {
+            try {
+                collaboratorClient = api.collaborator().createClient();
+            } catch (Exception e) {
+                logger.accept("Collaborator unavailable (" + e.getMessage() + ") — SSRF checks will use the response-signature heuristic instead of out-of-band callbacks.");
+            }
+        }
+        Map<String, CollaboratorPayload> ssrfPayloadsByField = new LinkedHashMap<>();
+
         List<String> fieldPathStrings = new ArrayList<>();
         List<List<Object>> fieldPaths = new ArrayList<>();
         List<ParsedHttpParameter> fieldUrlParam = new ArrayList<>();
@@ -93,6 +111,10 @@ public final class ParamValidatorModule implements IcarusModule {
 
             List<MutationSpec> specs = new ArrayList<>();
             for (MutationSpec spec : SpecsFactory.specsFor(leafValue, config)) {
+                if (pathRules.isException(pathString, spec)) continue;
+                specs.add(spec);
+            }
+            for (MutationSpec spec : contextualSpecs(pathString, leafValue, config, collaboratorClient, ssrfPayloadsByField)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
             }
@@ -110,6 +132,10 @@ public final class ParamValidatorModule implements IcarusModule {
 
             List<MutationSpec> specs = new ArrayList<>();
             for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config)) {
+                if (pathRules.isException(pathString, spec)) continue;
+                specs.add(spec);
+            }
+            for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
             }
@@ -353,6 +379,62 @@ public final class ParamValidatorModule implements IcarusModule {
                 }
             }
 
+            String bodyStrLower = bodyStr.toLowerCase();
+
+            boolean cmdiHit = false;
+            if (mutation.type().equals("STRING_CMDI")) {
+                String match = firstMatch(bodyStrLower, CMDI_SIGNATURES);
+                if (match != null && !baselineBodyLower.contains(match)) {
+                    cmdiHit = true;
+                    isInjectionFinding = true;
+                    extractedContext = extractContext(bodyStr, match, 60);
+                    injectionDesc = "Command Injection output signature detected (`" + match + "`). Context:\n`" + extractedContext + "`";
+                }
+            }
+
+            boolean sstiHit = false;
+            if (mutation.type().equals("STRING_SSTI") && mutation.value() instanceof String sstiPayload) {
+                String evaluated = SSTI_EXPECTED.get(sstiPayload);
+                if (evaluated != null && bodyStr.contains(evaluated) && !baselineBodyLower.contains(evaluated.toLowerCase())) {
+                    sstiHit = true;
+                    isInjectionFinding = true;
+                    extractedContext = extractContext(bodyStr, evaluated, 60);
+                    injectionDesc = "Server-Side Template Injection: payload `" + sstiPayload + "` was evaluated to `" + evaluated
+                            + "` rather than merely reflected. Context:\n`" + extractedContext + "`";
+                }
+            }
+
+            boolean ssrfHeuristicHit = false;
+            if (mutation.type().equals("STRING_SSRF_HEURISTIC")) {
+                String match = firstMatch(bodyStrLower, SSRF_SIGNATURES);
+                if (match != null && !baselineBodyLower.contains(match)) {
+                    ssrfHeuristicHit = true;
+                    isInjectionFinding = true;
+                    injectionSeverity = Severity.CRITICAL;
+                    extractedContext = extractContext(bodyStr, match, 60);
+                    injectionDesc = "SSRF suspected: response to an internal-target payload (`" + mutation.value() + "`) contains `" + match
+                            + "`, suggesting the request reached an internal service. Context:\n`" + extractedContext + "`";
+                }
+            }
+
+            // Single-identity heuristic: confirms the endpoint accepts a neighboring ID with a
+            // similarly-shaped 2xx response, not that it actually leaked another user's data —
+            // this session has only one auth context to test with, so it can't confirm
+            // cross-tenant access on its own. Flagged for manual verification with a second account.
+            boolean idorHit = false;
+            if (mutation.type().equals("IDOR_ADJACENT_ID") && status >= 200 && status <= 299) {
+                double idorDiffRatio = baselineLength <= 0 ? 1.0 : Math.abs(length - baselineLength) / (double) baselineLength;
+                if (idorDiffRatio < 0.5) {
+                    idorHit = true;
+                    isInjectionFinding = true;
+                    injectionSeverity = Severity.HIGH;
+                    injectionDesc = "Possible IDOR: swapping `" + mutation.path() + "` to a neighboring ID (`" + mutation.value() + "`) still returned HTTP "
+                            + status + " with a similarly-shaped response (" + length + " bytes vs baseline " + baselineLength + " bytes). This only "
+                            + "confirms the endpoint didn't reject the different ID — verify manually with a second account/session that it actually "
+                            + "returns a different resource's data before treating this as confirmed.";
+                }
+            }
+
             // Weaker signal than a confirmed time delay or reflection — tiered to MEDIUM below.
             // Reuses VerboseErrorDetector (already imported, centralized in 763efe4) instead of a
             // second, weaker hardcoded signature list — same class the drift check below leans on.
@@ -488,7 +570,116 @@ public final class ParamValidatorModule implements IcarusModule {
                 .build());
         }
 
+        findings.addAll(correlateSsrfInteractions(collaboratorClient, ssrfPayloadsByField, mutations, responses, config, logger));
+
         return findings;
+    }
+
+    /**
+     * Out-of-band SSRF confirmation: a Collaborator interaction is proof the target actually
+     * made an outbound request to a payload only this scan knows about — the highest-confidence
+     * signal in this whole module, unlike every response-content heuristic above which can only
+     * ever be circumstantial. Interactions can arrive with some delay after the triggering
+     * request, so this waits once (not per-payload) before polling, rather than racing the check
+     * against requests still in flight to Collaborator's infrastructure.
+     */
+    private List<Finding> correlateSsrfInteractions(CollaboratorClient client, Map<String, CollaboratorPayload> payloadsByField,
+                                                      List<Mutation> mutations, List<HttpRequestResponse> responses,
+                                                      ModuleConfig config, Consumer<String> logger) {
+        if (client == null || payloadsByField.isEmpty()) return List.of();
+
+        int waitMs = config.getInt("pv.ssrf_collaborator_wait_ms", 5000);
+        logger.accept("Waiting " + waitMs + "ms for Collaborator interactions before checking for out-of-band SSRF...");
+        try {
+            Thread.sleep(waitMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return List.of();
+        }
+
+        List<Interaction> interactions;
+        try {
+            interactions = client.getAllInteractions();
+        } catch (Exception e) {
+            logger.accept("Collaborator interaction poll failed: " + e.getMessage());
+            return List.of();
+        }
+        if (interactions.isEmpty()) return List.of();
+
+        List<Finding> findings = new ArrayList<>();
+        for (var entry : payloadsByField.entrySet()) {
+            String path = entry.getKey();
+            String payloadId = entry.getValue().id().toString();
+
+            for (Interaction interaction : interactions) {
+                if (!interaction.id().toString().equals(payloadId)) continue;
+
+                int mutationIndex = -1;
+                for (int i = 0; i < mutations.size(); i++) {
+                    if (mutations.get(i).path().equals(path) && mutations.get(i).type().equals("STRING_SSRF_OOB")) {
+                        mutationIndex = i;
+                        break;
+                    }
+                }
+                if (mutationIndex < 0 || mutationIndex >= responses.size() || responses.get(mutationIndex) == null) continue;
+                HttpRequestResponse evidence = responses.get(mutationIndex);
+
+                findings.add(Finding.builder(name(), "STRING_SSRF")
+                        .description("Server-Side Request Forgery confirmed on parameter `" + path + "` — the target made an out-of-band "
+                                + interaction.type() + " request to a Collaborator payload embedded only in this scan's request, proving it "
+                                + "followed the injected URL server-side.")
+                        .severity(Severity.CRITICAL)
+                        .category(Category.INJECTION)
+                        .path(path)
+                        .evidence(evidence)
+                        .meta("interactionType", interaction.type().name())
+                        .build());
+                logger.accept("[FINDING] " + shortPath(path) + " → STRING_SSRF (confirmed via Collaborator " + interaction.type() + ")");
+                break;
+            }
+        }
+        return findings;
+    }
+
+    /**
+     * SSRF and IDOR mutations need the field's name/path (to target ID-shaped fields, and to key
+     * SSRF's Collaborator payload map for later correlation) that {@link SpecsFactory#specsFor}
+     * doesn't have — generated here instead of through its pure value-only dispatch.
+     */
+    private List<MutationSpec> contextualSpecs(String pathString, Object leafValue, ModuleConfig config,
+                                                CollaboratorClient collaboratorClient, Map<String, CollaboratorPayload> ssrfPayloadsByField) {
+        List<MutationSpec> specs = new ArrayList<>();
+
+        if (config.getBool("pv.ssrf", true) && leafValue instanceof String) {
+            if (collaboratorClient != null) {
+                CollaboratorPayload payload = collaboratorClient.generatePayload();
+                specs.add(new MutationSpec("STRING_SSRF_OOB", "SSRF out-of-band payload", "http://" + payload + "/", false, Category.INJECTION));
+                ssrfPayloadsByField.put(pathString, payload);
+            } else {
+                for (String target : config.getString("pv.payload_ssrf_heuristic",
+                        "http://169.254.169.254/latest/meta-data/\nhttp://169.254.169.254/computeMetadata/v1/\nhttp://127.0.0.1/\nhttp://localhost/").split("\n")) {
+                    specs.add(new MutationSpec("STRING_SSRF_HEURISTIC", "SSRF internal-target payload", target, false, Category.INJECTION));
+                }
+            }
+        }
+
+        if (config.getBool("pv.idor", true) && pathString != null && pathString.matches("(?i).*\\b(id|uuid|guid)s?\\b.*")) {
+            if (leafValue instanceof Long l) {
+                specs.add(new MutationSpec("IDOR_ADJACENT_ID", "Adjacent numeric resource ID", l + 1, false, Category.ACCESS_CONTROL));
+            } else if (leafValue instanceof RawNumber rn && rn.isInteger()) {
+                try {
+                    specs.add(new MutationSpec("IDOR_ADJACENT_ID", "Adjacent numeric resource ID", Long.parseLong(rn.value()) + 1, false, Category.ACCESS_CONTROL));
+                } catch (NumberFormatException ignored) {
+                    // Not actually a plain integer literal despite isInteger() — leave the field alone rather than guess.
+                }
+            } else if (leafValue instanceof String s && s.matches("[0-9a-fA-F-]{8,36}")) {
+                // UUID/opaque-id-shaped string: probe a fixed, plausible alternate id rather than
+                // guessing a structure we can't safely mutate.
+                specs.add(new MutationSpec("IDOR_ADJACENT_ID", "Alternate resource ID", "00000000-0000-0000-0000-000000000001", false, Category.ACCESS_CONTROL));
+            }
+        }
+
+        return specs;
     }
 
     /** Parses a Retry-After header (either delay-seconds or an HTTP-date) into milliseconds, or -1 if absent/unparseable. */
@@ -505,6 +696,33 @@ public final class ParamValidatorModule implements IcarusModule {
                 return -1;
             }
         }
+    }
+
+    // Command-output signatures for common *nix/Windows commands used in the STRING_CMDI
+    // payloads above (`id`, `whoami`) — kept short and specific rather than exhaustive, to
+    // avoid false positives on legitimate response content.
+    private static final List<String> CMDI_SIGNATURES = List.of(
+            "uid=", "gid=", "groups=", "root:x:0:0", "www-data",
+            "volume serial number", "directory of ");
+
+    // Cloud metadata endpoint response fields — reaching these (via the STRING_SSRF_HEURISTIC
+    // payloads above) is a strong signal the server followed the URL into an internal network,
+    // not just that it echoed the payload back.
+    private static final List<String> SSRF_SIGNATURES = List.of(
+            "ami-id", "instance-id", "iam/security-credentials", "computemetadata", "instance/service-accounts");
+
+    // Only covers the default STRING_SSTI payloads (see SpecsFactory) — a custom pv.payload_ssti
+    // value won't have a known expected result to check against, so SSTI detection silently
+    // skips it rather than guessing what evaluation would look like.
+    private static final Map<String, String> SSTI_EXPECTED = Map.of(
+            "${7*7}", "49", "{{7*7}}", "49", "#{7*7}", "49", "<%= 7*7 %>", "49");
+
+    /** First signature (already lowercase) present in {@code bodyLower}, or null if none match. */
+    private static String firstMatch(String bodyLower, List<String> signatures) {
+        for (String sig : signatures) {
+            if (bodyLower.contains(sig)) return sig;
+        }
+        return null;
     }
 
     private static String shortPath(String path) {
@@ -594,6 +812,16 @@ public final class ParamValidatorModule implements IcarusModule {
                     }
                     if (config.getBool("pv.unicode", true)) {
                         specs.add(new MutationSpec("STRING_UNICODE", "Payload unicode / RTL override", config.getString("pv.payload_unicode", "‮test😀"), false, Category.INJECTION));
+                    }
+                    if (config.getBool("pv.cmdi", true)) {
+                        for (String payload : config.getString("pv.payload_cmdi", "; id\n| whoami\n`id`\n$(id)").split("\n")) {
+                            specs.add(new MutationSpec("STRING_CMDI", "Command Injection payload", payload, false, Category.INJECTION));
+                        }
+                    }
+                    if (config.getBool("pv.ssti", true)) {
+                        for (String payload : config.getString("pv.payload_ssti", "${7*7}\n{{7*7}}\n#{7*7}\n<%= 7*7 %>").split("\n")) {
+                            specs.add(new MutationSpec("STRING_SSTI", "Server-Side Template Injection payload", payload, false, Category.INJECTION));
+                        }
                     }
                 }
                 if (testTypeConfusion) {

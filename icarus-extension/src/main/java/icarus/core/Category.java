@@ -17,5 +17,6 @@ public enum Category {
     RATE_LIMIT,
     SERVER_ERROR,
     INFORMATION_DISCLOSURE,
+    ACCESS_CONTROL,
     MANUAL
 }

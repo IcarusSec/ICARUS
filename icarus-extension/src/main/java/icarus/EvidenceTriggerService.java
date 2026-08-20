@@ -43,7 +43,7 @@ public class EvidenceTriggerService {
     }
 
     public void captureEvidence(Finding finding, BufferedImage image, String caption) throws IOException {
-        Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
+        Path dir = EvidencePaths.evidenceImageDir(api, config);
         Files.createDirectories(dir);
         String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_")
                 + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".png";

@@ -258,7 +258,7 @@ public final class EvidenceCapture {
      */
     void saveAndRegisterEvidence(Finding finding, BufferedImage image) {
         try {
-            Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
+            Path dir = EvidencePaths.evidenceImageDir(api, config);
             Files.createDirectories(dir);
             String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_") + "-" + System.currentTimeMillis() + ".png";
             Path out = dir.resolve(filename);

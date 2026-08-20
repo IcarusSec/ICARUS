@@ -28,6 +28,24 @@ public final class EvidencePaths {
     }
 
     /**
+     * Where screenshot PNGs should actually be written — always a dedicated "icarus-evidence"
+     * subfolder, never {@link #defaultOutputDir} bare. {@code evidence.output_dir} is shared
+     * with the report/project-state save dialogs, which repoint it at wherever the user last
+     * saved a report (e.g. their Desktop) via {@code ReportExportService}; writing screenshots
+     * straight into that folder would dump evidence PNGs alongside/into arbitrary user folders.
+     * Idempotent: the no-explicit-dir default already ends in "icarus-evidence", so this
+     * doesn't double-nest it.
+     */
+    public static Path evidenceImageDir(MontoyaApi api, ModuleConfig config) {
+        Path base = Path.of(defaultOutputDir(api, config));
+        Path fileName = base.getFileName();
+        if (fileName != null && fileName.toString().equals("icarus-evidence")) {
+            return base;
+        }
+        return base.resolve("icarus-evidence");
+    }
+
+    /**
      * Best-effort only: Montoya's {@code Project} API exposes just a name, not a filesystem
      * path, so this parses Burp's own launch command line (a real, documented Montoya API —
      * {@code BurpSuite#commandLineArguments()} — not internal reflection) for a

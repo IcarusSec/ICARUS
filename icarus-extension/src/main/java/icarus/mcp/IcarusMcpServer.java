@@ -364,10 +364,12 @@ public final class IcarusMcpServer {
                         "image_base64", Map.of("type", "string", "description", "Optional base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence. "
                                 + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
                                 + "no screenshot is required."),
-                        "request_text", Map.of("type", "string", "description", "Overrides the request text used when rendering (image_base64 omitted). "
-                                + "Defaults to the finding's actual captured request. Edit/redact this to control exactly what appears in the rendered evidence."),
-                        "response_text", Map.of("type", "string", "description", "Overrides the response text used when rendering (image_base64 omitted). "
-                                + "Defaults to the finding's actual captured response."),
+                        "request_text", Map.of("type", "string", "description", "Leave unset unless redaction is actually required — the default (the finding's real captured "
+                                + "request) is what a report needs. If you must set this, start from get_finding/get_evidence's request text and change only what's necessary "
+                                + "(e.g. blank out a session token's value in place); keep every header, Host, and line exactly as captured. Never omit headers or replace the "
+                                + "request with a summary — that destroys the evidentiary value of the capture."),
+                        "response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only — "
+                                + "keep all response headers (Server, Date, Content-Type, etc.) intact. Never summarize or shorten the response."),
                         "title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."),
                         "description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."),
                         "severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."),
@@ -382,9 +384,10 @@ public final class IcarusMcpServer {
         var tool = new McpSchema.Tool("capture_evidence",
                 "Capture and annotate ICARUS evidence",
                 "Attaches evidence to a finding for the report, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
-                        + "the headless equivalent of the Evidence Manager's annotation editor. Pass image_base64 to attach a screenshot you already have, or omit "
-                        + "it to have ICARUS render the evidence image itself from the finding's captured traffic (optionally overridden via request_text/response_text "
-                        + "for a fully autonomous, screenshot-free workflow). Call get_evidence first to re-annotate an existing screenshot.",
+                        + "the headless equivalent of the Evidence Manager's annotation editor. Pass image_base64 to attach a screenshot you already have, or omit it to "
+                        + "have ICARUS render the evidence image itself from the finding's real captured traffic — the normal, preferred path, with no screenshot needed. "
+                        + "Do not set request_text/response_text unless you specifically need to redact a value; leave them unset otherwise so the report shows the actual "
+                        + "capture, headers included. Call get_evidence first to re-annotate an existing screenshot.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {

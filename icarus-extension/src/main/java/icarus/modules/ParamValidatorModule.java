@@ -435,6 +435,22 @@ public final class ParamValidatorModule implements IcarusModule {
                 }
             }
 
+            // Boolean-based SQLi ('OR '1'='1') leaves no error string and no timing tell —
+            // the only signal is that the payload changed which rows came back. Every other
+            // injection class above has a dedicated hit check; STRING_SQLI previously had
+            // none and only ever got flagged by the opt-in "Behavioral Analysis" toggle
+            // (off by default), so a real boolean-based SQLi went unreported out of the box.
+            boolean booleanSqliHit = false;
+            if (mutation.type().equals("STRING_SQLI") && requireBaseline && status >= 200 && status <= 299) {
+                double sqliDiffRatio = baselineLength <= 0 ? 0 : Math.abs(length - baselineLength) / (double) baselineLength;
+                if (sqliDiffRatio > 0.20) {
+                    booleanSqliHit = true;
+                    isInjectionFinding = true;
+                    injectionDesc = "Boolean-based SQLi anomaly detected: payload `" + mutation.value() + "` returned a response that diverged from baseline ("
+                            + length + " bytes vs baseline " + baselineLength + " bytes), suggesting the injected condition changed which rows were returned.";
+                }
+            }
+
             // Weaker signal than a confirmed time delay or reflection — tiered to MEDIUM below.
             // Reuses VerboseErrorDetector (already imported, centralized in 763efe4) instead of a
             // second, weaker hardcoded signature list — same class the drift check below leans on.

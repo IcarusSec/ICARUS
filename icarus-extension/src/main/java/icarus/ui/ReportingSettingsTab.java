@@ -137,31 +137,22 @@ public class ReportingSettingsTab {
             syncingSelection[0] = false;
         });
 
-        JPanel sectionListButtons = new JPanel(new GridLayout(2, 3, 4, 4));
+        JPanel sectionListButtons = new JPanel(new GridLayout(1, 4, 4, 0));
         themeHelper.applyTheme(sectionListButtons);
         JButton btnAddSection = new JButton("Add");
-        JButton btnAddFindingsMarker = new JButton("Insert Findings Here");
         JButton btnRemoveSection = new JButton("Remove");
         JButton btnMoveUp = new JButton("Up");
         JButton btnMoveDown = new JButton("Down");
-        for (JButton b : List.of(btnAddSection, btnAddFindingsMarker, btnRemoveSection, btnMoveUp, btnMoveDown)) themeHelper.styleButton(b);
+        for (JButton b : List.of(btnAddSection, btnRemoveSection, btnMoveUp, btnMoveDown)) themeHelper.styleButton(b);
         btnAddSection.addActionListener(e -> {
             sectionModel.addElement(new ReportTemplateConfig.Section("New Section", ""));
             sectionList.setSelectedIndex(sectionModel.size() - 1);
         });
-        btnAddFindingsMarker.addActionListener(e -> {
-            for (int i = 0; i < sectionModel.size(); i++) {
-                if (sectionModel.get(i).title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
-                    sectionList.setSelectedIndex(i);
-                    return;
-                }
-            }
-            sectionModel.addElement(new ReportTemplateConfig.Section(ReportTemplateConfig.FINDINGS_MARKER, ""));
-            sectionList.setSelectedIndex(sectionModel.size() - 1);
-        });
         btnRemoveSection.addActionListener(e -> {
             int idx = sectionList.getSelectedIndex();
-            if (idx >= 0) sectionModel.remove(idx);
+            if (idx >= 0 && !sectionModel.get(idx).title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
+                sectionModel.remove(idx);
+            }
         });
         btnMoveUp.addActionListener(e -> {
             int idx = sectionList.getSelectedIndex();
@@ -180,7 +171,6 @@ public class ReportingSettingsTab {
             }
         });
         sectionListButtons.add(btnAddSection);
-        sectionListButtons.add(btnAddFindingsMarker);
         sectionListButtons.add(btnRemoveSection);
         sectionListButtons.add(btnMoveUp);
         sectionListButtons.add(btnMoveDown);

@@ -63,6 +63,7 @@ public final class ReportTemplateConfig {
         ReportTemplateConfig result = new ReportTemplateConfig();
         if (!(raw instanceof Map<?, ?> rawMap)) {
             result.retestStatuses = new ArrayList<>(List.of("Fixed", "Not Fixed"));
+            result.sections.add(new Section(FINDINGS_MARKER, ""));
             return result;
         }
         Map<String, Object> map = (Map<String, Object>) rawMap;
@@ -74,6 +75,9 @@ public final class ReportTemplateConfig {
         sorted.sort((a, b) -> Double.compare(numberOf(a.get("order")), numberOf(b.get("order"))));
         for (Map<String, Object> s : sorted) {
             sections.add(new Section(String.valueOf(s.getOrDefault("title", "")), String.valueOf(s.getOrDefault("content", ""))));
+        }
+        if (sections.stream().noneMatch(s -> s.title().equalsIgnoreCase(FINDINGS_MARKER))) {
+            sections.add(new Section(FINDINGS_MARKER, ""));
         }
         result.sections = sections;
 

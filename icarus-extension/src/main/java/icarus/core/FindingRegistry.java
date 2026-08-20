@@ -180,7 +180,7 @@ public final class FindingRegistry {
             case CRITICAL, HIGH -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.HIGH;
             case MEDIUM         -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.MEDIUM;
             case LOW            -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.LOW;
-            case INFO           -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.INFORMATION;
+            case INFO, FIXED, NOT_FIXED -> burp.api.montoya.scanner.audit.issues.AuditIssueSeverity.INFORMATION;
         };
     }
 

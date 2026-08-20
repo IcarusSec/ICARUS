@@ -8,5 +8,8 @@ public enum Severity {
     HIGH,
     MEDIUM,
     LOW,
-    INFO
+    INFO,
+    /** Retest outcome, not a real severity — set via the Evidence Editor's "Retest" checkbox. */
+    FIXED,
+    NOT_FIXED
 }

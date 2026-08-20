@@ -156,6 +156,8 @@ public final class ReportGenerator {
                         --medium: #b38f00;
                         --low: #2f7a77;
                         --info: #6e6e6e;
+                        --fixed: #2f9e44;
+                        --not-fixed: #cc2e2e;
                     }
                     body {
                         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -222,6 +224,8 @@ public final class ReportGenerator {
                     .badge.MEDIUM { background-color: var(--medium); }
                     .badge.LOW { background-color: var(--low); }
                     .badge.INFO { background-color: var(--info); }
+                    .badge.FIXED { background-color: var(--fixed); }
+                    .badge.NOT_FIXED { background-color: var(--not-fixed); }
 
                     .finding-body { padding: 1.5rem; }
                     .meta-table {

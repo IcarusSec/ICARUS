@@ -51,6 +51,8 @@ public final class PdfReportGenerator {
     private static final Color MEDIUM   = new Color(0xb3, 0x8f, 0x00);
     private static final Color LOW      = new Color(0x2f, 0x7a, 0x77);
     private static final Color INFO     = new Color(0x6e, 0x6e, 0x6e);
+    private static final Color FIXED     = new Color(0x2f, 0x9e, 0x44);
+    private static final Color NOT_FIXED = new Color(0xcc, 0x2e, 0x2e);
     private static final Color ACCENT   = new Color(0x3e, 0x7b, 0xb8);
     private static final Color BORDER   = new Color(0xdd, 0xdd, 0xdd);
     private static final Color CARD_BG  = new Color(0xf7, 0xf7, 0xf7);
@@ -377,6 +379,8 @@ public final class PdfReportGenerator {
             case "HIGH" -> HIGH;
             case "MEDIUM" -> MEDIUM;
             case "LOW" -> LOW;
+            case "FIXED" -> FIXED;
+            case "NOT_FIXED" -> NOT_FIXED;
             default -> INFO;
         };
     }

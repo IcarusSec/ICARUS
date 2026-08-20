@@ -20,6 +20,7 @@ import icarus.evidence.EvidenceCapture;
 import icarus.evidence.EvidenceAnnotator;
 import icarus.evidence.EvidenceImageRenderer;
 import icarus.evidence.RateLimitTableRenderer;
+import icarus.modules.ParamValidatorModule;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -112,7 +113,8 @@ public final class IcarusMcpServer {
                             getEvidenceTool(), captureEvidenceTool(),
                             listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                             moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
-                            getReportConfigTool(), updateReportConfigTool())
+                            getReportConfigTool(), updateReportConfigTool(),
+                            validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool())
                     .build();
 
             port = transportProvider.start(requestedPort);
@@ -763,5 +765,332 @@ public final class IcarusMcpServer {
             f.put("suppressed", record.isSuppressed());
         }
         return f;
+    }
+
+    // ── Stage 2: validation, exploitation confirmation, attack-chain correlation ──
+
+    /** Finding types validate_finding/exploit_finding can actually re-check — all from
+     *  ParamValidatorModule's real detection primitives (Stage 1). Everything else returns the
+     *  fresh response for manual review rather than a fabricated verdict. */
+    private static final List<String> RECHECKABLE_TYPES = List.of(
+            "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID");
+
+    private record RecheckResult(Boolean reproduced, String note, HttpRequestResponse fresh) {}
+
+    /**
+     * Re-sends {@code finding}'s exact captured request live and re-runs the same detection
+     * primitive that originally flagged it (shared with {@link ParamValidatorModule} via its
+     * public signature constants — not a second hand-copied check that could drift from the
+     * original). {@code reproduced} is {@code null} whenever there's no reliable way to answer
+     * true/false rather than guessing.
+     */
+    private RecheckResult recheckFinding(Finding finding) {
+        if (finding.evidence() == null) {
+            return new RecheckResult(null, "This finding has no captured request to resend.", null);
+        }
+        long start = System.currentTimeMillis();
+        HttpRequestResponse fresh;
+        try {
+            fresh = api.http().sendRequest(finding.evidence().request());
+        } catch (Exception e) {
+            return new RecheckResult(null, "Resend failed: " + e.getMessage(), null);
+        }
+        long elapsedMs = System.currentTimeMillis() - start;
+        if (fresh == null || fresh.response() == null) {
+            return new RecheckResult(null, "No response received on resend.", fresh);
+        }
+
+        String bodyStr = fresh.response().bodyToString();
+        String bodyLower = bodyStr.toLowerCase();
+        String payload = finding.metadata().get("payload");
+
+        return switch (finding.type()) {
+            case "STRING_XSS" -> {
+                boolean hit = payload != null && bodyStr.contains(payload);
+                yield new RecheckResult(hit, hit ? "Payload still reflected." : "Payload no longer reflected in the response.", fresh);
+            }
+            case "STRING_CMDI" -> {
+                String match = ParamValidatorModule.firstMatch(bodyLower, ParamValidatorModule.CMDI_SIGNATURES);
+                yield new RecheckResult(match != null,
+                        match != null ? "Command-output signature still present ('" + match + "')." : "No command-output signature found.", fresh);
+            }
+            case "STRING_SSTI" -> {
+                String evaluated = payload != null ? ParamValidatorModule.SSTI_EXPECTED.get(payload) : null;
+                boolean hit = evaluated != null && bodyStr.contains(evaluated);
+                yield new RecheckResult(hit,
+                        hit ? "Payload still evaluates to '" + evaluated + "'." : "Payload no longer evaluates — may just no longer reflect/execute.", fresh);
+            }
+            case "STRING_SSRF_HEURISTIC" -> {
+                String match = ParamValidatorModule.firstMatch(bodyLower, ParamValidatorModule.SSRF_SIGNATURES);
+                yield new RecheckResult(match != null,
+                        match != null ? "Metadata/internal-service signature still present ('" + match + "')." : "No such signature found.", fresh);
+            }
+            case "STRING_SSRF" -> new RecheckResult(null,
+                    "This was confirmed via a one-time Burp Collaborator payload — it can't be replayed to reconfirm. Re-run a fresh ParamValidator "
+                            + "scan against this endpoint for a new out-of-band confirmation.", fresh);
+            case "STRING_SQLI_TIME" -> {
+                int threshold = orchestrator.getConfig().getInt("pv.payload_sqli_time_delay_ms", 10000);
+                boolean hit = elapsedMs >= threshold;
+                yield new RecheckResult(hit,
+                        hit ? "Still delays " + elapsedMs + "ms (>= " + threshold + "ms threshold)."
+                            : "Only delayed " + elapsedMs + "ms (< " + threshold + "ms threshold) — may no longer be vulnerable.", fresh);
+            }
+            case "IDOR_ADJACENT_ID" -> {
+                int status = fresh.response().statusCode();
+                boolean ok = status >= 200 && status <= 299;
+                yield new RecheckResult(ok,
+                        ok ? "Still returns HTTP " + status + " for the neighboring ID (single-identity check — doesn't confirm data leakage)."
+                           : "Now returns HTTP " + status + " — may have been fixed.", fresh);
+            }
+            default -> new RecheckResult(null,
+                    "No automated re-check exists for finding type '" + finding.type() + "'. The request was resent; review the fresh response manually.", fresh);
+        };
+    }
+
+    /** Rebuilds {@code finding} with {@code extra} merged into its metadata, keeping every other
+     *  field (including module/type/path, so it lands on the same similarityHash and updates the
+     *  existing FindingRecord rather than creating a duplicate). */
+    private static Finding withMeta(Finding finding, Map<String, String> extra) {
+        Finding.Builder builder = Finding.builder(finding.module(), finding.type())
+                .description(finding.description())
+                .severity(finding.severity())
+                .category(finding.category())
+                .path(finding.path())
+                .evidence(finding.evidence());
+        finding.metadata().forEach(builder::meta);
+        extra.forEach(builder::meta);
+        finding.cweIds().forEach(builder::cwe);
+        return builder.build();
+    }
+
+    private McpServerFeatures.SyncToolSpecification validateFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("validate_finding",
+                "Re-check an ICARUS finding",
+                "Re-sends the finding's exact captured request live and checks whether the same signal that originally flagged it still reproduces. "
+                        + "Read-only — no new payloads beyond what's already in the finding's evidence, no approval needed, safe to run unattended (e.g. "
+                        + "in a CI/CD pipeline). Only " + RECHECKABLE_TYPES + " get a definite reproduced=true/false; every other finding type returns the "
+                        + "fresh response with reproduced=null for manual review, since there's no shared re-check primitive for those modules to reuse "
+                        + "rather than a guessed one. Updates the finding's lastValidated metadata either way.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            RecheckResult result = recheckFinding(finding);
+
+            Map<String, String> extraMeta = new LinkedHashMap<>();
+            extraMeta.put("lastValidated", java.time.Instant.now().toString());
+            if (result.reproduced() != null) extraMeta.put("lastValidatedResult", result.reproduced() ? "reproduced" : "not_reproduced");
+            orchestrator.updateFinding(withMeta(finding, extraMeta));
+
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("hash", hash);
+            out.put("reproduced", result.reproduced());
+            out.put("note", result.note());
+            if (result.fresh() != null && result.fresh().response() != null) {
+                out.put("freshStatus", result.fresh().response().statusCode());
+                out.put("freshLength", result.fresh().response().body().length());
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification exploitFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("exploit_finding",
+                "Attempt exploitation confirmation of an ICARUS finding (requires human approval)",
+                "Re-sends the finding's exact captured payload live to confirm the same signal still fires. Unlike validate_finding, this ALWAYS blocks on "
+                        + "a Swing approval dialog on the analyst's screen inside Burp, showing exactly what request is about to be sent, before sending "
+                        + "anything — it does not run unattended, and will not work called from an unattended CI/CD job since there's no one there to "
+                        + "click Approve. Only supports " + RECHECKABLE_TYPES + " (ParamValidator's real detectors) — there is no generic multi-vulnerability-"
+                        + "class exploitation engine; any other finding type returns a 'not supported' error rather than a fabricated result. "
+                        + "STRING_SSRF (Collaborator-confirmed) payloads are single-use and can't be meaningfully replayed.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            if (!RECHECKABLE_TYPES.contains(finding.type())) {
+                return McpSchema.CallToolResult.builder().addTextContent(
+                        "exploit_finding does not support finding type '" + finding.type() + "' — no real exploitation-confirmation logic exists for it. "
+                                + "Supported types: " + RECHECKABLE_TYPES).isError(true).build();
+            }
+            if (finding.evidence() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("This finding has no captured request to resend.").isError(true).build();
+            }
+
+            var req = finding.evidence().request();
+            String payload = finding.metadata().get("payload");
+            String details = "ICARUS wants to resend this request to attempt exploitation confirmation:\n\n"
+                    + "Finding: " + finding.type() + " on " + finding.path() + "\n"
+                    + req.method() + " " + req.path() + "\n"
+                    + "Host: " + req.headerValue("Host") + "\n"
+                    + (payload != null ? "Payload: " + payload + "\n" : "")
+                    + "\nApprove sending this request?";
+            if (!HumanApprovalGate.requestApproval(api, "exploit_finding: " + finding.type(), details)) {
+                return McpSchema.CallToolResult.builder().addTextContent("Denied by analyst — no request was sent.").isError(true).build();
+            }
+
+            RecheckResult result = recheckFinding(finding);
+
+            Map<String, String> extraMeta = new LinkedHashMap<>();
+            extraMeta.put("exploitedAt", java.time.Instant.now().toString());
+            extraMeta.put("exploitConfirmed", String.valueOf(Boolean.TRUE.equals(result.reproduced())));
+            orchestrator.updateFinding(withMeta(finding, extraMeta));
+
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("hash", hash);
+            out.put("exploited", result.reproduced());
+            out.put("note", result.note());
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
+        });
+    }
+
+    /** Rule-based, read-only correlation over findings ICARUS actually produced — no graph
+     *  engine, no invented probability scores. A pattern only ever surfaces when every required
+     *  finding type is genuinely present on the same path; most of the "classic" chain patterns
+     *  from security literature need a detector ICARUS doesn't have (open-redirect, CORS
+     *  misconfiguration, MFA absence, admin-endpoint identification) and are deliberately not
+     *  listed here rather than defined to silently never match. */
+    private record ChainPattern(String name, List<String> requiredTypes, String finalImpact, Severity combinedSeverity, String remediation) {}
+
+    private static final List<ChainPattern> CHAIN_PATTERNS = List.of(
+            new ChainPattern("XSS + Missing CSP", List.of("STRING_XSS", "MISSING_CSP"),
+                    "Cookie theft / account takeover via reflected XSS with no CSP to contain it", Severity.CRITICAL,
+                    "Fix the reflected XSS first (output-encode the parameter); add a Content-Security-Policy as defense-in-depth so a future XSS can't exfiltrate cookies."),
+            new ChainPattern("XSS + Weak Cookie (no HttpOnly)", List.of("STRING_XSS", "COOKIE_MISSING_HTTPONLY"),
+                    "Session hijacking via XSS reading the session cookie directly", Severity.HIGH,
+                    "Fix the reflected XSS first; set HttpOnly on session cookies so script can't read them even if XSS recurs."),
+            new ChainPattern("XSS + Weak Cookie (no Secure)", List.of("STRING_XSS", "COOKIE_MISSING_SECURE"),
+                    "Session hijacking over unencrypted traffic combined with XSS", Severity.HIGH,
+                    "Fix the reflected XSS first; set the Secure flag on session cookies."));
+
+    private List<Map<String, Object>> computeAttackChains(String pathFilter) {
+        Map<String, List<FindingRecord>> byPath = new LinkedHashMap<>();
+        for (FindingRecord r : orchestrator.getAllFindingRecords()) {
+            if (r.isSuppressed()) continue;
+            if (pathFilter != null && !r.getFinding().path().equals(pathFilter)) continue;
+            byPath.computeIfAbsent(r.getFinding().path(), k -> new ArrayList<>()).add(r);
+        }
+
+        List<Map<String, Object>> chains = new ArrayList<>();
+        for (var entry : byPath.entrySet()) {
+            String path = entry.getKey();
+            List<FindingRecord> records = entry.getValue();
+            for (ChainPattern pattern : CHAIN_PATTERNS) {
+                List<FindingRecord> steps = new ArrayList<>();
+                boolean allPresent = true;
+                for (String requiredType : pattern.requiredTypes()) {
+                    FindingRecord match = records.stream().filter(r -> r.getFinding().type().equals(requiredType)).findFirst().orElse(null);
+                    if (match == null) { allPresent = false; break; }
+                    steps.add(match);
+                }
+                if (!allPresent) continue;
+
+                List<Object> stepMaps = new ArrayList<>();
+                for (FindingRecord r : steps) {
+                    stepMaps.add(Map.of(
+                            "hash", r.getFinding().similarityHash(),
+                            "type", r.getFinding().type(),
+                            "severity", r.getFinding().severity().name(),
+                            "recheckable", RECHECKABLE_TYPES.contains(r.getFinding().type())));
+                }
+
+                Map<String, Object> chain = new LinkedHashMap<>();
+                chain.put("chainId", pattern.name() + "::" + path);
+                chain.put("pattern", pattern.name());
+                chain.put("path", path);
+                chain.put("steps", stepMaps);
+                chain.put("finalImpact", pattern.finalImpact());
+                chain.put("combinedSeverity", pattern.combinedSeverity().name());
+                chain.put("remediation", pattern.remediation());
+                chains.add(chain);
+            }
+        }
+        return chains;
+    }
+
+    private McpServerFeatures.SyncToolSpecification findAttackChainsTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("path", Map.of("type", "string", "description", "Optional — restrict correlation to findings on this exact path (ICARUS scans one endpoint at a time, so this is usually the endpoint just tested)")),
+                List.of(), false, null, null);
+        var tool = new McpSchema.Tool("find_attack_chains",
+                "Correlate ICARUS findings into known dangerous combinations",
+                "Advisory, read-only: looks for pairs of findings on the same path that combine into a worse risk than either alone (e.g. reflected XSS "
+                        + "plus a missing Content-Security-Policy). Only fires when every finding a pattern needs was actually produced by ICARUS — no "
+                        + "invented data, no execution. Patterns needing a detector ICARUS doesn't have (open redirect, CORS misconfiguration, MFA absence) "
+                        + "aren't listed, so they simply never appear rather than silently never matching. Each returned chain has a chainId usable with "
+                        + "simulate_attack_chain.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String pathFilter = request.arguments().get("path") instanceof String s && !s.isBlank() ? s : null;
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(computeAttackChains(pathFilter))).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification simulateAttackChainTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("chain_id", Map.of("type", "string", "description", "A chainId returned by find_attack_chains")),
+                List.of("chain_id"), false, null, null);
+        var tool = new McpSchema.Tool("simulate_attack_chain",
+                "Dry-run an attack chain's execution plan",
+                "Re-derives the chain fresh (findings may have changed since find_attack_chains ran) and, if it still matches, returns the ordered list of "
+                        + "exploit_finding calls that would be needed to actually work through it — no invented success-probability or risk-score numbers, "
+                        + "since nothing in this codebase backs a statistic like that. This tool never sends a request; actual execution means calling "
+                        + "exploit_finding yourself for each step's hash, in order, each one gated by its own human-approval dialog.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String chainId = (String) request.arguments().get("chain_id");
+            int sep = chainId.indexOf("::");
+            if (sep < 0) {
+                return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::path').").isError(true).build();
+            }
+            String path = chainId.substring(sep + 2);
+
+            for (Map<String, Object> chain : computeAttackChains(path)) {
+                if (!chainId.equals(chain.get("chainId"))) continue;
+
+                @SuppressWarnings("unchecked")
+                List<Object> steps = (List<Object>) chain.get("steps");
+                List<Object> plan = new ArrayList<>();
+                int order = 1;
+                for (Object stepObj : steps) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> step = (Map<String, Object>) stepObj;
+                    Map<String, Object> planStep = new LinkedHashMap<>(step);
+                    planStep.put("order", order++);
+                    planStep.put("nextAction", Boolean.TRUE.equals(step.get("recheckable"))
+                            ? "call exploit_finding with hash=" + step.get("hash")
+                            : "no automated exploitation-confirmation exists for this type — review manually");
+                    plan.add(planStep);
+                }
+
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("chainId", chainId);
+                out.put("stillValid", true);
+                out.put("finalImpact", chain.get("finalImpact"));
+                out.put("combinedSeverity", chain.get("combinedSeverity"));
+                out.put("executionPlan", plan);
+                out.put("note", "Dry-run only — nothing was sent. Call exploit_finding yourself for each step above to actually execute it.");
+                return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
+            }
+
+            return McpSchema.CallToolResult.builder().addTextContent(
+                    "Chain '" + chainId + "' no longer matches — its findings may have been fixed, suppressed, or re-hashed since find_attack_chains ran. "
+                            + "Call find_attack_chains again for the current state.").isError(true).build();
+        });
     }
 }

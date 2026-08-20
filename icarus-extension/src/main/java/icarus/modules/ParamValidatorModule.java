@@ -489,6 +489,7 @@ public final class ParamValidatorModule implements IcarusModule {
                         .meta("length", String.valueOf(length))
                         .meta("responseTime", String.valueOf(responseTime))
                         .meta("context", extractedContext)
+                        .meta("payload", String.valueOf(mutation.value()))
                         .build());
                 logger.accept("[FINDING] " + shortPath(mutation.path()) + " → " + mutation.type() + " (HTTP " + status + ")");
                 continue; // Skip adding to the grouped validation bucket
@@ -700,25 +701,27 @@ public final class ParamValidatorModule implements IcarusModule {
 
     // Command-output signatures for common *nix/Windows commands used in the STRING_CMDI
     // payloads above (`id`, `whoami`) — kept short and specific rather than exhaustive, to
-    // avoid false positives on legitimate response content.
-    private static final List<String> CMDI_SIGNATURES = List.of(
+    // avoid false positives on legitimate response content. Public: reused as-is by
+    // IcarusMcpServer's validate_finding/exploit_finding so a re-check runs the exact same
+    // signature logic as the original detection, not a second hand-copied list that could drift.
+    public static final List<String> CMDI_SIGNATURES = List.of(
             "uid=", "gid=", "groups=", "root:x:0:0", "www-data",
             "volume serial number", "directory of ");
 
     // Cloud metadata endpoint response fields — reaching these (via the STRING_SSRF_HEURISTIC
     // payloads above) is a strong signal the server followed the URL into an internal network,
     // not just that it echoed the payload back.
-    private static final List<String> SSRF_SIGNATURES = List.of(
+    public static final List<String> SSRF_SIGNATURES = List.of(
             "ami-id", "instance-id", "iam/security-credentials", "computemetadata", "instance/service-accounts");
 
     // Only covers the default STRING_SSTI payloads (see SpecsFactory) — a custom pv.payload_ssti
     // value won't have a known expected result to check against, so SSTI detection silently
     // skips it rather than guessing what evaluation would look like.
-    private static final Map<String, String> SSTI_EXPECTED = Map.of(
+    public static final Map<String, String> SSTI_EXPECTED = Map.of(
             "${7*7}", "49", "{{7*7}}", "49", "#{7*7}", "49", "<%= 7*7 %>", "49");
 
     /** First signature (already lowercase) present in {@code bodyLower}, or null if none match. */
-    private static String firstMatch(String bodyLower, List<String> signatures) {
+    public static String firstMatch(String bodyLower, List<String> signatures) {
         for (String sig : signatures) {
             if (bodyLower.contains(sig)) return sig;
         }

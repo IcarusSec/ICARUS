@@ -73,6 +73,49 @@ public final class IcarusMcpServer {
     private McpSyncServer server;
     private int port = -1;
 
+    /**
+     * Server-level guidance sent to every connected client — grounded in exactly what's
+     * implemented below, not aspirational. Written to stop the two failure modes actually
+     * observed in practice: an agent supplying image_base64/request_text when it didn't need to
+     * (destroying evidentiary value), and guessing pixel coordinates for text whose position
+     * can't be known ahead of render time.
+     */
+    private static final String MCP_INSTRUCTIONS = """
+            You're connected to ICARUS, a Burp Suite extension. Every tool here reflects a real \
+            capability — there is no generic multi-vulnerability exploitation engine behind this \
+            server, so don't assume one exists for a vuln class you don't see a tool/finding type for.
+
+            FINDINGS: list_findings / get_finding / get_reportable_findings / get_passive_findings \
+            return what ICARUS's modules already detected. suppress_finding false positives before \
+            generate_report — it includes every non-suppressed finding by default.
+
+            EVIDENCE: capture_evidence renders its own image from the finding's real captured \
+            traffic — omit image_base64 (the normal path) rather than trying to supply a screenshot \
+            yourself. Leave request_text/response_text unset unless you specifically need to redact \
+            one value in place; never rewrite or summarize the captured traffic, that destroys what \
+            the report needs to show. For annotations, prefer "anchor" over guessed x/y/width/height \
+            whenever the tool's response lists one available — dynamically positioned text (e.g. a \
+            rate-limit RPS badge) has pixel coordinates you cannot predict from outside the renderer.
+
+            VALIDATION — read-only, no approval needed, safe to call unattended (e.g. in CI/CD): \
+            validate_finding re-sends a finding's captured request and re-checks whether the same \
+            signal still fires. Only gives a real true/false for ParamValidator's own detectors \
+            (XSS reflection, CMDi/SSTI signatures, SSRF, time-based SQLi, IDOR-adjacent-ID); every \
+            other type returns the fresh response for manual review, not a guess. find_attack_chains \
+            / simulate_attack_chain correlate findings ICARUS already produced into known-dangerous \
+            combinations — advisory only, no execution, no invented probability/risk numbers.
+
+            EXPLOITATION — requires a human at the keyboard, do not call from an unattended pipeline: \
+            exploit_finding ALWAYS blocks on a Swing approval dialog inside Burp before sending \
+            anything; it will be denied or hang with no one there to click Approve. It only supports \
+            the same finding types validate_finding does — for anything else it returns an explicit \
+            "not supported" error rather than attempting something it can't back. To act on a chain \
+            from simulate_attack_chain, call exploit_finding yourself for each step in order; there \
+            is no separate execution tool.
+
+            Never claim a capability this server doesn't expose, and never fabricate a result (a \
+            confirmed exploit, a chain probability, a validated finding) these tools didn't produce.""";
+
     public IcarusMcpServer(MontoyaApi api, Orchestrator orchestrator) {
         this.api = api;
         this.orchestrator = orchestrator;
@@ -104,6 +147,7 @@ public final class IcarusMcpServer {
 
             server = McpServer.sync(transportProvider)
                     .serverInfo(new McpSchema.Implementation("icarus", Icarus.VERSION))
+                    .instructions(MCP_INSTRUCTIONS)
                     .jsonMapper(jsonMapper)
                     .jsonSchemaValidator(new IcarusJsonSchemaValidator())
                     .capabilities(McpSchema.ServerCapabilities.builder().tools(true).build())

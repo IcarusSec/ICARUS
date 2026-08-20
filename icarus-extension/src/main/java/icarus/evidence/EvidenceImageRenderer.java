@@ -110,8 +110,13 @@ public final class EvidenceImageRenderer {
      * wrapping/indentation and drawLine's JSON/header syntax coloring are untouched; this only
      * bounds how many of the already-wrapped lines get drawn.
      */
+    /** Pixel height of one drawn line — shared with {@link EvidenceAutoRenderer} so it can compute
+     *  tight per-line annotation anchors (a specific header, the status line) that land exactly
+     *  where drawColumnLines actually put the text, instead of a caller guessing. */
+    public static final int LINE_HEIGHT = 18;
+
     public static void drawColumnLines(Graphics2D g, String[] lines, int x, int startY, int imgHeight, EvidenceColorScheme cs, boolean isRequest) {
-        int lineHeight = 18;
+        int lineHeight = LINE_HEIGHT;
         int maxLines = Math.max(0, (imgHeight - 10 - startY) / lineHeight);
         boolean truncated = lines.length > maxLines;
         int linesToDraw = truncated ? Math.max(0, maxLines - 1) : lines.length;

@@ -67,7 +67,53 @@ public final class EvidenceAutoRenderer {
         String resText = EvidenceImageRenderer.wrapEvidenceText(
                 responseTextOverride != null ? responseTextOverride : responseText(api, finding.evidence()), wrapWidth);
 
+        if (outAnchors != null) {
+            int startY = 90 + 22; // matches colLabelY + 22 in EvidenceImageRenderer.renderTextToImage
+            int colWidth = imgWidth / 2 - 40;
+            outAnchors.putAll(lineAnchors(reqText.split("\n"), 20, startY, colWidth, "request"));
+            outAnchors.putAll(lineAnchors(resText.split("\n"), imgWidth / 2 + 20, startY, colWidth, "response"));
+        }
+
         return EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
+    }
+
+    /**
+     * Tight, per-line annotation targets — a single header's line, or the request/status line —
+     * instead of the only prior option (box the entire half-image column). Built from the exact
+     * wrapped lines drawColumnLines is about to draw, so the returned rectangles land precisely
+     * on that text rather than an outside guess. Named "{prefix}_status_line", "{prefix}_headers"
+     * (the whole header block, still far tighter than a full column) and "{prefix}_header:name"
+     * per header actually present — mirrors the header-line heuristic in EvidenceImageRenderer's
+     * own drawLine (no leading whitespace, contains ':', not JSON/structural).
+     */
+    private static Map<String, Rectangle> lineAnchors(String[] lines, int x, int startY, int colWidth, String prefix) {
+        Map<String, Rectangle> anchors = new java.util.LinkedHashMap<>();
+        if (lines.length == 0) return anchors;
+
+        int lineHeight = EvidenceImageRenderer.LINE_HEIGHT;
+        int topPad = 14; // roughly the font's ascent, so the box sits around the glyphs, not below them
+        anchors.put(prefix + "_status_line", new Rectangle(x, startY - topPad, colWidth, lineHeight));
+
+        int firstHeaderLine = -1, lastHeaderLine = -1;
+        for (int i = 1; i < lines.length; i++) {
+            String line = lines[i];
+            String trimmed = line.trim();
+            boolean noLeadingWhitespace = !line.isEmpty() && line.charAt(0) != ' ' && line.charAt(0) != '\t';
+            boolean looksLikeHeader = noLeadingWhitespace && trimmed.contains(":") && !trimmed.startsWith("{")
+                    && !trimmed.startsWith("}") && !trimmed.startsWith("[") && !trimmed.startsWith("]") && !trimmed.startsWith("\"");
+            if (!looksLikeHeader) continue;
+
+            if (firstHeaderLine == -1) firstHeaderLine = i;
+            lastHeaderLine = i;
+            String headerName = line.substring(0, line.indexOf(':')).trim().toLowerCase();
+            anchors.putIfAbsent(prefix + "_header:" + headerName, new Rectangle(x, startY + i * lineHeight - topPad, colWidth, lineHeight));
+        }
+        if (firstHeaderLine != -1) {
+            int top = startY + firstHeaderLine * lineHeight - topPad;
+            int bottom = startY + (lastHeaderLine + 1) * lineHeight - topPad;
+            anchors.put(prefix + "_headers", new Rectangle(x, top, colWidth, bottom - top));
+        }
+        return anchors;
     }
 
     /** Mirrors {@link EvidencePhase1Dialog}'s reqText build so headless and interactive renders start from identical text. */

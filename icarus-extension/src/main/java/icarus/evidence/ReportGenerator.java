@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +48,11 @@ public final class ReportGenerator {
         if (!config.getBool("evidence.html_report", true) || findings.isEmpty()) {
             return false;
         }
+        // Worst-first: a reader should hit CRITICAL/HIGH before scrolling past six LOW header
+        // findings to find them. Severity's enum order is already CRITICAL..INFO, so ordinal
+        // sorts correctly; stable sort keeps same-severity findings in their original order.
+        findings = new ArrayList<>(findings);
+        findings.sort(java.util.Comparator.comparingInt(f -> f.severity().ordinal()));
 
         // Screenshots are grouped by Finding#similarityHash(), not identity — re-editing a
         // finding's evidence builds a new Finding instance with the same hash, so identity

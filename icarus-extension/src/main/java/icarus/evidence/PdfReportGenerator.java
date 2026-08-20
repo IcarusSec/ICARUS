@@ -79,6 +79,9 @@ public final class PdfReportGenerator {
         if (findings.isEmpty()) {
             return false;
         }
+        // Worst-first, same rule as ReportGenerator — see its comment for why.
+        findings = new java.util.ArrayList<>(findings);
+        findings.sort(java.util.Comparator.comparingInt(f -> f.severity().ordinal()));
 
         // Grouped by Finding#similarityHash(), not identity — see ReportGenerator for why.
         var evidenceByHash = capture.groupedBySimilarityHash();

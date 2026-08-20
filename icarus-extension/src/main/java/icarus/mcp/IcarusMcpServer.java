@@ -85,12 +85,11 @@ public final class IcarusMcpServer {
             server, so don't assume one exists for a vuln class you don't see a tool/finding type for.
 
             FINDINGS: list_findings / get_finding / get_reportable_findings / get_passive_findings \
-            return what ICARUS's modules already detected. generate_report only includes findings \
-            explicitly confirmed positive via validate_finding (lastValidatedResult=reproduced) or \
-            exploit_finding (exploitConfirmed=true) — an unvalidated finding won't appear in the \
-            report even if never suppressed, so validate (or exploit-confirm) everything you want \
-            included before generating one. Every included finding gets an evidence image either way, \
-            auto-rendered from its captured traffic when nobody captured one manually.
+            return what ICARUS's modules already detected. generate_report includes every finding \
+            that hasn't been suppressed — validate_finding/exploit_finding are optional extra \
+            confirmation, not a prerequisite for a finding to appear in the report. Every included \
+            finding gets an evidence image either way, auto-rendered from its captured traffic when \
+            nobody captured one manually.
 
             EVIDENCE: capture_evidence renders its own image from the finding's real captured \
             traffic — omit image_base64 (the normal path) rather than trying to supply a screenshot \
@@ -353,10 +352,9 @@ public final class IcarusMcpServer {
                 List.of("format", "output_path"), false, null, null);
         var tool = new McpSchema.Tool("generate_report",
                 "Generate ICARUS report",
-                "Writes an HTML or PDF report to the given path, overwriting it if it exists. Only includes findings explicitly confirmed positive — "
-                        + "call validate_finding or exploit_finding on each finding first (sets lastValidatedResult=reproduced or exploitConfirmed=true); "
-                        + "an unvalidated finding, even if never suppressed, will NOT appear in the report. Every included finding gets an evidence image "
-                        + "either way — auto-rendered from its captured traffic if nobody captured one manually.",
+                "Writes an HTML or PDF report to the given path, overwriting it if it exists. Includes every finding that hasn't been suppressed — "
+                        + "validate_finding/exploit_finding are optional extra confirmation, not a prerequisite. Every included finding gets an evidence "
+                        + "image either way — auto-rendered from its captured traffic if nobody captured one manually.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
@@ -366,8 +364,7 @@ public final class IcarusMcpServer {
                 boolean written = orchestrator.generateReport(format, java.nio.file.Path.of(outputPath));
                 return written
                         ? McpSchema.CallToolResult.builder().addTextContent("Report written to " + outputPath).build()
-                        : McpSchema.CallToolResult.builder().addTextContent("No report was written — either that format is disabled in Settings, or no findings are confirmed yet "
-                                + "(call validate_finding/exploit_finding on findings first; unconfirmed findings are excluded).").isError(true).build();
+                        : McpSchema.CallToolResult.builder().addTextContent("No report was written — either that format is disabled in Settings, or there are no unsuppressed findings to include.").isError(true).build();
             } catch (Exception e) {
                 return McpSchema.CallToolResult.builder().addTextContent("Report generation failed: " + e.getMessage()).isError(true).build();
             }

@@ -29,6 +29,7 @@ public final class EvidenceAnnotator {
         g2.drawImage(source, 0, 0, null);
         g2.setStroke(new BasicStroke(3f));
 
+        double imageArea = (double) source.getWidth() * source.getHeight();
         Rectangle crop = null;
         for (Annotation a : annotations) {
             if ("CROP".equals(a.kind())) {
@@ -38,7 +39,16 @@ public final class EvidenceAnnotator {
             Shape shape = "ARROW".equals(a.kind())
                     ? createArrow(new Point(a.x(), a.y()), new Point(a.x() + a.width(), a.y() + a.height()))
                     : new Rectangle2D.Double(a.x(), a.y(), a.width(), a.height());
-            paintAnnotation(g2, shape, a.kind(), Color.RED);
+            // A translucent-yellow HIGHLIGHT wash over a huge area (e.g. an agent picking a
+            // whole request_column/response_column anchor) reads as a muddy, illegible smear
+            // rather than a pointer to anything — downgrade to an outline instead, same as BOX,
+            // once it covers more than a third of the image. REDACT is exempt: blacking out a
+            // large area is often the actual intent (redacting a big block of sensitive body).
+            String kind = a.kind();
+            if ("HIGHLIGHT".equals(kind) && (a.width() * (double) a.height()) / imageArea > 0.33) {
+                kind = "BOX";
+            }
+            paintAnnotation(g2, shape, kind, Color.RED);
         }
         g2.dispose();
 
@@ -97,9 +107,13 @@ public final class EvidenceAnnotator {
         g2.drawImage(snap, 0, 0, null);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setStroke(new BasicStroke(3f));
+        double imageArea = (double) snap.getWidth() * snap.getHeight();
         for (int i = 0; i < shapes.size(); i++) {
             String kind = kinds.get(i);
             Shape s = shapes.get(i);
+            if ("HIGHLIGHT".equals(kind) && s.getBounds2D().getWidth() * s.getBounds2D().getHeight() / imageArea > 0.33) {
+                kind = "BOX";
+            }
             if ("HIGHLIGHT".equals(kind)) {
                 g2.setColor(new Color(255, 255, 0, 80));
                 g2.fill(s);

@@ -97,7 +97,12 @@ public final class IcarusMcpServer {
             one value in place; never rewrite or summarize the captured traffic, that destroys what \
             the report needs to show. For annotations, prefer "anchor" over guessed x/y/width/height \
             whenever the tool's response lists one available — dynamically positioned text (e.g. a \
-            rate-limit RPS badge) has pixel coordinates you cannot predict from outside the renderer.
+            rate-limit RPS badge) has pixel coordinates you cannot predict from outside the renderer. \
+            An ARROW pointing at the specific line/value that matters does more for a reader than any \
+            box — add one whenever you can name the target coordinates, instead of only outlining or \
+            highlighting a whole pane. Never HIGHLIGHT a full request_column/response_column (it just \
+            washes the whole pane in translucent yellow and hides the text); reserve HIGHLIGHT for a \
+            small anchor or a tight custom rectangle around the few lines that matter.
 
             VALIDATION — read-only, no approval needed, safe to call unattended (e.g. in CI/CD): \
             validate_finding re-sends a finding's captured request and re-checks whether the same \
@@ -412,10 +417,14 @@ public final class IcarusMcpServer {
                         "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — prefer this whenever "
                                 + "one applies (BOX/HIGHLIGHT/REDACT/CROP only, not ARROW). Guessed x/y for text whose position depends on rendered string width (e.g. a "
                                 + "badge after a variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available "
-                                + "on any server-rendered image (image_base64 omitted): \"request_column\", \"response_column\" (the full left/right traffic panes). On "
-                                + "RATE_LIMIT/NO_RATE_LIMIT findings specifically, also: \"rps\" (the colored requests-per-second badge next to the description) and \"blocked\" "
-                                + "(the \"← BLOCKED\" marker on the row that tripped the limit, if any). capture_evidence's result also echoes back exactly which anchors this "
-                                + "particular render had, for findings where availability varies."),
+                                + "on any server-rendered image (image_base64 omitted): \"request_column\", \"response_column\" (the full left/right traffic panes — use these "
+                                + "with BOX or CROP, not HIGHLIGHT: a translucent-yellow wash over an entire pane reads as a muddy smear, not a pointer, so HIGHLIGHT on one "
+                                + "of these auto-downgrades to a BOX outline anyway). On RATE_LIMIT/NO_RATE_LIMIT findings specifically, also: \"rps\" (the colored "
+                                + "requests-per-second badge next to the description) and \"blocked\" (the \"← BLOCKED\" marker on the row that tripped the limit, if any) — "
+                                + "these are small and safe to HIGHLIGHT. To point at one specific line/value inside a column (e.g. the row that changed in a boolean-SQLi "
+                                + "response), skip the column anchor and give ARROW explicit x/y/width/height ending right at it — an arrow does more to guide the reader's "
+                                + "eye than any box. capture_evidence's result also echoes back exactly which anchors this particular render had, for findings where "
+                                + "availability varies."),
                         "x", Map.of("type", "integer", "description", "Ignored if anchor is set."),
                         "y", Map.of("type", "integer", "description", "Ignored if anchor is set."),
                         "width", Map.of("type", "integer", "description", "For ARROW, the end point's x offset from x. Ignored if anchor is set."),

@@ -41,3 +41,5 @@ libs/
 .claude/
 CLAUDE.md
 PLAN.md
+# Added by code-review-graph
+.code-review-graph/

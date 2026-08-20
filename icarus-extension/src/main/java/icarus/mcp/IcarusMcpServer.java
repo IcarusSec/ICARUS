@@ -14,6 +14,7 @@ import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
 import icarus.core.ReportTemplateConfig;
 import icarus.evidence.EvidenceCapture;
+import icarus.evidence.EvidenceAnnotator;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -388,17 +389,17 @@ public final class IcarusMcpServer {
 
                 Object rawAnnotations = request.arguments().get("annotations");
                 if (rawAnnotations instanceof List<?> list && !list.isEmpty()) {
-                    List<EvidenceCapture.Annotation> annotations = new ArrayList<>();
+                    List<EvidenceAnnotator.Annotation> annotations = new ArrayList<>();
                     for (Object o : list) {
                         Map<?, ?> m = (Map<?, ?>) o;
-                        annotations.add(new EvidenceCapture.Annotation(
+                        annotations.add(new EvidenceAnnotator.Annotation(
                                 (String) m.get("kind"),
                                 ((Number) m.get("x")).intValue(),
                                 ((Number) m.get("y")).intValue(),
                                 ((Number) m.get("width")).intValue(),
                                 ((Number) m.get("height")).intValue()));
                     }
-                    image = orchestrator.getEvidenceCapture().applyAnnotations(image, annotations);
+                    image = EvidenceAnnotator.applyAnnotations(image, annotations);
                 }
 
                 orchestrator.captureEvidence(finding, image, caption);

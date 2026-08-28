@@ -120,7 +120,7 @@ public class SettingsPanel {
         cardAuto.addFormRow(btnClearAuth);
 
         CardPanel cardMcp = new CardPanel(I18n.t("settings.section.mcp"), "cpu");
-        JLabel mcpStatusBadge = new JLabel(mcpServer.isRunning() ? "● ATIVO" : "● PARADO");
+        JLabel mcpStatusBadge = new JLabel(mcpServer.isRunning() ? I18n.t("settings.mcp.status.active", "● ACTIVE") : I18n.t("settings.mcp.status.stopped", "● STOPPED"));
         mcpStatusBadge.setFont(mcpStatusBadge.getFont().deriveFont(Font.BOLD));
         mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
         
@@ -144,10 +144,10 @@ public class SettingsPanel {
         mcpPortPanel.add(chkMcp);
         cardMcp.addFormRow(mcpPortPanel);
 
-        JButton btnRestartMcp = new JButton("Reiniciar Servidor", EvidenceUiHelpers.createIcon("refresh-cw"));
+        JButton btnRestartMcp = new JButton(I18n.t("settings.button.restart_mcp", "Restart Server"), EvidenceUiHelpers.createIcon("refresh-cw"));
         btnRestartMcp.addActionListener(e -> {
             btnRestartMcp.setEnabled(false);
-            btnRestartMcp.setText("Reiniciando...");
+            btnRestartMcp.setText(I18n.t("settings.button.restarting_mcp", "Restarting..."));
             
             boolean enabled = chkMcp.isSelected();
             int port = (int) spinMcpPort.getValue();
@@ -167,9 +167,9 @@ public class SettingsPanel {
                 
                 @Override
                 protected void done() {
-                    mcpStatusBadge.setText(mcpServer.isRunning() ? "● ATIVO" : "● PARADO");
+                    mcpStatusBadge.setText(mcpServer.isRunning() ? I18n.t("settings.mcp.status.active", "● ACTIVE") : I18n.t("settings.mcp.status.stopped", "● STOPPED"));
                     mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
-                    btnRestartMcp.setText("Reiniciar Servidor");
+                    btnRestartMcp.setText(I18n.t("settings.button.restart_mcp", "Restart Server"));
                     btnRestartMcp.setEnabled(true);
                 }
             };
@@ -204,7 +204,7 @@ public class SettingsPanel {
         pnlGeneralTab.add(Box.createVerticalStrut(16));
         pnlGeneralTab.add(pnlReset);
         pnlGeneralTab.add(Box.createVerticalGlue());
-        settingsTabs.addTab("Geral & Integrações", wrapInScroll(pnlGeneralTab));
+        settingsTabs.addTab(I18n.t("settings.subtab.general", "General & Integrations"), wrapInScroll(pnlGeneralTab));
 
         // 2. Active Scanners
         JPanel pnlActiveTab = new JPanel();
@@ -274,7 +274,7 @@ public class SettingsPanel {
         pnlActiveTab.add(Box.createVerticalStrut(16));
         pnlActiveTab.add(cardRl);
         pnlActiveTab.add(Box.createVerticalGlue());
-        settingsTabs.addTab("Scanners Ativos", wrapInScroll(pnlActiveTab));
+        settingsTabs.addTab(I18n.t("settings.subtab.active", "Active Scanners"), wrapInScroll(pnlActiveTab));
 
         // 3. Passive Scanners & Checks
         JPanel pnlPassiveTab = new JPanel();
@@ -296,7 +296,7 @@ public class SettingsPanel {
         pnlPassiveTab.add(Box.createVerticalStrut(16));
         pnlPassiveTab.add(cardSh);
         pnlPassiveTab.add(Box.createVerticalGlue());
-        settingsTabs.addTab("Scanners Passivos", wrapInScroll(pnlPassiveTab));
+        settingsTabs.addTab(I18n.t("settings.subtab.passive", "Passive Scanners"), wrapInScroll(pnlPassiveTab));
 
     }
 

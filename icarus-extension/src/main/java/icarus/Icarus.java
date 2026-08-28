@@ -33,6 +33,7 @@ public class Icarus implements BurpExtension {
         api.extension().setName(NAME + " v" + VERSION);
 
         var config = new ModuleConfig();
+        I18n.initialize(config);
         applyDefaults(config);
 
         // Load persisted settings
@@ -42,7 +43,7 @@ public class Icarus implements BurpExtension {
         }
         config.migrateReportTemplateConfigIfNeeded();
         
-        // Initialize I18n
+        // Re-initialize I18n with loaded config
         I18n.initialize(config);
 
         List<IcarusModule> modules = List.of(

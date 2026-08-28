@@ -67,7 +67,7 @@ public class ReportingSettingsTab {
         themeHelper.applyTheme(mainPanel);
 
         // -- SEÇÕES DO RELATÓRIO --
-        JPanel sectionsCard = createCardPanel(I18n.t("ui.reporting.section.report_sections", "Seções do Relatório"));
+        JPanel sectionsCard = createCardPanel(I18n.t("ui.reporting.section.report_sections", "Report Sections"));
         sectionsCard.setLayout(new BorderLayout());
         
         DefaultListModel<ReportTemplateConfig.Section> sectionModel = new DefaultListModel<>();
@@ -139,13 +139,13 @@ public class ReportingSettingsTab {
         JPanel sectionListButtons = new JPanel(new GridLayout(1, 4, 4, 0));
         sectionListButtons.setBorder(new EmptyBorder(4, 0, 0, 0));
         sectionListButtons.setOpaque(false);
-        JButton btnAddSection = createIconButton("plus", I18n.t("ui.reporting.btn.add", "Adicionar"));
-        JButton btnRemoveSection = createIconButton("trash-2", I18n.t("ui.reporting.btn.remove", "Remover"));
-        JButton btnMoveUpSection = createIconButton("chevron-up", I18n.t("ui.reporting.btn.up", "Subir"));
-        JButton btnMoveDownSection = createIconButton("chevron-down", I18n.t("ui.reporting.btn.down", "Descer"));
+        JButton btnAddSection = createIconButton("plus", I18n.t("ui.reporting.btn.add", "Add"));
+        JButton btnRemoveSection = createIconButton("trash-2", I18n.t("ui.reporting.btn.remove", "Remove"));
+        JButton btnMoveUpSection = createIconButton("chevron-up", I18n.t("ui.reporting.btn.up", "Move Up"));
+        JButton btnMoveDownSection = createIconButton("chevron-down", I18n.t("ui.reporting.btn.down", "Move Down"));
         
         btnAddSection.addActionListener(e -> {
-            sectionModel.addElement(new ReportTemplateConfig.Section(I18n.t("ui.reporting.new_section", "Nova Seção"), ""));
+            sectionModel.addElement(new ReportTemplateConfig.Section(I18n.t("ui.reporting.new_section", "New Section"), ""));
             sectionList.setSelectedIndex(sectionModel.size() - 1);
         });
         btnRemoveSection.addActionListener(e -> {
@@ -172,7 +172,7 @@ public class ReportingSettingsTab {
         themeHelper.styleTextArea(txtSectionContent);
         setupTextArea(txtSectionContent, 8);
 
-        JLabel lblFindingsBanner = new JLabel("ℹ️ " + I18n.t("ui.reporting.marker.findings.content", "Esta seção é gerada dinamicamente a partir dos achados cadastrados no Gerenciador de Evidências."));
+        JLabel lblFindingsBanner = new JLabel("ℹ️ " + I18n.t("ui.reporting.marker.findings.content", "This section is generated dynamically from findings registered in the Evidence Manager."));
         lblFindingsBanner.setBorder(new EmptyBorder(0, 0, 8, 0));
         lblFindingsBanner.setForeground(UIManager.getColor("Label.disabledForeground"));
         lblFindingsBanner.setVisible(false);
@@ -183,7 +183,7 @@ public class ReportingSettingsTab {
         
         JPanel titleRow = new JPanel(new BorderLayout(8, 0));
         titleRow.setOpaque(false);
-        JLabel lblTitleField = new JLabel(I18n.t("ui.reporting.lbl.title", "Título:"));
+        JLabel lblTitleField = new JLabel(I18n.t("ui.reporting.lbl.title", "Title:"));
         titleRow.add(lblTitleField, BorderLayout.WEST);
         titleRow.add(txtSectionTitle, BorderLayout.CENTER);
         sectionEditorPanel.add(titleRow, BorderLayout.NORTH);
@@ -194,7 +194,7 @@ public class ReportingSettingsTab {
         centerContentPanel.add(new JScrollPane(txtSectionContent), BorderLayout.CENTER);
         sectionEditorPanel.add(centerContentPanel, BorderLayout.CENTER);
         
-        JLabel lblMarkdownHint = new JLabel(I18n.t("ui.reporting.lbl.markdown_hint", "Suporta formatação Markdown"));
+        JLabel lblMarkdownHint = new JLabel(I18n.t("ui.reporting.lbl.markdown_hint", "Supports Markdown formatting"));
         lblMarkdownHint.setFont(lblMarkdownHint.getFont().deriveFont(11f));
         sectionEditorPanel.add(lblMarkdownHint, BorderLayout.SOUTH);
 
@@ -254,9 +254,9 @@ public class ReportingSettingsTab {
         mainPanel.add(Box.createVerticalStrut(15)); // Tolerância Zero
 
         // -- VARIÁVEIS --
-        JPanel varsCard = createCardPanel(I18n.t("ui.reporting.section.template_variables", "Variáveis do Template"));
+        JPanel varsCard = createCardPanel(I18n.t("ui.reporting.section.template_variables", "Template Variables"));
         varsCard.setLayout(new BorderLayout(0, 4));
-        JLabel lblVarHint = new JLabel(I18n.t("ui.reporting.lbl.var_hint", "Defina variáveis globais (chave=valor)"));
+        JLabel lblVarHint = new JLabel(I18n.t("ui.reporting.lbl.var_hint", "Define global variables (key=value)"));
         varsCard.add(lblVarHint, BorderLayout.NORTH);
         
         StringBuilder varLines = new StringBuilder();
@@ -272,11 +272,11 @@ public class ReportingSettingsTab {
 
 
         // -- RETESTE --
-        JPanel retestCard = createCardPanel(I18n.t("ui.reporting.section.retest_mode", "Modo de Reteste"));
+        JPanel retestCard = createCardPanel(I18n.t("ui.reporting.section.retest_mode", "Retest Mode"));
         retestCard.setLayout(new BoxLayout(retestCard, BoxLayout.Y_AXIS));
         retestCard.setAlignmentX(Component.LEFT_ALIGNMENT);
         
-        JLabel lblRetestHint = new JLabel(I18n.t("ui.reporting.lbl.status_hint", "Status de achados a incluir no relatório de reteste (um por linha):"));
+        JLabel lblRetestHint = new JLabel(I18n.t("ui.reporting.lbl.status_hint", "Finding statuses to include in retest report (one per line):"));
         lblRetestHint.setAlignmentX(Component.LEFT_ALIGNMENT);
         retestCard.add(lblRetestHint);
         retestCard.add(Box.createRigidArea(new Dimension(0, 4)));
@@ -291,7 +291,7 @@ public class ReportingSettingsTab {
         retestCard.add(retestScroll);
         
         retestCard.add(Box.createRigidArea(new Dimension(0, 10)));
-        JLabel lblSuppressHint = new JLabel(I18n.t("ui.reporting.lbl.suppress_hint", "Títulos de seção para ocultar em relatórios de reteste (um por linha):"));
+        JLabel lblSuppressHint = new JLabel(I18n.t("ui.reporting.lbl.suppress_hint", "Section titles to hide in retest reports (one per line):"));
         lblSuppressHint.setAlignmentX(Component.LEFT_ALIGNMENT);
         retestCard.add(lblSuppressHint);
         retestCard.add(Box.createRigidArea(new Dimension(0, 4)));
@@ -311,7 +311,7 @@ public class ReportingSettingsTab {
         // -- TEMA E ESTILO --
         JPanel themeCardPanel = new JPanel(new GridBagLayout());
         themeCardPanel.setBackground(UIManager.getColor("TextField.background"));
-        themeCardPanel.setBorder(BorderFactory.createTitledBorder("Tema e Estilo"));
+        themeCardPanel.setBorder(BorderFactory.createTitledBorder(I18n.t("ui.reporting.section.theme_style", "Theme and Style")));
         themeCardPanel.setAlignmentX(Component.LEFT_ALIGNMENT);
         
         GridBagConstraints gbc = new GridBagConstraints();
@@ -320,40 +320,40 @@ public class ReportingSettingsTab {
         JPanel colorPickerPrimaria = createColorPickerComponent("");
         setColorPickerValue(colorPickerPrimaria, rtc.primaryColor());
         gbc.gridx = 0; gbc.gridy = 0; gbc.insets = new Insets(5, 5, 5, 10); gbc.anchor = GridBagConstraints.EAST;
-        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.primary_color", "Cor primária:")), gbc);
+        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.primary_color", "Primary color:")), gbc);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST; gbc.weightx = 1.0;
         themeCardPanel.add(colorPickerPrimaria, gbc);
 
         JPanel colorPickerSecundaria = createColorPickerComponent("");
         setColorPickerValue(colorPickerSecundaria, rtc.secondaryColor());
         gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0; gbc.anchor = GridBagConstraints.EAST;
-        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.secondary_color", "Cor secundária:")), gbc);
+        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.secondary_color", "Secondary color:")), gbc);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST; gbc.weightx = 1.0;
         themeCardPanel.add(colorPickerSecundaria, gbc);
 
         JPanel filePickerCss = createFilePickerComponent("");
         setFilePickerValue(filePickerCss, rtc.customCssPath());
         gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.0; gbc.anchor = GridBagConstraints.EAST;
-        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.custom_css", "CSS Customizado:")), gbc);
+        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.custom_css", "Custom CSS:")), gbc);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST; gbc.weightx = 1.0;
         themeCardPanel.add(filePickerCss, gbc);
 
         JPanel filePickerLogo = createFilePickerComponent("");
         setFilePickerValue(filePickerLogo, rtc.logoPath());
         gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.0; gbc.anchor = GridBagConstraints.EAST;
-        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.report_logo", "Logo do Relatório:")), gbc);
+        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.report_logo", "Report Logo:")), gbc);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST; gbc.weightx = 1.0;
         themeCardPanel.add(filePickerLogo, gbc);
 
         JPanel filePickerClientLogo = createFilePickerComponent("");
         setFilePickerValue(filePickerClientLogo, rtc.clientLogoPath());
         gbc.gridx = 0; gbc.gridy = 4; gbc.weightx = 0.0; gbc.anchor = GridBagConstraints.EAST;
-        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.client_logo", "Logo do Cliente:")), gbc);
+        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.lbl.client_logo", "Client Logo:")), gbc);
         gbc.gridx = 1; gbc.anchor = GridBagConstraints.WEST; gbc.weightx = 1.0;
         themeCardPanel.add(filePickerClientLogo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 5; gbc.weightx = 0.0; gbc.anchor = GridBagConstraints.EAST;
-        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.chk.toc", "Gerar Índice (TOC):")), gbc);
+        themeCardPanel.add(new JLabel(I18n.t("ui.reporting.chk.toc", "Generate Table of Contents (TOC):")), gbc);
         JCheckBox chkToc = new JCheckBox();
         chkToc.setSelected(rtc.tocEnabled());
         chkToc.setOpaque(false);
@@ -463,10 +463,10 @@ public class ReportingSettingsTab {
             panel.add(new JLabel(label));
         }
         
-        JLabel fileLabel = new JLabel(I18n.t("ui.reporting.lbl.no_file", "Nenhum arquivo"));
+        JLabel fileLabel = new JLabel(I18n.t("ui.reporting.lbl.no_file", "(no file selected)"));
         fileLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         
-        JButton btnBrowse = new JButton(I18n.t("ui.reporting.btn.browse", "Navegar..."));
+        JButton btnBrowse = new JButton(I18n.t("ui.reporting.btn.browse", "Browse..."));
         btnBrowse.setIcon(EvidenceUiHelpers.createIcon("folder"));
         btnBrowse.addActionListener(e -> {
             JFileChooser fc = new JFileChooser();
@@ -493,7 +493,7 @@ public class ReportingSettingsTab {
             lbl.setForeground(UIManager.getColor("Label.foreground"));
             panel.putClientProperty("filePath", path);
         } else {
-            lbl.setText(I18n.t("ui.reporting.lbl.no_file", "Nenhum arquivo"));
+            lbl.setText(I18n.t("ui.reporting.lbl.no_file", "(no file selected)"));
             lbl.setToolTipText(null);
             lbl.setForeground(UIManager.getColor("Label.disabledForeground"));
             panel.putClientProperty("filePath", "");
@@ -574,7 +574,7 @@ public class ReportingSettingsTab {
             setForeground(isSelected ? list.getSelectionForeground() : themeHelper.getForegroundColor());
 
             boolean isFindings = value.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER);
-            String label = isFindings ? I18n.t("ui.reporting.marker.findings", "FINDINGS") : (value.title().isBlank() ? I18n.t("ui.reporting.marker.untitled", "Sem Título") : value.title());
+            String label = isFindings ? I18n.t("ui.reporting.marker.findings", "FINDINGS") : (value.title().isBlank() ? I18n.t("ui.reporting.marker.untitled", "(untitled)") : value.title());
 
             lblTitle.setText((index + 1) + ". " + label);
             lblTitle.setForeground(getForeground());

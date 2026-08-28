@@ -165,7 +165,7 @@ public class KnowledgeBaseTab {
         themeHelper.applyTheme(txtName);
         if (entry != null) txtName.setEditable(false);
 
-        JComboBox<String> cbSeverity = new JComboBox<>(new String[]{"CRÍTICO", "ALTO", "MÉDIO", "BAIXO", "INFO"});
+        JComboBox<String> cbSeverity = new JComboBox<>(new String[]{"CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"});
         if (entry != null) cbSeverity.setSelectedItem(entry.severity());
 
         JTextArea txtDesc = new JTextArea(entry != null ? entry.description() : "", 4, 30);

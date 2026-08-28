@@ -227,8 +227,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     /**
      * Non-interactive report generation for the MCP server ({@code generate_icarus_report}
      * tool) — no file chooser, no Swing thread. Hydrates the ICARUS template fields
-     * ({@code classificacao}, {@code eht}, {@code solicitante}, etc., per
-     * {@code .claude/mcp_integration_plan.md}) into the persisted {@link ReportTemplateConfig}
+     * ({@code classification}, {@code team}, {@code requester}, etc.) into the persisted {@link ReportTemplateConfig}
      * before rendering, same as a human filling in the Reporting tab, then writes to a
      * timestamped file under {@link EvidencePaths#defaultOutputDir}.
      *

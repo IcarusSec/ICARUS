@@ -789,7 +789,7 @@ public class EvidenceManagerTab {
 
         gbc.gridy++;
         JPanel escopoPanel = fieldGroup(I18n.t("ui.evidence.section.escopo"), vars, new String[][]{
-            {I18n.t("ui.evidence.lbl.eht"), "team"},
+            {I18n.t("ui.evidence.lbl.team"), "team"},
             {I18n.t("ui.evidence.lbl.componente"), "component"},
             {I18n.t("ui.evidence.lbl.solicitante"), "requester"},
             {I18n.t("ui.evidence.lbl.responsavel"), "owner"},

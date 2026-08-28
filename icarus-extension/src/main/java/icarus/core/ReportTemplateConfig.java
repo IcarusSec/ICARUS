@@ -84,10 +84,11 @@ public final class ReportTemplateConfig {
      *  this rename still surfaces its filled-in values under the new key (see {@link #fromConfig}). */
     private static final Map<String, String> LEGACY_VARIABLE_KEY_ALIASES = Map.ofEntries(
         Map.entry("classification", "classificacao"), Map.entry("report_title", "titulo_relatorio"),
-        Map.entry("project", "projeto"), Map.entry("version", "versao"), Map.entry("author", "autor"),
-        Map.entry("reviewer", "revisor"), Map.entry("approver", "aprovador"), Map.entry("team", "eht"),
-        Map.entry("component", "componente"), Map.entry("requester", "solicitante"), Map.entry("owner", "responsavel"),
-        Map.entry("environment", "ambiente"), Map.entry("assessment_period", "periodo_avaliacao"), Map.entry("method", "metodo")
+        Map.entry("project", "projeto"), Map.entry("version", "versao"), Map.entry("date", "data"),
+        Map.entry("author", "autor"), Map.entry("reviewer", "revisor"), Map.entry("approver", "aprovador"),
+        Map.entry("team", "eht"), Map.entry("component", "componente"), Map.entry("requester", "solicitante"),
+        Map.entry("owner", "responsavel"), Map.entry("environment", "ambiente"),
+        Map.entry("assessment_period", "periodo_avaliacao"), Map.entry("method", "metodo")
     );
 
     // Neutral default accent — no client branding baked in. Fully overridable from

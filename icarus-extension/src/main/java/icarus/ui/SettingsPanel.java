@@ -74,7 +74,7 @@ public class SettingsPanel {
         pnlGeneralTab.setBackground(themeHelper.getBackgroundColor());
         
         CardPanel cardGlobal = new CardPanel(I18n.t("settings.section.general_and_modules"), "shield");
-        addComboBoxToForm(cardGlobal, ModuleConfig.UI_LANGUAGE_KEY, I18n.t("settings.combo.language"), new String[]{"pt-BR", "en"});
+        addComboBoxToForm(cardGlobal, ModuleConfig.UI_LANGUAGE_KEY, I18n.t("settings.combo.language"), new String[]{"en", "pt-BR"});
         
         JPanel pnlGlobalGrid = new JPanel(new GridBagLayout());
         pnlGlobalGrid.setOpaque(false);

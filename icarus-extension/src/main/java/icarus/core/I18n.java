@@ -14,7 +14,7 @@ public class I18n {
 
     public static void initialize(ModuleConfig config) {
         configRef = config;
-        String lang = config.getString(ModuleConfig.UI_LANGUAGE_KEY, "pt-BR");
+        String lang = config.getString(ModuleConfig.UI_LANGUAGE_KEY, "en");
         setLocale(lang);
     }
 
@@ -61,8 +61,8 @@ public class I18n {
 
     public static String getLanguage() {
         if (configRef != null) {
-            return configRef.getString(ModuleConfig.UI_LANGUAGE_KEY, "pt-BR");
+            return configRef.getString(ModuleConfig.UI_LANGUAGE_KEY, "en");
         }
-        return "pt-BR";
+        return "en";
     }
 }

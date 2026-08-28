@@ -2,6 +2,7 @@ package icarus.core;
 
 import burp.api.montoya.MontoyaApi;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -16,15 +17,25 @@ public final class EvidencePaths {
      * to the open Burp project file, falling back to {@code ~/icarus-reports} when the project
      * file's location can't be determined.
      */
+    private static String ensureExists(String pathStr) {
+        try {
+            Path p = Path.of(pathStr);
+            if (!Files.exists(p)) {
+                Files.createDirectories(p);
+            }
+        } catch (Exception ignored) { }
+        return pathStr;
+    }
+
     public static String defaultOutputDir(MontoyaApi api, ModuleConfig config) {
         String explicit = config.getString("evidence.output_dir", "");
-        if (!explicit.isBlank()) return explicit;
+        if (!explicit.isBlank()) return ensureExists(explicit);
 
         Path projectDir = resolveProjectDirectory(api);
         if (projectDir != null) {
-            return projectDir.resolve("icarus-evidence").toString();
+            return ensureExists(projectDir.resolve("icarus-evidence").toString());
         }
-        return System.getProperty("user.home") + "/icarus-reports";
+        return ensureExists(System.getProperty("user.home") + "/icarus-reports");
     }
 
     /**

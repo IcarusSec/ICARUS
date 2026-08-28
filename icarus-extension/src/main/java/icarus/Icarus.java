@@ -14,6 +14,7 @@ import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
 import icarus.ui.IcarusTab;
 
+import javax.swing.SwingUtilities;
 import java.util.List;
 
 /**
@@ -23,19 +24,9 @@ import java.util.List;
  * with auto-evidence capture and structured reporting.
  */
 public class Icarus implements BurpExtension {
-    public static final boolean HTML_and_PDF_REPORT = true;
-
-    // Feature toggles for all modules
-    public static final boolean ENABLE_PARAM_VALIDATOR = true;
-    public static final boolean ENABLE_HTTP_VERB = true;
-    public static final boolean ENABLE_JWT_CHECKER = true;
-    public static final boolean ENABLE_SENSITIVE_HEADER = true;
-    public static final boolean ENABLE_POSTMAN_EXPORT = true;
-    public static final boolean ENABLE_RATE_LIMIT = true;
-    public static final boolean ENABLE_PASSIVE_ERROR = true;
 
     public static final String NAME = "ICARUS";
-    public static final String VERSION = "1.4.0";
+    public static final String VERSION = "1.6.0";
 
     @Override
     public void initialize(MontoyaApi api) {
@@ -50,29 +41,45 @@ public class Icarus implements BurpExtension {
             loadPersistedConfig(config, persisted);
         }
         config.migrateReportTemplateConfigIfNeeded();
+        
+        // Initialize I18n
+        I18n.initialize(config);
 
-        List<IcarusModule> modules = new java.util.ArrayList<>();
-        if (ENABLE_PARAM_VALIDATOR) modules.add(new ParamValidatorModule(api));
-        if (ENABLE_HTTP_VERB) modules.add(new HttpVerbModule(api));
-        if (ENABLE_JWT_CHECKER) modules.add(new JwtCheckerModule(api));
-        if (ENABLE_SENSITIVE_HEADER) modules.add(new SensitiveHeaderModule(api));
-        if (ENABLE_POSTMAN_EXPORT) modules.add(new PostmanExportModule(api));
-        if (ENABLE_RATE_LIMIT) modules.add(new RateLimitModule(api));
-        if (ENABLE_PASSIVE_ERROR) modules.add(new PassiveErrorModule());
+        List<IcarusModule> modules = List.of(
+            new ParamValidatorModule(api),
+            new HttpVerbModule(api),
+            new JwtCheckerModule(api),
+            new SensitiveHeaderModule(api),
+            new PostmanExportModule(api),
+            new RateLimitModule(api),
+            new PassiveErrorModule()
+        );
 
         var evidenceCapture = new EvidenceCapture(api, config);
         var reportGenerator = new ReportGenerator(api);
         var autoAuth = new AutoAuthModule(api, config);
 
         var orchestrator = new Orchestrator(api, modules, config, evidenceCapture, reportGenerator, autoAuth);
+        
+        String savedState = api.persistence().extensionData().getString("icarus_state");
+        if (savedState != null) {
+            orchestrator.restoreState(savedState);
+        }
 
         // Local MCP server (AI agent access to findings) — off by default, toggled in Settings.
         // Built here (not lazily in the toggle handler) so Settings can start/stop the same
         // instance; extensionUnloaded must stop it or a reload leaves the old HttpServer
         // holding its port.
         var mcpServer = new IcarusMcpServer(api, orchestrator);
-        if (config.getBool("mcp.enabled", false)) mcpServer.start(config.getInt("mcp.port", 61337));
-        api.extension().registerUnloadingHandler(mcpServer::stop);
+        if (config.getBool("mcp.enabled", false)) {
+            mcpServer.start(config.getInt("mcp.port", 61337));
+        } else {
+            api.logging().logToOutput("MCP Server is disabled by default. Enable it in the settings tab.");
+        }
+        api.extension().registerUnloadingHandler(() -> {
+            mcpServer.stop();
+            orchestrator.shutdown();
+        });
 
         // Register UI tab
         var tab = new IcarusTab(api, config, modules, orchestrator, mcpServer);
@@ -93,17 +100,13 @@ public class Icarus implements BurpExtension {
         // Burp's Settings"), confirmed against the bundled Montoya API sources/tutorial in
         // /usr/share/burpsuite/burpsuite.jar. Registering via a HotKey object (rather than
         // the deprecated raw-String overload) also surfaces this in Burp's Command Palette.
-        // Wrapped in catch(Throwable): on Burp builds/environments missing the HotKey API,
-        // the reference triggers a ClassNotFoundException at the classloader level (not a
-        // regular Exception) — left unguarded, that aborts initialize() before the passive
-        // HTTP handler below gets registered, silently breaking every module that depends on it.
         try {
             HotKey createEvidenceHotKey = HotKey.hotKey("ICARUS: Send to Reporter Creation", "Ctrl+P");
             api.userInterface().registerHotKeyHandler(HotKeyContext.HTTP_MESSAGE_EDITOR, createEvidenceHotKey,
                     event -> event.messageEditorRequestResponse()
                             .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
         } catch (Throwable t) {
-            api.logging().logToError("HotKey registration failed (incompatible Burp API version): " + t.getMessage());
+            api.logging().logToError("Aviso: Registro de HotKey falhou (API incompatível com esta versão do Burp): " + t.getMessage());
         }
 
         // Register passive HTTP handler for SensitiveHeaderModule
@@ -113,6 +116,9 @@ public class Icarus implements BurpExtension {
     }
 
     public static void applyDefaults(ModuleConfig config) {
+        // ── General defaults ──
+        config.set("ui.show_popups", false);
+
         // ── ParamValidator defaults ──
         config.set("pv.enabled", true);
         config.set("pv.structural", true);
@@ -169,13 +175,13 @@ public class Icarus implements BurpExtension {
         config.set("hv.enabled", true);
         config.set("hv.test_get", true);
         config.set("hv.test_head", true);
-        config.set("hv.test_post", false);
-        config.set("hv.test_put", false);
-        config.set("hv.test_patch", false);
-        config.set("hv.test_delete", false);
+        config.set("hv.test_post", true);
+        config.set("hv.test_put", true);
+        config.set("hv.test_patch", true);
+        config.set("hv.test_delete", true);
         config.set("hv.test_options", true);
         config.set("hv.test_trace", true);
-        config.set("hv.test_connect", false);
+        config.set("hv.test_connect", true);
         config.set("hv.skip_original", true);
         config.set("hv.enable_state_changing", true);
         config.set("hv.body_strategy", "AUTO");
@@ -188,7 +194,7 @@ public class Icarus implements BurpExtension {
 
         // ── JWTChecker defaults ──
         config.set("jwt.enabled", true);
-        config.set("jwt.redact_sensitive_claims", true);
+        config.set("jwt.redact_sensitive_claims", false);
 
         // ── SensitiveHeaders defaults ──
         config.set("sh.enabled", true);
@@ -202,7 +208,7 @@ public class Icarus implements BurpExtension {
         config.set("sh.check_cwe200_financial", true);
         config.set("sh.check_cwe200_backend", true);
         config.set("sh.check_cwe200_infra", true);
-        config.set("sh.redact_pii_values", true);
+        config.set("sh.redact_pii_values", false);
 
         // ── PostmanExport defaults ──
         config.set("export.enabled", true);

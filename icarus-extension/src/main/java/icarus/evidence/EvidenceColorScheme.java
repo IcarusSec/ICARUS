@@ -27,44 +27,29 @@ public record EvidenceColorScheme(
     private static final Map<String, EvidenceColorScheme> SCHEMES = new LinkedHashMap<>();
 
     static {
-        register(new EvidenceColorScheme("Minimal Dark",
-            new Color(24, 24, 24), new Color(18, 18, 18),
-            new Color(212, 212, 212), new Color(120, 120, 120), new Color(50, 50, 50),
-            Color.WHITE, new Color(120, 120, 120),
-            new Color(150, 150, 150), new Color(106, 171, 115), new Color(104, 151, 187),
-            new Color(80, 180, 80), new Color(80, 140, 200), new Color(220, 140, 60), new Color(210, 70, 70)
+        register(new EvidenceColorScheme("Slate Dark",
+            new Color(15, 23, 42),       // Canvas Background: #0f172a
+            new Color(8, 12, 23),        // Header Background: #080C17
+            new Color(255, 255, 255),    // Text/Values: #ffffff (High Contrast White)
+            new Color(203, 213, 225),    // Dim/Muted: #cbd5e1
+            new Color(29, 78, 216),      // Border/Divider: #1d4ed8 (Deep Royal Blue)
+            new Color(34, 211, 238),     // Title/Labels: #22d3ee (Cyan Accent)
+            new Color(34, 211, 238),     // Header Keys: #22d3ee (Cyan Accent)
+            new Color(250, 204, 21),     // JSON Keys: Yellowish
+            new Color(134, 239, 172),    // JSON Strings: Greenish
+            new Color(250, 204, 21),     // JSON Numbers: Yellow
+            new Color(74, 222, 128),     // 2xx Success: #4ade80 (Neon green)
+            new Color(56, 189, 248),     // 3xx Info: #38bdf8 (Bright blue)
+            new Color(250, 204, 21),     // 4xx Warning: #facc15 (Bright yellow)
+            new Color(248, 113, 113)     // 5xx Error: #f87171 (Bright red)
         ));
 
-        register(new EvidenceColorScheme("Catppuccin Mocha",
-            new Color(30, 30, 46), new Color(24, 24, 37),
-            new Color(205, 214, 244), new Color(147, 153, 178), new Color(69, 71, 90),
-            new Color(205, 214, 244), new Color(147, 153, 178),
-            new Color(137, 180, 250), new Color(166, 227, 161), new Color(250, 179, 135),
-            new Color(166, 227, 161), new Color(137, 180, 250), new Color(249, 226, 175), new Color(243, 139, 168)
-        ));
-
-        register(new EvidenceColorScheme("Tokyo Night",
-            new Color(26, 27, 38), new Color(22, 22, 30),
-            new Color(169, 177, 214), new Color(86, 95, 137), new Color(52, 59, 88),
-            new Color(192, 202, 245), new Color(86, 95, 137),
-            new Color(125, 207, 255), new Color(158, 206, 106), new Color(255, 158, 100),
-            new Color(158, 206, 106), new Color(125, 207, 255), new Color(224, 175, 104), new Color(247, 118, 142)
-        ));
-
-        register(new EvidenceColorScheme("One Dark",
-            new Color(40, 44, 52), new Color(33, 37, 43),
-            new Color(171, 178, 191), new Color(92, 99, 112), new Color(62, 68, 81),
-            new Color(187, 194, 207), new Color(92, 99, 112),
-            new Color(198, 120, 221), new Color(152, 195, 121), new Color(209, 154, 102),
-            new Color(152, 195, 121), new Color(97, 175, 239), new Color(229, 192, 123), new Color(224, 108, 117)
-        ));
-
-        register(new EvidenceColorScheme("One Light",
-            new Color(250, 250, 250), new Color(240, 240, 240),
-            new Color(56, 58, 66), new Color(120, 120, 120), new Color(210, 210, 210),
-            new Color(56, 58, 66), new Color(120, 120, 120),
-            new Color(166, 38, 164), new Color(80, 161, 79), new Color(193, 132, 1),
-            new Color(80, 161, 79), new Color(64, 120, 242), new Color(193, 132, 1), new Color(228, 86, 73)
+        register(new EvidenceColorScheme("Slate Light",
+            new Color(250, 251, 252), new Color(240, 243, 250),
+            new Color(15, 23, 42), new Color(100, 116, 139), new Color(230, 232, 242),
+            new Color(15, 23, 42), new Color(100, 116, 139),
+            new Color(34, 58, 210), new Color(21, 128, 61), new Color(29, 78, 216),
+            new Color(21, 128, 61), new Color(34, 58, 210), new Color(180, 130, 0), new Color(200, 40, 40)
         ));
     }
 

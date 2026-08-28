@@ -1,37 +1,53 @@
 package icarus;
 
 import burp.api.montoya.MontoyaApi;
-import icarus.core.Finding;
-import icarus.core.FindingRecord;
-import icarus.core.FindingRegistry;
-import icarus.core.ReportTemplateConfig;
-import icarus.core.ModuleConfig;
+import burp.api.montoya.http.handler.*;
+import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
+import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
+import icarus.autoauth.AutoAuthModule;
+import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
 import icarus.evidence.PdfReportGenerator;
+import icarus.evidence.ProjectStateCodec;
 import icarus.evidence.ReportGenerator;
+import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
-
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Files;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class ReportExportService {
     private final MontoyaApi api;
-    private final ModuleConfig config;
-    private final ReportGenerator reportGenerator;
-    private final PdfReportGenerator pdfReportGenerator;
-    private final EvidenceCapture evidenceCapture;
-    private final FindingRegistry findings;
+    private final icarus.core.ModuleConfig config;
+    private final icarus.evidence.ReportGenerator reportGenerator;
+    private final icarus.evidence.PdfReportGenerator pdfReportGenerator;
+    private final icarus.evidence.EvidenceCapture evidenceCapture;
+    private final icarus.core.FindingRegistry findings;
 
-    public ReportExportService(MontoyaApi api, ModuleConfig config, ReportGenerator reportGenerator,
-                               PdfReportGenerator pdfReportGenerator, EvidenceCapture evidenceCapture,
-                               FindingRegistry findings) {
+    public ReportExportService(MontoyaApi api, icarus.core.ModuleConfig config, icarus.evidence.ReportGenerator reportGenerator, icarus.evidence.PdfReportGenerator pdfReportGenerator, icarus.evidence.EvidenceCapture evidenceCapture, icarus.core.FindingRegistry findings) {
         this.api = api;
         this.config = config;
         this.reportGenerator = reportGenerator;
@@ -42,20 +58,23 @@ public class ReportExportService {
 
     public List<Finding> getReportableFindings() {
         List<Finding> result = new ArrayList<>();
-        Set<String> seenHashes = new HashSet<>();
+        Set<Finding> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (var ce : evidenceCapture.getCaptured()) {
             if (!evidenceCapture.isIncluded(ce)) continue;
-            String hash = ce.finding().similarityHash();
-            if (!seenHashes.add(hash)) continue;
-            var record = findings.getRecordByHash(hash);
-            if (record == null || record.isSuppressed()) continue;
-            result.add(record.getFinding());
+            Finding f = ce.finding();
+            if (!seen.add(f)) continue;
+            var record = findings.getRecordByHash(f.similarityHash());
+            if (record == null || record.isSuppressed() || record.getFinding() != f) continue;
+            result.add(f);
         }
         return result;
     }
 
     public void previewReport(Component parent, JButton triggerButton) {
-        List<Finding> reportFindings = getReportableFindings();
+                List<Finding> reportFindings = new java.util.ArrayList<>();
+        for (icarus.core.FindingRecord record : findings.getAllFindingRecords()) {
+            if (!record.isSuppressed()) reportFindings.add(record.getFinding());
+        }
         if (reportFindings.isEmpty()) {
             JOptionPane.showMessageDialog(parent,
                     "No evidence to preview yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
@@ -64,7 +83,7 @@ public class ReportExportService {
 
         Path tempFile;
         try {
-            tempFile = Files.createTempFile("icarus-report-preview-", ".html");
+            tempFile = Files.createTempFile("icarus-report-preview-", ".pdf");
         } catch (IOException e) {
             api.logging().logToError("Failed to create preview temp file: " + e);
             JOptionPane.showMessageDialog(parent, "Failed to create a temp file for the preview: " + e.getMessage());
@@ -75,7 +94,7 @@ public class ReportExportService {
         new SwingWorker<Boolean, Void>() {
             @Override
             protected Boolean doInBackground() throws Exception {
-                return reportGenerator.generate(reportFindings, config, evidenceCapture, tempFile);
+                return pdfReportGenerator.generate(reportFindings, config, evidenceCapture, tempFile);
             }
 
             @Override
@@ -85,11 +104,10 @@ public class ReportExportService {
                 try {
                     boolean written = get();
                     if (!written) {
-                        ToastNotification.show(suiteFrame,
-                                "No preview generated — HTML reports may be disabled in Settings.");
+                        ToastNotification.show(suiteFrame, "No preview generated.");
                         return;
                     }
-                    openInBrowser(tempFile, parent);
+                    openWithDefaultViewer(tempFile, parent);
                 } catch (Exception ex) {
                     api.logging().logToError("Report preview failed: " + ex.getCause());
                     JOptionPane.showMessageDialog(parent, "Report preview failed: " + ex.getCause());
@@ -98,23 +116,18 @@ public class ReportExportService {
         }.execute();
     }
 
-    private void openInBrowser(Path file, Component parent) {
-        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+    private void openWithDefaultViewer(Path file, Component parent) {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
             try {
-                Desktop.getDesktop().browse(file.toUri());
+                Desktop.getDesktop().open(file.toFile());
                 return;
             } catch (IOException ex) {
-                api.logging().logToError("Failed to open preview in browser: " + ex);
+                api.logging().logToError("Failed to open preview in default PDF viewer: " + ex);
                 // fall through to the manual-path message below
             }
         }
         JOptionPane.showMessageDialog(parent,
-                "Couldn't open a browser automatically. Preview saved at:\n" + file.toAbsolutePath());
-    }
-
-    @FunctionalInterface
-    public interface ReportWriter {
-        boolean write(List<Finding> findings, ModuleConfig config, EvidenceCapture capture, Path outputFile) throws Exception;
+                "Couldn't open a PDF viewer automatically. Preview saved at:\n" + file.toAbsolutePath());
     }
 
     public void generateHtmlReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
@@ -127,30 +140,38 @@ public class ReportExportService {
                 (findings, cfg, capture, out) -> pdfReportGenerator.generate(findings, cfg, capture, out));
     }
 
-    public boolean generateReport(String format, Path outputFile) throws Exception {
-        List<Finding> reportFindings = new ArrayList<>();
-        for (FindingRecord record : findings.getAllFindingRecords()) {
+    public Path generateReport(String format, Map<String, String> templateVariables) throws Exception {
+                List<Finding> reportFindings = new java.util.ArrayList<>();
+        for (icarus.core.FindingRecord record : findings.getAllFindingRecords()) {
             if (!record.isSuppressed()) reportFindings.add(record.getFinding());
         }
-        return switch (format.toLowerCase()) {
-            case "html" -> reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
-            case "pdf" -> pdfReportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
-            default -> throw new IllegalArgumentException("Unknown report format: " + format + " (expected html or pdf)");
-        };
+        if (reportFindings.isEmpty()) return null;
+
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        rtc.variables().putAll(templateVariables);
+        rtc.saveTo(config);
+        api.persistence().extensionData().setString("config", config.serialize());
+
+        boolean pdf = "pdf".equalsIgnoreCase(format);
+        Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
+        Files.createDirectories(dir);
+        Path outputFile = dir.resolve("icarus-report-" + System.currentTimeMillis() + (pdf ? ".pdf" : ".html"));
+
+        boolean written = pdf
+                ? pdfReportGenerator.generate(reportFindings, config, evidenceCapture, outputFile)
+                : reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+
+        return written ? outputFile.toAbsolutePath() : null;
     }
 
-    public ReportTemplateConfig getReportTemplateConfig() {
-        return ReportTemplateConfig.fromConfig(config);
-    }
-
-    public void saveReportTemplateConfig(ReportTemplateConfig rtc) {
+    public void saveReportTemplateConfig(icarus.core.ReportTemplateConfig rtc) {
         rtc.saveTo(config);
         api.persistence().extensionData().setString("config", config.serialize());
     }
 
     private void exportReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings,
                                           String extension, String defaultFileName, String formatLabel, ReportWriter writer) {
-        JFileChooser fc = new JFileChooser(new java.io.File(icarus.core.EvidencePaths.defaultOutputDir(api, config)));
+        JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));
         fc.setSelectedFile(new java.io.File(defaultFileName));
         if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return;
@@ -201,5 +222,16 @@ public class ReportExportService {
                 }
             }
         }.execute();
+    }
+
+    public icarus.core.ReportTemplateConfig getReportTemplateConfig() {
+        return icarus.core.ReportTemplateConfig.fromConfig(config);
+    }
+
+ 
+
+    @FunctionalInterface
+    public interface ReportWriter {
+        boolean write(java.util.List<icarus.core.Finding> findings, icarus.core.ModuleConfig config, icarus.evidence.EvidenceCapture capture, Path outputFile) throws Exception;
     }
 }

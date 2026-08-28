@@ -5,18 +5,19 @@ import burp.api.montoya.MontoyaApi;
 import icarus.core.Finding;
 import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
+import icarus.core.Severity;
 import icarus.evidence.EvidenceCapture.CapturedEvidence;
 
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -48,10 +49,40 @@ public final class ReportGenerator {
         if (!config.getBool("evidence.html_report", true) || findings.isEmpty()) {
             return false;
         }
-        // Worst-first: a reader should hit CRITICAL/HIGH before scrolling past six LOW header
-        // findings to find them. Severity's enum order is already CRITICAL..INFO, so ordinal
-        // sorts correctly; stable sort keeps same-severity findings in their original order.
-        findings = new ArrayList<>(findings);
+
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        
+        List<Finding> processedFindings = new java.util.ArrayList<>();
+        for (Finding f : findings) {
+            ReportTemplateConfig.FindingTemplate tmpl = rtc.getFindingTemplate(f.type());
+            if (tmpl == null) {
+                processedFindings.add(f);
+                continue;
+            }
+            
+            Finding.Builder b = Finding.builder(f.module(), f.type())
+                .category(f.category())
+                .path(f.path())
+                .evidence(f.evidence());
+            f.metadata().forEach(b::meta);
+            f.cweIds().forEach(b::cwe);
+            
+            b.description(tmpl.descricao() != null && !tmpl.descricao().isBlank() ? tmpl.descricao() : f.description());
+            
+            Severity sev = f.severity();
+            if (tmpl.severidade() != null && !tmpl.severidade().isBlank()) {
+                try { sev = Severity.valueOf(tmpl.severidade().toUpperCase()); } catch (Exception e) {}
+            }
+            b.severity(sev);
+            
+            processedFindings.add(b.build());
+        }
+        
+        findings = processedFindings;
+        
+        // Force the same stable worst-first order in HTML that the PDF gets via OpenPDF's implicit traversal;
+        // findings with identical severity retain their arbitrary (usually time-of-discovery) arrival order
+        // because java.util.Collections.sort is guaranteed stable.
         findings.sort(java.util.Comparator.comparingInt(f -> f.severity().ordinal()));
 
         // Screenshots are grouped by Finding#similarityHash(), not identity — re-editing a
@@ -76,8 +107,10 @@ public final class ReportGenerator {
             }
         }
 
-        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
-        String projectName = rtc.variables().get("projectName");
+        rtc.injectFindingsVariables(findings);
+        // Evidence Manager's "Report Details" tab wins when filled in; falls back to Burp's
+        // own project name otherwise, same as before this field existed.
+        String projectName = rtc.variables().get("project");
         if (projectName == null || projectName.isBlank()) {
             projectName = null;
             if (config.getBool("evidence.include_project_name", true)) {
@@ -96,10 +129,10 @@ public final class ReportGenerator {
             StringBuilder sb = new StringBuilder();
             appendHeader(sb, reportDir.getFileName().toString(), projectName, rtc);
             if (rtc.tocEnabled()) appendToc(sb, rtc, findings, retest);
-            boolean findingsPlaced = appendSections(sb, rtc, retest, findings, evidenceByHash, config);
+            boolean findingsPlaced = appendSections(sb, rtc, retest, findings, evidenceByHash, config, capture);
             if (!findingsPlaced) {
                 appendSummary(sb, findings);
-                appendFindings(sb, findings, evidenceByHash, config, retest);
+                appendFindings(sb, findings, evidenceByHash, config, retest, capture, rtc);
             }
             appendFooter(sb);
             html = sb.toString();
@@ -133,12 +166,15 @@ public final class ReportGenerator {
         String textMuted = dark ? "#a0a0a0" : "#666666";
         String border = dark ? "#3a3a3a" : "#dddddd";
 
+        // Evidence Manager → "Report Details" tab, stored under the same variable keys
+        // (author/reviewer/environment) the configured sections already interpolate via
+        // {{author}} etc. -- reused here rather than a second, disconnected set of fields.
         StringBuilder detailRows = new StringBuilder();
         appendMetaRow(detailRows, "Project", projectName);
         appendMetaRow(detailRows, "Author", rtc.variables().get("author"));
-        appendMetaRow(detailRows, "Revisor", rtc.variables().get("revisor"));
-        appendMetaRow(detailRows, "Ambient", rtc.variables().get("ambient"));
-        appendMetaRow(detailRows, "Date", rtc.variables().get("reportDate"));
+        appendMetaRow(detailRows, "Reviewer", rtc.variables().get("reviewer"));
+        appendMetaRow(detailRows, "Environment", rtc.variables().get("environment"));
+        appendMetaRow(detailRows, "Date", rtc.variables().get("date"));
         String detailsTable = detailRows.isEmpty() ? "" : "<table class=\"meta-table\">" + detailRows + "</table>";
 
         html.append("""
@@ -267,6 +303,7 @@ public final class ReportGenerator {
             </head>
             <body>
                 <div class="header">
+                    %s
                     <h1>ICARUS Security Report</h1>
                     <p style="color: var(--text-muted)">Generated on: %s | Report ID: %s</p>
                     %s
@@ -275,6 +312,7 @@ public final class ReportGenerator {
                 bg, cardBg, text, textMuted, border,
                 accent, accent2,
                 customCssBlock(rtc.customCssPath()),
+                logoHtml(rtc.logoPath()),
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 reportName,
                 detailsTable
@@ -285,6 +323,33 @@ public final class ReportGenerator {
     private void appendMetaRow(StringBuilder html, String label, String value) {
         if (value == null || value.isBlank()) return;
         html.append("<tr><th>").append(escapeHtml(label)).append("</th><td>").append(escapeHtml(value)).append("</td></tr>");
+    }
+
+    /** Embeds a report logo as a Base64 &lt;img&gt;, so the standalone HTML file stays
+     *  self-sufficient with no relative asset to keep alongside it. Settings → Reporting →
+     *  Theme's logo path overrides, when set; otherwise falls back to the ICARUS logo bundled
+     *  on the classpath, so reports carry branding out of the box with no configuration
+     *  required. Missing/unreadable files are skipped silently, same as {@link #customCssBlock}. */
+    private String logoHtml(String logoPath) {
+        try {
+            byte[] imgBytes;
+            String mimeType;
+            if (logoPath != null && !logoPath.isBlank()) {
+                imgBytes = Files.readAllBytes(Path.of(logoPath));
+                mimeType = logoPath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+            } else {
+                try (var in = ReportGenerator.class.getResourceAsStream("/icarus_logo.png")) {
+                    if (in == null) return "";
+                    imgBytes = in.readAllBytes();
+                    mimeType = "image/png";
+                }
+            }
+            String base64 = Base64.getEncoder().encodeToString(imgBytes);
+            return "<div style=\"text-align: center;\"><img src=\"data:" + mimeType + ";base64," + base64
+                    + "\" style=\"max-width: 200px; margin-bottom: 20px;\"/></div>";
+        } catch (IOException | RuntimeException e) {
+            return "";
+        }
     }
 
     /** Reads a user-supplied CSS file (Settings → Reporting → Theme) and wraps it in its own
@@ -308,16 +373,16 @@ public final class ReportGenerator {
      *  block (summary + finding cards) in its place instead of Markdown content.
      *  @return true if the Findings block was rendered here (caller must not append it again). */
     private boolean appendSections(StringBuilder html, ReportTemplateConfig rtc, boolean retest,
-                                    List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config) {
+                                    List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config, EvidenceCapture capture) {
         int i = 0;
         boolean findingsPlaced = false;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
-            if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
+            if (retest && !ReportTemplateConfig.isMandatory(section.title()) && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
             if (section.title().equalsIgnoreCase(ReportTemplateConfig.FINDINGS_MARKER)) {
                 html.append("<div id=\"section-").append(i).append("\">\n");
                 appendSummary(html, findings);
-                appendFindings(html, findings, evidenceByHash, config, retest);
+                appendFindings(html, findings, evidenceByHash, config, retest, capture, rtc);
                 html.append("</div>\n");
                 findingsPlaced = true;
                 continue;
@@ -337,7 +402,7 @@ public final class ReportGenerator {
         html.append("<div class=\"toc\"><strong>Contents</strong><ul>\n");
         int i = 0;
         for (ReportTemplateConfig.Section section : rtc.sections()) {
-            if (retest && rtc.retestSuppressedSections().contains(section.title())) continue;
+            if (retest && !ReportTemplateConfig.isMandatory(section.title()) && rtc.retestSuppressedSections().contains(section.title())) continue;
             i++;
             html.append("<li><a href=\"#section-").append(i).append("\">")
                 .append(escapeHtml(section.title())).append("</a></li>\n");
@@ -394,7 +459,7 @@ public final class ReportGenerator {
         return findings.stream().filter(f -> f.severity().name().equals(severity)).count();
     }
 
-    private void appendFindings(StringBuilder html, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config, boolean retest) {
+    private void appendFindings(StringBuilder html, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config, boolean retest, EvidenceCapture capture, ReportTemplateConfig rtc) {
         int index = 1;
         for (Finding f : findings) {
             html.append("""
@@ -408,12 +473,11 @@ public final class ReportGenerator {
                             <tr><th>Module</th><td>%s</td></tr>
                             <tr><th>Category</th><td>%s</td></tr>
                             <tr><th>Target Path</th><td><code>%s</code></td></tr>
-                            <tr><th>Description</th><td>%s</td></tr>
             """.formatted(
                 index, index++, escapeHtml(f.type()),
                 f.severity().name(), f.severity().name(),
                 f.module(), f.category().name(),
-                escapeHtml(f.path()), escapeHtml(f.description())
+                escapeHtml(f.path())
             ));
 
             if (!f.cweIds().isEmpty()) {
@@ -423,31 +487,54 @@ public final class ReportGenerator {
                             return cwe != null ? cwe.label() : id;
                         })
                         .collect(java.util.stream.Collectors.joining(", "));
-                html.append("                        <tr><th>CWE</th><td>")
+                html.append("                        <tr><th>Attack Reference</th><td>")
                     .append(escapeHtml(cweLabels))
                     .append("</td></tr>\n");
-            }
-
-            if (!f.metadata().isEmpty()) {
-                for (var meta : f.metadata().entrySet()) {
-                    html.append("""
-                            <tr><th>%s</th><td><code>%s</code></td></tr>
-                    """.formatted(escapeHtml(meta.getKey()), escapeHtml(meta.getValue())));
-                }
             }
 
             if (retest) {
                 String status = config.getString("retest.status." + f.similarityHash(), "");
                 if (!status.isBlank()) {
-                    html.append("                        <tr><th>Retest Status</th><td><strong>")
+                    html.append("                        <tr><th>Status</th><td><strong>")
                         .append(escapeHtml(status))
                         .append("</strong></td></tr>\n");
                 }
             }
 
+            if (!f.metadata().isEmpty()) {
+                for (var meta : f.metadata().entrySet()) {
+                    if (!meta.getKey().equalsIgnoreCase("grc_id")) {
+                        html.append("""
+                                <tr><th>%s</th><td><code>%s</code></td></tr>
+                        """.formatted(escapeHtml(meta.getKey()), escapeHtml(meta.getValue())));
+                    }
+                }
+            }
+            
+            html.append("                        <tr><th>Description</th><td>")
+                .append(escapeHtml(f.description()))
+                .append("</td></tr>\n");
+
+            ReportTemplateConfig.FindingTemplate tmpl = rtc.getFindingTemplate(f.type());
+            String impact = (tmpl != null && tmpl.impacto() != null) ? tmpl.impacto() : "";
+            String recommendation = (tmpl != null && tmpl.recomendacao() != null) ? tmpl.recomendacao() : "";
+
+            if (!impact.isBlank()) {
+                html.append("                        <tr><th>Impact</th><td>")
+                    .append(escapeHtml(impact))
+                    .append("</td></tr>\n");
+            }
+            if (!recommendation.isBlank()) {
+                html.append("                        <tr><th>Recommendation</th><td>")
+                    .append(escapeHtml(recommendation))
+                    .append("</td></tr>\n");
+            }
+
+            html.append("                        </table>\n");
+
             List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
             if (!group.isEmpty()) {
-                html.append("                        </table>\n                        <h4>Evidence</h4>\n");
+                html.append("                        <h4>Evidence</h4>\n");
                 int evidenceIndex = 1;
                 for (CapturedEvidence c : group) {
                     html.append("""
@@ -463,8 +550,8 @@ public final class ReportGenerator {
                 }
                 html.append("                    </div>\n                </div>\n");
             } else {
-                html.append("                        </table>\n                        <h4>Evidence</h4>\n");
-                String dataUri = autoRenderedDataUri(f, config);
+                html.append("                        <h4>Evidence</h4>\n");
+                String dataUri = autoRenderedDataUri(f, capture);
                 if (dataUri != null) {
                     html.append("""
                             <div class="evidence-block">
@@ -488,11 +575,11 @@ public final class ReportGenerator {
      *  finding nobody captured a screenshot for, so every reportable finding gets an image either way.
      *  {@code null} if the finding has no captured request to render from (e.g. a manually-created
      *  finding with no evidence at all) — that case still falls back to the placeholder text. */
-    private String autoRenderedDataUri(Finding f, ModuleConfig config) {
+    private String autoRenderedDataUri(Finding f, EvidenceCapture capture) {
         if (f.evidence() == null) return null;
         try {
-            var image = EvidenceAutoRenderer.render(api, config, f, true);
-            var out = new java.io.ByteArrayOutputStream();
+            var image = EvidenceAutoRenderer.render(capture, f, true);
+            var out = new ByteArrayOutputStream();
             javax.imageio.ImageIO.write(image, "png", out);
             return "data:image/png;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
         } catch (Exception e) {

@@ -19,9 +19,13 @@ import icarus.core.ModuleConfig;
 import icarus.core.RawNumber;
 import icarus.core.Severity;
 import icarus.core.VerboseErrorDetector;
+import icarus.core.I18n;
 
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 
 public final class ParamValidatorModule implements IcarusModule {
 
@@ -36,7 +40,11 @@ public final class ParamValidatorModule implements IcarusModule {
         return "ParamValidator";
     }
 
-    record MutationSpec(String type, String description, Object value, boolean remove, Category category) {}
+    record MutationSpec(String type, String description, Object value, boolean remove, Category category, icarus.modules.ast.mutators.AstMutationResult astResult) {
+        public MutationSpec(String type, String description, Object value, boolean remove, Category category) {
+            this(type, description, value, remove, category, null);
+        }
+    }
     record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value) {}
 
     @Override
@@ -59,6 +67,21 @@ public final class ParamValidatorModule implements IcarusModule {
 
         Object originalRoot = hasJsonBody ? JsonParser.parse(originalBody) : null;
         List<List<Object>> allPaths = hasJsonBody ? JsonPaths.collect(originalRoot) : List.of();
+        
+        icarus.modules.ast.OffensiveAstRoot astRoot = null;
+        if (hasJsonBody) {
+            try {
+                astRoot = icarus.modules.ast.OffensiveJsonParser.parse(originalBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                logger.accept("Failed to parse JSON into AST: " + e.getMessage());
+            }
+        }
+        Map<String, List<icarus.modules.ast.mutators.AstMutationResult>> astMutationsByPath = new HashMap<>();
+        if (astRoot != null) {
+            for (icarus.modules.ast.mutators.AstMutationResult res : icarus.modules.ast.AstMutationGenerator.generateMutations(astRoot)) {
+                astMutationsByPath.computeIfAbsent(res.path, k -> new ArrayList<>()).add(res);
+            }
+        }
 
         PathRules pathRules = new PathRules(
                 config.getStringList("pv.include_paths"),
@@ -74,7 +97,7 @@ public final class ParamValidatorModule implements IcarusModule {
             eligiblePaths.add(path);
         }
 
-        logger.accept("Detected " + (eligiblePaths.size() + urlParams.size()) + " inputs (" + eligiblePaths.size() + " body, " + urlParams.size() + " URL).");
+        logger.accept(I18n.t("module.pv.log.detected_inputs", (eligiblePaths.size() + urlParams.size()), eligiblePaths.size(), urlParams.size()));
 
         int maxMutations = config.getInt("pv.max_mutations", 60);
         List<Mutation> mutations = new ArrayList<>();
@@ -96,7 +119,7 @@ public final class ParamValidatorModule implements IcarusModule {
             try {
                 collaboratorClient = api.collaborator().createClient();
             } catch (Exception e) {
-                logger.accept("Collaborator unavailable (" + e.getMessage() + ") — SSRF checks will use the response-signature heuristic instead of out-of-band callbacks.");
+                logger.accept(I18n.t("module.pv.log.collab_unavailable", e.getMessage()));
             }
         }
         Map<String, CollaboratorPayload> ssrfPayloadsByField = new LinkedHashMap<>();
@@ -117,6 +140,14 @@ public final class ParamValidatorModule implements IcarusModule {
             for (MutationSpec spec : contextualSpecs(pathString, leafValue, config, collaboratorClient, ssrfPayloadsByField)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
+            }
+            List<icarus.modules.ast.mutators.AstMutationResult> astSpecs = astMutationsByPath.get(pathString);
+            if (astSpecs != null) {
+                for (icarus.modules.ast.mutators.AstMutationResult astRes : astSpecs) {
+                    MutationSpec spec = new MutationSpec(astRes.type, astRes.description, astRes.value, false, astRes.category, astRes);
+                    if (pathRules.isException(pathString, spec)) continue;
+                    specs.add(spec);
+                }
             }
             if (!specs.isEmpty()) {
                 fieldPathStrings.add(pathString);
@@ -170,17 +201,33 @@ public final class ParamValidatorModule implements IcarusModule {
                             spec.value()
                     ));
                 } else {
-                    Object clonedRoot = JsonParser.parse(originalBody);
-                    boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
-                    if (applied) {
-                        mutations.add(new Mutation(
-                                fieldPathStrings.get(f),
-                                spec.type(),
-                                spec.description(),
-                                spec.category(),
-                                request.withBody(JsonParser.write(clonedRoot)),
-                                spec.value()
-                        ));
+                    if (spec.astResult() != null) {
+                        try {
+                            byte[] mutatedBody = icarus.modules.ast.AstSerializer.serialize(spec.astResult().root).payload;
+                            mutations.add(new Mutation(
+                                    fieldPathStrings.get(f),
+                                    spec.type(),
+                                    spec.description(),
+                                    spec.category(),
+                                    request.withBody(burp.api.montoya.core.ByteArray.byteArray(mutatedBody)),
+                                    spec.value()
+                            ));
+                        } catch (Exception e) {
+                            api.logging().logToError("Failed to serialize AST: " + e.getMessage());
+                        }
+                    } else {
+                        Object clonedRoot = JsonParser.parse(originalBody);
+                        boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
+                        if (applied) {
+                            mutations.add(new Mutation(
+                                    fieldPathStrings.get(f),
+                                    spec.type(),
+                                    spec.description(),
+                                    spec.category(),
+                                    request.withBody(JsonParser.write(clonedRoot)),
+                                    spec.value()
+                            ));
+                        }
                     }
                 }
             }
@@ -236,12 +283,12 @@ public final class ParamValidatorModule implements IcarusModule {
 
         for (int i = 0; i < mutatedRequests.size(); i++) {
             icarus.ScanRunner.waitIfPaused();
-            if (Thread.currentThread().isInterrupted()) {
-                logger.accept("Stopped by user — " + (mutatedRequests.size() - i) + " mutation(s) skipped.");
+            if (Thread.currentThread().isInterrupted() || icarus.ScanRunner.isStopRequested() || icarus.ScanRunner.isSkipRequested()) {
+                logger.accept(I18n.t("module.pv.log.stopped_by_user", (mutatedRequests.size() - i)));
                 break;
             }
             Mutation m = mutations.get(i);
-            logger.accept("testing " + shortPath(m.path()) + " with " + m.description().toLowerCase() + "...");
+            logger.accept(I18n.t("module.pv.log.testing_mutation", shortPath(m.path()), m.description().toLowerCase()));
 
             if (delayMs > 0) {
                 try { Thread.sleep(delayMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
@@ -261,24 +308,24 @@ public final class ParamValidatorModule implements IcarusModule {
                         long wanted = retryAfterMs > 0 ? retryAfterMs : 2000;
                         if (wanted > delayMs) {
                             delayMs = (int) Math.min(wanted, 30_000);
-                            logger.accept("tool is returning 429 (rate limited) — throttling to " + delayMs + "ms between requests.");
+                            logger.accept(I18n.t("module.pv.log.throttling_429", delayMs));
                         }
                     } else if (st == 401 || st == 403) {
                         blockStreak++;
-                        logger.accept("tool is returning " + st);
+                        logger.accept(I18n.t("module.pv.log.tool_returning", st));
                         if (!promptedThrottle) {
                             promptedThrottle = true;
                             // Blocking dialog must run on the EDT (CLAUDE.md) — same invokeAndWait
                             // pattern ScanRunner already uses for its Akamai prompt.
                             int[] choiceHolder = { javax.swing.JOptionPane.NO_OPTION };
                             try {
-                                javax.swing.SwingUtilities.invokeAndWait(() -> choiceHolder[0] = javax.swing.JOptionPane.showConfirmDialog(null,
-                                    "WAF Block (" + st + ") detected! Slow down requests (add 2s delay)?",
-                                    "WAF Block Detected", javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE));
+                                javax.swing.SwingUtilities.invokeAndWait(() -> choiceHolder[0] = javax.swing.JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(),
+                                    I18n.t("module.pv.ui.waf_throttle_msg", st),
+                                    I18n.t("module.pv.ui.waf_throttle_title"), javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE));
                             } catch (InterruptedException ex) {
                                 Thread.currentThread().interrupt();
                             } catch (java.lang.reflect.InvocationTargetException ex) {
-                                api.logging().logToError("Param Validator: WAF throttle dialog failed: " + ex.getCause());
+                                api.logging().logToError(I18n.t("module.pv.err.waf_dialog_failed", ex.getCause()));
                             }
                             if (choiceHolder[0] == javax.swing.JOptionPane.YES_OPTION) {
                                 delayMs = 2000;
@@ -295,13 +342,13 @@ public final class ParamValidatorModule implements IcarusModule {
                         int escalated = (int) Math.min(delayMs * 2L, 30_000);
                         if (escalated > delayMs) {
                             delayMs = escalated;
-                            logger.accept("Still being blocked after " + blockStreak + " attempts — increasing delay to " + delayMs + "ms.");
+                            logger.accept(I18n.t("module.pv.log.still_blocked", blockStreak, delayMs));
                         }
                     }
                 }
             } catch (Exception e) {
-                api.logging().logToError("Param Validator: mutation request failed: " + e);
-                logger.accept("request failed: " + e.getMessage());
+                api.logging().logToError(I18n.t("module.pv.err.mutation_failed", e));
+                logger.accept(I18n.t("module.pv.log.request_failed", e.getMessage()));
                 responses.add(null);
             }
             requestTimes[i] = System.currentTimeMillis() - startTime;
@@ -322,7 +369,7 @@ public final class ParamValidatorModule implements IcarusModule {
                 HttpRequestResponse bl = api.http().sendRequest(request);
                 if (bl != null && bl.response() != null) baselineBodyLower = bl.response().bodyToString().toLowerCase();
             } catch (Exception e) {
-                api.logging().logToError("Param Validator: baseline request failed: " + e);
+                api.logging().logToError(I18n.t("module.pv.err.baseline_failed", e));
             }
             baselineTime = System.currentTimeMillis() - st;
         }
@@ -343,10 +390,17 @@ public final class ParamValidatorModule implements IcarusModule {
             long responseTime = requestTimes[i];
             String bodyStr = mutatedResponse.bodyToString();
 
-            // Robust rejection of 401/403 (WAF/Auth block fix) — checked BEFORE injection
-            // detection so a WAF block page can't be mistaken for a confirmed injection hit
-            // just because it echoes the payload back or mentions a DB error keyword.
-            if (status == 401 || status == 403) {
+            // Robust rejection of WAF/Auth blocks — checked BEFORE injection
+            // detection so a WAF block page can't be mistaken for a confirmed injection hit.
+            boolean isWafBlock = status == 401 || status == 403 || status == 406;
+            if (!isWafBlock && status == 400) {
+                // Check common WAF headers
+                String serverHeader = mutatedResponse.headerValue("Server");
+                if (serverHeader != null && (serverHeader.toLowerCase().contains("cloudflare") || serverHeader.toLowerCase().contains("akamai"))) {
+                    isWafBlock = true;
+                }
+            }
+            if (isWafBlock) {
                 continue;
             }
 
@@ -363,19 +417,65 @@ public final class ParamValidatorModule implements IcarusModule {
             String injectionDesc = "";
             Severity injectionSeverity = Severity.HIGH;
 
-            boolean timeDelayHit = mutation.type().equals("STRING_SQLI_TIME") && responseTime >= timeDelayMs;
+            // Calculate statistical variance for Time-based SQLi
+            boolean timeDelayHit = false;
+            if (mutation.type().equals("STRING_SQLI_TIME")) {
+                // Minimum threshold check
+                if (responseTime >= timeDelayMs) {
+                    // Statistical validation against baseline
+                    double diff = Math.abs(responseTime - baselineTime);
+                    // If the baseline was already slow, we need standard deviation (simplified here)
+                    // For now, require the payload response to be at least 2.5x slower than the baseline
+                    // AND at least the timeDelayMs difference
+                    if (responseTime > (baselineTime * 2.5) && diff >= (timeDelayMs * 0.8)) {
+                        timeDelayHit = true;
+                    }
+                }
+            }
             if (timeDelayHit) {
                 isInjectionFinding = true;
-                injectionDesc = "Time-based SQLi anomaly detected. Baseline was " + baselineTime + "ms, payload took " + responseTime + "ms.";
+                injectionDesc = I18n.t("module.pv.finding.desc.sqli_time", baselineTime, responseTime);
             }
 
             boolean xssReflectionHit = false;
+            boolean xssUncertain = false;
             if (checkXssReflection && mutation.type().equals("STRING_XSS") && mutation.value() instanceof String payload) {
                 if (bodyStr.contains(payload)) {
-                    xssReflectionHit = true;
-                    isInjectionFinding = true;
-                    extractedContext = extractContext(bodyStr, payload, 60);
-                    injectionDesc = "XSS Payload reflection detected. Context:\n`" + extractedContext + "`";
+                    // It reflected exactly. Is it in an executable context or just a JSON response?
+                    String resContentType = mutatedResponse.headerValue("Content-Type");
+                    if (resContentType != null && (resContentType.toLowerCase().contains("application/json") || resContentType.toLowerCase().contains("text/plain"))) {
+                        // Reflected inside JSON or text - usually not exploitable directly unless the client misparses it.
+                        xssUncertain = true;
+                    } else {
+                        // Use JSoup to validate if the payload broke out of the DOM
+                        org.jsoup.nodes.Document doc = org.jsoup.Jsoup.parse(bodyStr);
+                        // A true XSS payload like <svg/onmouseover="confirm(1)"/class="x"> 
+                        // should result in an SVG element with those attributes in the DOM.
+                        // If it's escaped, Jsoup parses it as text nodes, not elements.
+                        boolean foundExecutableDom = !doc.getElementsByTag("svg").isEmpty() || 
+                                                     !doc.getElementsByTag("details").isEmpty() ||
+                                                     !doc.getElementsByAttribute("onmouseover").isEmpty() ||
+                                                     !doc.getElementsByAttribute("ontoggle").isEmpty() ||
+                                                     !doc.getElementsByAttribute("onload").isEmpty();
+                        
+                        if (foundExecutableDom) {
+                            xssReflectionHit = true;
+                        } else {
+                            // The exact string is there, but JSoup didn't parse our injected tags/attributes.
+                            // This might be a false positive (escaped context) or inside a <script> block which JSoup treats as data.
+                            // We mark it as uncertain so MCP/LLM can validate it later.
+                            xssUncertain = true;
+                        }
+                    }
+                    
+                    if (xssReflectionHit || xssUncertain) {
+                        isInjectionFinding = true;
+                        extractedContext = extractContext(bodyStr, payload, 60);
+                        injectionDesc = I18n.t("module.pv.finding.desc.xss", extractedContext);
+                        if (xssUncertain) {
+                            injectionDesc += "\n[UNCERTAIN] " + I18n.t("module.pv.finding.desc.xss_uncertain");
+                        }
+                    }
                 }
             }
 
@@ -388,7 +488,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     cmdiHit = true;
                     isInjectionFinding = true;
                     extractedContext = extractContext(bodyStr, match, 60);
-                    injectionDesc = "Command Injection output signature detected (`" + match + "`). Context:\n`" + extractedContext + "`";
+                    injectionDesc = I18n.t("module.pv.finding.desc.cmdi", match, extractedContext);
                 }
             }
 
@@ -399,8 +499,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     sstiHit = true;
                     isInjectionFinding = true;
                     extractedContext = extractContext(bodyStr, evaluated, 60);
-                    injectionDesc = "Server-Side Template Injection: payload `" + sstiPayload + "` was evaluated to `" + evaluated
-                            + "` rather than merely reflected. Context:\n`" + extractedContext + "`";
+                    injectionDesc = I18n.t("module.pv.finding.desc.ssti", sstiPayload, evaluated, extractedContext);
                 }
             }
 
@@ -412,8 +511,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     isInjectionFinding = true;
                     injectionSeverity = Severity.CRITICAL;
                     extractedContext = extractContext(bodyStr, match, 60);
-                    injectionDesc = "SSRF suspected: response to an internal-target payload (`" + mutation.value() + "`) contains `" + match
-                            + "`, suggesting the request reached an internal service. Context:\n`" + extractedContext + "`";
+                    injectionDesc = I18n.t("module.pv.finding.desc.ssrf_heuristic", mutation.value(), match, extractedContext);
                 }
             }
 
@@ -428,10 +526,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     idorHit = true;
                     isInjectionFinding = true;
                     injectionSeverity = Severity.HIGH;
-                    injectionDesc = "Possible IDOR: swapping `" + mutation.path() + "` to a neighboring ID (`" + mutation.value() + "`) still returned HTTP "
-                            + status + " with a similarly-shaped response (" + length + " bytes vs baseline " + baselineLength + " bytes). This only "
-                            + "confirms the endpoint didn't reject the different ID — verify manually with a second account/session that it actually "
-                            + "returns a different resource's data before treating this as confirmed.";
+                    injectionDesc = I18n.t("module.pv.finding.desc.idor", mutation.path(), mutation.value(), status, length, baselineLength);
                 }
             }
 
@@ -446,8 +541,7 @@ public final class ParamValidatorModule implements IcarusModule {
                 if (sqliDiffRatio > 0.20) {
                     booleanSqliHit = true;
                     isInjectionFinding = true;
-                    injectionDesc = "Boolean-based SQLi anomaly detected: payload `" + mutation.value() + "` returned a response that diverged from baseline ("
-                            + length + " bytes vs baseline " + baselineLength + " bytes), suggesting the injected condition changed which rows were returned.";
+                    injectionDesc = I18n.t("module.pv.finding.desc.boolean_sqli", mutation.value(), length, baselineLength);
                 }
             }
 
@@ -468,7 +562,7 @@ public final class ParamValidatorModule implements IcarusModule {
                         backendErrorHit = true;
                         isInjectionFinding = true;
                         injectionSeverity = Severity.MEDIUM;
-                        injectionDesc = "Backend Error / SQLi Anomaly detected. " + verboseMatch;
+                        injectionDesc = I18n.t("module.pv.finding.desc.backend_error", verboseMatch);
                     }
                 }
 
@@ -482,11 +576,11 @@ public final class ParamValidatorModule implements IcarusModule {
                     if (diffRatio > 0.20) {
                         isInjectionFinding = true;
                         injectionSeverity = Severity.MEDIUM;
-                        injectionDesc = "Behavioral size anomaly detected (" + length + " bytes vs baseline " + baselineLength + " bytes).";
+                        injectionDesc = I18n.t("module.pv.finding.desc.size_anomaly", length, baselineLength);
                     } else if (baselineTime > 0 && responseTime > baselineTime * 5 && responseTime > 3000) {
                         isInjectionFinding = true;
                         injectionSeverity = Severity.MEDIUM;
-                        injectionDesc = "Behavioral time anomaly detected (" + responseTime + "ms vs baseline " + baselineTime + "ms).";
+                        injectionDesc = I18n.t("module.pv.finding.desc.time_anomaly", responseTime, baselineTime);
                     }
                 }
             }
@@ -496,7 +590,7 @@ public final class ParamValidatorModule implements IcarusModule {
             // injection classes on the same parameter don't collide under one shared name.
             if (isInjectionFinding) {
                 findings.add(Finding.builder(name(), mutation.type())
-                        .description("Manual Evaluation Required. Injection anomaly detected on parameter `" + mutation.path() + "` using payload `" + mutation.value() + "`.\n\n" + injectionDesc)
+                        .description(I18n.t("module.pv.finding.desc.injection", mutation.path(), mutation.value(), injectionDesc))
                         .severity(injectionSeverity)
                         .category(mutation.category())
                         .path(mutation.path())
@@ -508,7 +602,7 @@ public final class ParamValidatorModule implements IcarusModule {
                         .meta("payload", String.valueOf(mutation.value()))
                         .meta("baselineLength", String.valueOf(baselineLength))
                         .build());
-                logger.accept("[FINDING] " + shortPath(mutation.path()) + " → " + mutation.type() + " (HTTP " + status + ")");
+                logger.accept(I18n.t("module.pv.log.finding_injection", shortPath(mutation.path()), mutation.type(), status));
                 continue; // Skip adding to the grouped validation bucket
             }
 
@@ -521,7 +615,7 @@ public final class ParamValidatorModule implements IcarusModule {
 
             if (accepted) {
                 Severity severity = Severity.MEDIUM;
-                String findingDesc = mutation.description() + " | HTTP=" + status + " | size=" + length;
+                String findingDesc = I18n.t("module.pv.finding.desc.validation_mutation", mutation.description(), status, length);
 
                 // Group standard missing-validation findings
                 groupedByPath.computeIfAbsent(mutation.path(), k -> new ArrayList<>())
@@ -557,24 +651,24 @@ public final class ParamValidatorModule implements IcarusModule {
                     .findFirst()
                     .orElse(pathFindings.get(0));
 
-            String findingName = "Missing Input Validation";
-            StringBuilder desc = new StringBuilder("The parameter `" + path + "` lacks comprehensive input validation. Based on the automated tests, the endpoint accepted:\n\n");
+            String findingName = I18n.t("module.pv.finding.name.validation");
+            StringBuilder desc = new StringBuilder(I18n.t("module.pv.finding.desc.validation_base", path));
 
             if (structuralFailure) {
-                desc.append("- **Missing Structural Enforcement:** The endpoint accepted requests where this parameter was completely omitted, set to null, or replaced with empty objects/arrays.\n");
+                desc.append(I18n.t("module.pv.finding.desc.validation_structural"));
             }
             if (typeFailure) {
-                desc.append("- **Type Confusion:** The endpoint accepted data types that violate the expected schema (e.g., accepting strings instead of booleans/integers).\n");
+                desc.append(I18n.t("module.pv.finding.desc.validation_type"));
             }
             if (boundaryFailure) {
-                desc.append("- **Missing Boundary Checks:** The endpoint accepted extreme boundary values (e.g., negative numbers, massive strings, or zero).\n");
+                desc.append(I18n.t("module.pv.finding.desc.validation_boundary"));
             }
 
             // Per-mutation detail — keeps the specific payload/status/size a pentester
             // needs to reproduce each bypass, instead of only the rolled-up summary above.
-            desc.append("\nContributing payloads:\n");
+            desc.append(I18n.t("module.pv.finding.desc.validation_payloads"));
             for (MutationResult res : pathFindings) {
-                desc.append("- `").append(res.mutation().type()).append("`: ").append(res.desc()).append("\n");
+                desc.append(I18n.t("module.pv.finding.desc.validation_payload_item", res.mutation().type(), res.desc()));
             }
 
             findings.add(Finding.builder(name(), findingName)
@@ -589,6 +683,68 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         findings.addAll(correlateSsrfInteractions(collaboratorClient, ssrfPayloadsByField, mutations, responses, config, logger));
+
+        Map<String, List<Finding>> groupedFindings = findings.stream()
+                .collect(Collectors.groupingBy(f -> {
+                    String fullPath = f.evidence() != null && f.evidence().request() != null ? f.evidence().request().path() : f.path();
+                    String urlPath = fullPath.contains("?") ? fullPath.substring(0, fullPath.indexOf('?')) : fullPath;
+                    return f.type() + "|||" + urlPath;
+                }));
+
+        List<Finding> finalFindings = new ArrayList<>();
+        
+        for (Map.Entry<String, List<Finding>> entry : groupedFindings.entrySet()) {
+            List<Finding> group = entry.getValue();
+            if (group.size() > 1) {
+                Finding first = group.get(0);
+                String fullPath = first.evidence() != null && first.evidence().request() != null ? first.evidence().request().path() : first.path();
+                String urlPath = fullPath.contains("?") ? fullPath.substring(0, fullPath.indexOf('?')) : fullPath;
+                
+                final int[] choice = new int[1];
+                try {
+                    SwingUtilities.invokeAndWait(() -> {
+                        choice[0] = JOptionPane.showConfirmDialog(
+                            null,
+                            I18n.t("module.pv.ui.combine_findings_msg", group.size(), first.type(), urlPath),
+                            I18n.t("module.pv.ui.combine_findings_title"),
+                            JOptionPane.YES_NO_OPTION
+                        );
+                    });
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    choice[0] = JOptionPane.NO_OPTION;
+                } catch (Exception e) {
+                    choice[0] = JOptionPane.NO_OPTION;
+                }
+                
+                if (choice[0] == JOptionPane.YES_OPTION) {
+                    StringBuilder combinedDesc = new StringBuilder(I18n.t("module.pv.finding.desc.combined_base", urlPath));
+                    Finding mostSevere = group.get(0);
+                    for (Finding f : group) {
+                        if (f.severity().compareTo(mostSevere.severity()) < 0) {
+                            mostSevere = f;
+                        }
+                        combinedDesc.append(I18n.t("module.pv.finding.desc.combined_param", f.path()));
+                        combinedDesc.append(f.description()).append("\n\n");
+                    }
+                    
+                    var aggregatedBuilder = Finding.builder(name(), first.type())
+                        .description(combinedDesc.toString().trim())
+                        .severity(mostSevere.severity())
+                        .category(mostSevere.category())
+                        .path(urlPath)
+                        .evidence(mostSevere.evidence());
+                    mostSevere.metadata().forEach(aggregatedBuilder::meta);
+                    finalFindings.add(aggregatedBuilder.build());
+                } else {
+                    finalFindings.addAll(group);
+                }
+            } else {
+                finalFindings.addAll(group);
+            }
+        }
+        
+        findings = finalFindings;
 
         return findings;
     }
@@ -607,7 +763,7 @@ public final class ParamValidatorModule implements IcarusModule {
         if (client == null || payloadsByField.isEmpty()) return List.of();
 
         int waitMs = config.getInt("pv.ssrf_collaborator_wait_ms", 5000);
-        logger.accept("Waiting " + waitMs + "ms for Collaborator interactions before checking for out-of-band SSRF...");
+        logger.accept(I18n.t("module.pv.log.wait_collaborator", waitMs));
         try {
             Thread.sleep(waitMs);
         } catch (InterruptedException e) {
@@ -619,7 +775,7 @@ public final class ParamValidatorModule implements IcarusModule {
         try {
             interactions = client.getAllInteractions();
         } catch (Exception e) {
-            logger.accept("Collaborator interaction poll failed: " + e.getMessage());
+            logger.accept(I18n.t("module.pv.log.collab_poll_failed", e.getMessage()));
             return List.of();
         }
         if (interactions.isEmpty()) return List.of();
@@ -643,16 +799,14 @@ public final class ParamValidatorModule implements IcarusModule {
                 HttpRequestResponse evidence = responses.get(mutationIndex);
 
                 findings.add(Finding.builder(name(), "STRING_SSRF")
-                        .description("Server-Side Request Forgery confirmed on parameter `" + path + "` — the target made an out-of-band "
-                                + interaction.type() + " request to a Collaborator payload embedded only in this scan's request, proving it "
-                                + "followed the injected URL server-side.")
+                        .description(I18n.t("module.pv.finding.desc.ssrf_oob", path, interaction.type()))
                         .severity(Severity.CRITICAL)
                         .category(Category.INJECTION)
                         .path(path)
                         .evidence(evidence)
                         .meta("interactionType", interaction.type().name())
                         .build());
-                logger.accept("[FINDING] " + shortPath(path) + " → STRING_SSRF (confirmed via Collaborator " + interaction.type() + ")");
+                logger.accept(I18n.t("module.pv.log.finding_ssrf_collab", shortPath(path), interaction.type()));
                 break;
             }
         }
@@ -671,29 +825,29 @@ public final class ParamValidatorModule implements IcarusModule {
         if (config.getBool("pv.ssrf", true) && leafValue instanceof String) {
             if (collaboratorClient != null) {
                 CollaboratorPayload payload = collaboratorClient.generatePayload();
-                specs.add(new MutationSpec("STRING_SSRF_OOB", "SSRF out-of-band payload", "http://" + payload + "/", false, Category.INJECTION));
+                specs.add(new MutationSpec("STRING_SSRF_OOB", I18n.t("module.pv.spec.desc.ssrf_oob"), "http://" + payload + "/", false, Category.INJECTION));
                 ssrfPayloadsByField.put(pathString, payload);
             } else {
                 for (String target : config.getString("pv.payload_ssrf_heuristic",
                         "http://169.254.169.254/latest/meta-data/\nhttp://169.254.169.254/computeMetadata/v1/\nhttp://127.0.0.1/\nhttp://localhost/").split("\n")) {
-                    specs.add(new MutationSpec("STRING_SSRF_HEURISTIC", "SSRF internal-target payload", target, false, Category.INJECTION));
+                    specs.add(new MutationSpec("STRING_SSRF_HEURISTIC", I18n.t("module.pv.spec.desc.ssrf_heuristic"), target, false, Category.INJECTION));
                 }
             }
         }
 
         if (config.getBool("pv.idor", true) && pathString != null && pathString.matches("(?i).*\\b(id|uuid|guid)s?\\b.*")) {
             if (leafValue instanceof Long l) {
-                specs.add(new MutationSpec("IDOR_ADJACENT_ID", "Adjacent numeric resource ID", l + 1, false, Category.ACCESS_CONTROL));
+                specs.add(new MutationSpec("IDOR_ADJACENT_ID", I18n.t("module.pv.spec.desc.adjacent_id"), l + 1, false, Category.ACCESS_CONTROL));
             } else if (leafValue instanceof RawNumber rn && rn.isInteger()) {
                 try {
-                    specs.add(new MutationSpec("IDOR_ADJACENT_ID", "Adjacent numeric resource ID", Long.parseLong(rn.value()) + 1, false, Category.ACCESS_CONTROL));
+                    specs.add(new MutationSpec("IDOR_ADJACENT_ID", I18n.t("module.pv.spec.desc.adjacent_id"), Long.parseLong(rn.value()) + 1, false, Category.ACCESS_CONTROL));
                 } catch (NumberFormatException ignored) {
                     // Not actually a plain integer literal despite isInteger() — leave the field alone rather than guess.
                 }
             } else if (leafValue instanceof String s && s.matches("[0-9a-fA-F-]{8,36}")) {
                 // UUID/opaque-id-shaped string: probe a fixed, plausible alternate id rather than
                 // guessing a structure we can't safely mutate.
-                specs.add(new MutationSpec("IDOR_ADJACENT_ID", "Alternate resource ID", "00000000-0000-0000-0000-000000000001", false, Category.ACCESS_CONTROL));
+                specs.add(new MutationSpec("IDOR_ADJACENT_ID", I18n.t("module.pv.spec.desc.alternate_id"), "00000000-0000-0000-0000-000000000001", false, Category.ACCESS_CONTROL));
             }
         }
 
@@ -718,9 +872,7 @@ public final class ParamValidatorModule implements IcarusModule {
 
     // Command-output signatures for common *nix/Windows commands used in the STRING_CMDI
     // payloads above (`id`, `whoami`) — kept short and specific rather than exhaustive, to
-    // avoid false positives on legitimate response content. Public: reused as-is by
-    // IcarusMcpServer's validate_finding/exploit_finding so a re-check runs the exact same
-    // signature logic as the original detection, not a second hand-copied list that could drift.
+    // avoid false positives on legitimate response content.
     public static final List<String> CMDI_SIGNATURES = List.of(
             "uid=", "gid=", "groups=", "root:x:0:0", "www-data",
             "volume serial number", "directory of ");
@@ -776,138 +928,138 @@ public final class ParamValidatorModule implements IcarusModule {
 
             if (testStructural) {
                 if (config.getBool("pv.null_value", true)) {
-                    specs.add(new MutationSpec("NULL_VALUE", "Value replaced by null", null, false, Category.STRUCTURAL));
+                    specs.add(new MutationSpec("NULL_VALUE", I18n.t("module.pv.spec.desc.null_value"), null, false, Category.STRUCTURAL));
                 }
                 if (config.getBool("pv.field_removal", true)) {
-                    specs.add(new MutationSpec("FIELD_REMOVED", "Field removed from body", null, true, Category.STRUCTURAL));
+                    specs.add(new MutationSpec("FIELD_REMOVED", I18n.t("module.pv.spec.desc.field_removed"), null, true, Category.STRUCTURAL));
                 }
                 if (config.getBool("pv.empty_object", true)) {
-                    specs.add(new MutationSpec("TYPE_EMPTY_OBJECT", "Value replaced by empty object {}", new LinkedHashMap<>(), false, Category.STRUCTURAL));
+                    specs.add(new MutationSpec("TYPE_EMPTY_OBJECT", I18n.t("module.pv.spec.desc.empty_object"), new LinkedHashMap<>(), false, Category.STRUCTURAL));
                 }
                 if (config.getBool("pv.empty_array", true)) {
-                    specs.add(new MutationSpec("TYPE_EMPTY_ARRAY", "Value replaced by empty array []", new ArrayList<>(), false, Category.STRUCTURAL));
+                    specs.add(new MutationSpec("TYPE_EMPTY_ARRAY", I18n.t("module.pv.spec.desc.empty_array"), new ArrayList<>(), false, Category.STRUCTURAL));
                 }
             }
 
             if (value instanceof String) {
                 if (testBoundary) {
                     if (config.getBool("pv.empty_string", true)) {
-                        specs.add(new MutationSpec("EMPTY_STRING", "Empty string", "", false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("EMPTY_STRING", I18n.t("module.pv.spec.desc.empty_string"), "", false, Category.BOUNDARY));
                     }
                     if (config.getBool("pv.long_string", true)) {
                         int len = config.getInt("pv.long_string_length", 10000);
-                        specs.add(new MutationSpec("STRING_LONG", "Very long string (" + len + " chars)", "A".repeat(len), false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("STRING_LONG", I18n.t("module.pv.spec.desc.long_string", len), "A".repeat(len), false, Category.BOUNDARY));
                     }
                 }
                 if (testInjection) {
-                    if (config.getBool("pv.sqli", true)) {
-                        for (String payload : config.getString("pv.payload_sqli", "' OR '1'='1").split("\n")) {
-                            specs.add(new MutationSpec("STRING_SQLI", "SQL Injection payload", payload, false, Category.INJECTION));
-                        }
+                    // Canary Probes First
+                    for (String payload : icarus.modules.PayloadRepository.CANARY_PROBES) {
+                        specs.add(new MutationSpec("CANARY_PROBE", icarus.core.I18n.t("module.pv.spec.desc.canary_probe"), payload, false, Category.INJECTION));
                     }
+
                     if (config.getBool("pv.sqli_time", true)) {
-                        for (String payload : config.getString("pv.payload_sqli_time", "'; WAITFOR DELAY '0:0:10'--").split("\n")) {
-                            specs.add(new MutationSpec("STRING_SQLI_TIME", "Time-based SQL Injection payload", payload, false, Category.INJECTION));
+                        for (String payload : icarus.modules.PayloadRepository.SQLI_TIME) {
+                            specs.add(new MutationSpec("STRING_SQLI_TIME", I18n.t("module.pv.spec.desc.sqli_time"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.xss", true)) {
-                        for (String payload : config.getString("pv.payload_xss", "<script>alert(1)</script>").split("\n")) {
-                            specs.add(new MutationSpec("STRING_XSS", "XSS payload", payload, false, Category.INJECTION));
+                        for (String payload : icarus.modules.PayloadRepository.XSS_POLYGLOT) {
+                            specs.add(new MutationSpec("STRING_XSS", I18n.t("module.pv.spec.desc.xss"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.path_traversal", true)) {
-                        for (String payload : config.getString("pv.payload_path_traversal", "../../../../etc/passwd").split("\n")) {
-                            specs.add(new MutationSpec("STRING_PATH_TRAVERSAL", "Path Traversal payload", payload, false, Category.INJECTION));
+                        for (String payload : icarus.modules.PayloadRepository.PATH_TRAVERSAL) {
+                            specs.add(new MutationSpec("STRING_PATH_TRAVERSAL", I18n.t("module.pv.spec.desc.path_traversal"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.nosqli", true)) {
                         for (String payload : config.getString("pv.payload_nosqli", "{\"$ne\": null}").split("\n")) {
-                            specs.add(new MutationSpec("STRING_NOSQLI", "NoSQL Injection payload", payload, false, Category.INJECTION));
+                            specs.add(new MutationSpec("STRING_NOSQLI", I18n.t("module.pv.spec.desc.nosqli"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.format_string", true)) {
                         for (String payload : config.getString("pv.payload_format_string", "%s%x%n").split("\n")) {
-                            specs.add(new MutationSpec("STRING_FORMAT", "Format string payload", payload, false, Category.INJECTION));
+                            specs.add(new MutationSpec("STRING_FORMAT", I18n.t("module.pv.spec.desc.format_string"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.unicode", true)) {
-                        specs.add(new MutationSpec("STRING_UNICODE", "Payload unicode / RTL override", config.getString("pv.payload_unicode", "‮test😀"), false, Category.INJECTION));
+                        specs.add(new MutationSpec("STRING_UNICODE", I18n.t("module.pv.spec.desc.unicode"), config.getString("pv.payload_unicode", "‮test😀"), false, Category.INJECTION));
                     }
                     if (config.getBool("pv.cmdi", true)) {
                         for (String payload : config.getString("pv.payload_cmdi", "; id\n| whoami\n`id`\n$(id)").split("\n")) {
-                            specs.add(new MutationSpec("STRING_CMDI", "Command Injection payload", payload, false, Category.INJECTION));
+                            specs.add(new MutationSpec("STRING_CMDI", I18n.t("module.pv.spec.desc.cmdi"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.ssti", true)) {
                         for (String payload : config.getString("pv.payload_ssti", "${7*7}\n{{7*7}}\n#{7*7}\n<%= 7*7 %>").split("\n")) {
-                            specs.add(new MutationSpec("STRING_SSTI", "Server-Side Template Injection payload", payload, false, Category.INJECTION));
+                            specs.add(new MutationSpec("STRING_SSTI", I18n.t("module.pv.spec.desc.ssti"), payload, false, Category.INJECTION));
                         }
                     }
                 }
                 if (testTypeConfusion) {
                     if (config.getBool("pv.string_as_number", true)) {
-                        specs.add(new MutationSpec("TYPE_NUMBER", "String replaced by number", 0L, false, Category.TYPE_CONFUSION));
+                        specs.add(new MutationSpec("TYPE_NUMBER", I18n.t("module.pv.spec.desc.string_as_number"), 0L, false, Category.TYPE_CONFUSION));
                     }
                     if (config.getBool("pv.string_as_boolean", true)) {
-                        specs.add(new MutationSpec("TYPE_BOOLEAN", "String replaced by boolean", Boolean.TRUE, false, Category.TYPE_CONFUSION));
+                        specs.add(new MutationSpec("TYPE_BOOLEAN", I18n.t("module.pv.spec.desc.string_as_boolean"), Boolean.TRUE, false, Category.TYPE_CONFUSION));
                     }
                 }
             } else if (value instanceof Long || value instanceof Integer
                     || (value instanceof RawNumber rn && rn.isInteger())) {
                 if (testBoundary) {
                     if (config.getBool("pv.number_zero", true)) {
-                        specs.add(new MutationSpec("NUMBER_ZERO", "Zero value", 0L, false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("NUMBER_ZERO", I18n.t("module.pv.spec.desc.zero_value"), 0L, false, Category.BOUNDARY));
                     }
                     if (config.getBool("pv.number_negative", true)) {
-                        specs.add(new MutationSpec("NUMBER_NEGATIVE", "Negative value", -1L, false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("NUMBER_NEGATIVE", I18n.t("module.pv.spec.desc.negative_value"), -1L, false, Category.BOUNDARY));
                     }
                     if (config.getBool("pv.number_overflow", true)) {
-                        specs.add(new MutationSpec("NUMBER_OVERFLOW", "Overflow (Long.MAX_VALUE)", Long.MAX_VALUE, false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("NUMBER_OVERFLOW", I18n.t("module.pv.spec.desc.overflow"), Long.MAX_VALUE, false, Category.BOUNDARY));
                     }
                     if (config.getBool("pv.integer_as_float", true)) {
-                        specs.add(new MutationSpec("NUMBER_FLOAT", "Float where integer was expected", 1.5, false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("NUMBER_FLOAT", I18n.t("module.pv.spec.desc.integer_as_float"), 1.5, false, Category.BOUNDARY));
                     }
                 }
                 if (testTypeConfusion) {
                     if (config.getBool("pv.number_as_string", true)) {
-                        specs.add(new MutationSpec("TYPE_STRING", "Number replaced by non-numeric string", "abc", false, Category.TYPE_CONFUSION));
+                        specs.add(new MutationSpec("TYPE_STRING", I18n.t("module.pv.spec.desc.number_as_string"), "abc", false, Category.TYPE_CONFUSION));
                     }
                     if (config.getBool("pv.number_as_numeric_string", true)) {
-                        specs.add(new MutationSpec("TYPE_STRING_NUMERIC", "Number replaced by numeric string", "123", false, Category.TYPE_CONFUSION));
+                        specs.add(new MutationSpec("TYPE_STRING_NUMERIC", I18n.t("module.pv.spec.desc.number_as_numeric_string"), "123", false, Category.TYPE_CONFUSION));
                     }
                 }
             } else if (value instanceof Double || (value instanceof RawNumber rn && !rn.isInteger())) {
                 if (testBoundary) {
                     if (config.getBool("pv.number_zero", true)) {
-                        specs.add(new MutationSpec("NUMBER_ZERO", "Zero value", 0.0, false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("NUMBER_ZERO", I18n.t("module.pv.spec.desc.zero_value"), 0.0, false, Category.BOUNDARY));
                     }
                     if (config.getBool("pv.number_negative", true)) {
-                        specs.add(new MutationSpec("NUMBER_NEGATIVE", "Negative value", -1.5, false, Category.BOUNDARY));
+                        specs.add(new MutationSpec("NUMBER_NEGATIVE", I18n.t("module.pv.spec.desc.negative_value"), -1.5, false, Category.BOUNDARY));
                     }
                 }
                 if (testInjection) {
                     if (config.getBool("pv.sqli", true)) {
-                        specs.add(new MutationSpec("NUMBER_SQLI_MATH", "Mathematical SQL Injection payload", "1/0", false, Category.INJECTION));
+                        specs.add(new MutationSpec("NUMBER_SQLI_MATH", I18n.t("module.pv.spec.desc.sqli_math"), "1/0", false, Category.INJECTION));
                     }
                     if (config.getBool("pv.sqli_time", true)) {
                         for (String payload : config.getString("pv.payload_sqli_time", "1-(WAITFOR DELAY '0:0:10')").split("\n")) {
-                            specs.add(new MutationSpec("STRING_SQLI_TIME", "Time-based SQL Injection payload (Number context)", payload, false, Category.INJECTION));
+                            specs.add(new MutationSpec("STRING_SQLI_TIME", I18n.t("module.pv.spec.desc.sqli_time_num"), payload, false, Category.INJECTION));
                         }
                     }
                 }
                 if (testTypeConfusion && config.getBool("pv.number_as_string", true)) {
-                    specs.add(new MutationSpec("TYPE_STRING", "Number replaced by string", "abc", false, Category.TYPE_CONFUSION));
+                    specs.add(new MutationSpec("TYPE_STRING", I18n.t("module.pv.spec.desc.number_as_string_generic"), "abc", false, Category.TYPE_CONFUSION));
                 }
             } else if (value instanceof Boolean b) {
                 if (testBoundary && config.getBool("pv.boolean_flip", true)) {
-                    specs.add(new MutationSpec("BOOLEAN_FLIP", "Boolean flipped", !b, false, Category.BOUNDARY));
+                    specs.add(new MutationSpec("BOOLEAN_FLIP", I18n.t("module.pv.spec.desc.boolean_flip"), !b, false, Category.BOUNDARY));
                 }
                 if (testTypeConfusion) {
                     if (config.getBool("pv.boolean_as_string", true)) {
-                        specs.add(new MutationSpec("TYPE_STRING", "Boolean replaced by string", "true", false, Category.TYPE_CONFUSION));
+                        specs.add(new MutationSpec("TYPE_STRING", I18n.t("module.pv.spec.desc.boolean_as_string"), "true", false, Category.TYPE_CONFUSION));
                     }
                     if (config.getBool("pv.boolean_as_number", true)) {
-                        specs.add(new MutationSpec("TYPE_NUMBER", "Boolean replaced by number", 1L, false, Category.TYPE_CONFUSION));
+                        specs.add(new MutationSpec("TYPE_NUMBER", I18n.t("module.pv.spec.desc.boolean_as_number"), 1L, false, Category.TYPE_CONFUSION));
                     }
                 }
             }

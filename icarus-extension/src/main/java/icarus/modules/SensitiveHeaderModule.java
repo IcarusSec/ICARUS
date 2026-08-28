@@ -118,7 +118,7 @@ public class SensitiveHeaderModule implements IcarusModule {
         boolean checkCwe200Financial = config.getBool("sh.check_cwe200_financial", true);
         boolean checkCwe200Backend = config.getBool("sh.check_cwe200_backend", true);
         boolean checkCwe200Infra = config.getBool("sh.check_cwe200_infra", true);
-        boolean redactPiiValues = config.getBool("sh.redact_pii_values", true);
+        boolean redactPiiValues = config.getBool("sh.redact_pii_values", false);
 
         boolean hasHsts = false;
         boolean hasCsp = false;
@@ -145,7 +145,7 @@ public class SensitiveHeaderModule implements IcarusModule {
             // Sensitive Data Leaks
             if (checkLeak) {
                 if (lowerName.equals("authorization") || lowerName.equals("x-api-key") || lowerName.equals("x-auth-token")) {
-                    addFinding(findings, evidence, "TOKEN_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Sensitive header leaked in response: " + name);
+                    addFinding(findings, evidence, "TOKEN_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Sensitive header leaked in response: " + name + " = " + (redactPiiValues ? "[REDACTED]" : value));
                 } else if (lowerName.equals("www-authenticate") && value.contains("internal")) { // simplified realm check
                     addFinding(findings, evidence, "AUTH_REALM_LEAK", Severity.HIGH, Category.HEADER_LEAK, "WWW-Authenticate realm contains internal info: " + value);
                 } else if (lowerName.equals("x-forwarded-for") || lowerName.equals("x-real-ip") || lowerName.equals("x-originating-ip")) {
@@ -158,7 +158,7 @@ public class SensitiveHeaderModule implements IcarusModule {
             // Debug Headers
             if (checkDebug) {
                 if (lowerName.equals("x-debug") || lowerName.equals("x-debug-token") || lowerName.equals("x-debug-token-link") || lowerName.equals("x-powered-by-plesk") || lowerName.startsWith("x-backend-") || lowerName.startsWith("x-runtime") || lowerName.startsWith("x-request-id")) {
-                    addFinding(findings, evidence, "DEBUG_HEADER", Severity.MEDIUM, Category.HEADER_LEAK, "Debug/internal header present: " + name);
+                    addFinding(findings, evidence, "DEBUG_HEADER", Severity.MEDIUM, Category.HEADER_LEAK, "Debug/internal header present: " + name + " = " + (redactPiiValues ? "[REDACTED]" : value));
                 }
             }
 
@@ -177,36 +177,37 @@ public class SensitiveHeaderModule implements IcarusModule {
 
             // CWE-200: PII / National IDs
             if (checkCwe200Pii) {
+                String valDisplay = redactPiiValues ? "[REDACTED]" : value;
                 if (US_SSN_PATTERN.matcher(value).find()) {
-                    addFinding(findings, evidence, "PII_US_SSN_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential US SSN leaked in header '" + name + "'");
+                    addFinding(findings, evidence, "PII_US_SSN_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential US SSN leaked in header '" + name + "': " + valDisplay);
                 } else if (UK_NINO_PATTERN.matcher(value).find()) {
-                    addFinding(findings, evidence, "PII_UK_NINO_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential UK NINO leaked in header '" + name + "'");
+                    addFinding(findings, evidence, "PII_UK_NINO_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential UK NINO leaked in header '" + name + "': " + valDisplay);
                 } else if (CA_SIN_PATTERN.matcher(value).find()) {
-                    addFinding(findings, evidence, "PII_CA_SIN_LEAK", Severity.LOW, Category.HEADER_LEAK, "Potential Canada SIN leaked in header '" + name + "' (low-confidence structural match)");
+                    addFinding(findings, evidence, "PII_CA_SIN_LEAK", Severity.LOW, Category.HEADER_LEAK, "Potential Canada SIN leaked in header '" + name + "': " + valDisplay);
                 } else if (BR_CPF_PATTERN.matcher(value).find()) {
-                    addFinding(findings, evidence, "PII_BR_CPF_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential Brazil CPF leaked in header '" + name + "'");
+                    addFinding(findings, evidence, "PII_BR_CPF_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential Brazil CPF leaked in header '" + name + "': " + valDisplay);
                 } else if (FR_NIR_PATTERN.matcher(value).find()) {
-                    addFinding(findings, evidence, "PII_FR_NIR_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential France SSN (NIR) leaked in header '" + name + "'");
+                    addFinding(findings, evidence, "PII_FR_NIR_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential France SSN (NIR) leaked in header '" + name + "': " + valDisplay);
                 }
 
                 if (lowerName.contains("name") || lowerName.contains("user") || lowerName.contains("author") || lowerName.contains("email")) {
                     if (!lowerName.equals("user-agent") && !lowerName.equals("server-timing")
                             && !lowerName.contains("authorization")) {
-                        String displayValue = redactPiiValues ? "[REDACTED]" : value;
                         addFinding(findings, evidence, "PII_HEADER_KEY_LEAK", Severity.LOW, Category.HEADER_LEAK,
-                            "Header key suggests PII disclosure: " + name + " = " + displayValue);
+                            "Header key suggests PII disclosure: " + name + " = " + valDisplay);
                     }
                 }
             }
 
             // CWE-200: Financial Data
             if (checkCwe200Financial) {
+                String valDisplay = redactPiiValues ? "[REDACTED]" : value;
                 var ccMatcher = CREDIT_CARD_PATTERN.matcher(value);
                 if (ccMatcher.find() && isValidLuhn(ccMatcher.group())) {
-                    addFinding(findings, evidence, "CREDIT_CARD_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential Credit Card leaked in header '" + name + "'");
+                    addFinding(findings, evidence, "CREDIT_CARD_LEAK", Severity.HIGH, Category.HEADER_LEAK, "Potential Credit Card leaked in header '" + name + "': " + valDisplay);
                 }
                 if (IBAN_PATTERN.matcher(value).find()) {
-                    addFinding(findings, evidence, "IBAN_LEAK", Severity.LOW, Category.HEADER_LEAK, "Potential IBAN leaked in header '" + name + "' (low-confidence structural match)");
+                    addFinding(findings, evidence, "IBAN_LEAK", Severity.LOW, Category.HEADER_LEAK, "Potential IBAN leaked in header '" + name + "': " + valDisplay);
                 }
             }
 

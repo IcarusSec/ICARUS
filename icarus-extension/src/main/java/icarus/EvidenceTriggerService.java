@@ -1,60 +1,75 @@
 package icarus;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.handler.*;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
+import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
 import icarus.autoauth.AutoAuthModule;
-import icarus.core.Category;
-import icarus.core.Finding;
-import icarus.core.IcarusModule;
-import icarus.core.ModuleConfig;
-import icarus.core.Severity;
+import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
-import icarus.core.EvidencePaths;
-
-import javax.imageio.ImageIO;
+import icarus.evidence.PdfReportGenerator;
+import icarus.evidence.ProjectStateCodec;
+import icarus.evidence.ReportGenerator;
+import icarus.modules.PassiveErrorModule;
+import icarus.ui.ToastNotification;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
-import java.awt.image.BufferedImage;
+import java.awt.datatransfer.Transferable;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Files;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 public class EvidenceTriggerService {
     private final MontoyaApi api;
-    private final ModuleConfig config;
-    private final EvidenceCapture evidenceCapture;
-    private final List<IcarusModule> modules;
-    private final AutoAuthModule autoAuth;
-    private final Orchestrator owner;
+    private final icarus.core.ModuleConfig config;
+    private final icarus.evidence.EvidenceCapture evidenceCapture;
+    private final java.util.List<icarus.core.IcarusModule> modules;
+    private final icarus.autoauth.AutoAuthModule autoAuth;
+    private final Orchestrator orchestrator;
 
-    public EvidenceTriggerService(MontoyaApi api, ModuleConfig config, EvidenceCapture evidenceCapture,
-                                  List<IcarusModule> modules, AutoAuthModule autoAuth, Orchestrator owner) {
+    public EvidenceTriggerService(MontoyaApi api, icarus.core.ModuleConfig config, icarus.evidence.EvidenceCapture evidenceCapture, java.util.List<icarus.core.IcarusModule> modules, icarus.autoauth.AutoAuthModule autoAuth, Orchestrator orchestrator) {
         this.api = api;
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.modules = modules;
         this.autoAuth = autoAuth;
-        this.owner = owner;
+        this.orchestrator = orchestrator;
     }
 
     public void captureEvidence(Finding finding, BufferedImage image, String caption) throws IOException {
-        Path dir = EvidencePaths.evidenceImageDir(api, config);
-        Files.createDirectories(dir);
+        Path dir = icarus.core.EvidencePaths.evidenceImageDir(api, config);
+        java.nio.file.Files.createDirectories(dir);
         String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_")
                 + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".png";
         Path imagePath = dir.resolve(filename);
         ImageIO.write(image, "png", imagePath.toFile());
-        var ce = new EvidenceCapture.CapturedEvidence(finding, imagePath, image, caption);
+        var ce = new icarus.evidence.EvidenceCapture.CapturedEvidence(finding, imagePath, image, caption);
         evidenceCapture.restoreCaptured(ce, true);
-        owner.updateFinding(finding);
+        orchestrator.updateFinding(finding);
     }
 
     public void createManualEvidence(HttpRequestResponse rr) {
+        // AutoAuth injects the token on the wire (handleHttpRequestToBeSent), but that never
+        // touches the UI's copy of the request — without this, captured evidence shows the
+        // stale pre-injection token instead of what was actually sent.
         HttpRequest injectedRequest = autoAuth.injectIfApplicable(rr.request());
         if (injectedRequest != rr.request()) {
             rr = HttpRequestResponse.httpRequestResponse(injectedRequest, rr.response());
@@ -66,13 +81,18 @@ public class EvidenceTriggerService {
     private Finding detectSmartEvidence(HttpRequestResponse rr) {
         if (rr.response() == null) return null;
 
-        IcarusModule pem = modules.stream().filter(m -> m.getClass().getSimpleName().equals("PassiveErrorModule")).findFirst().orElse(null);
-        List<Finding> errorFindings = pem != null ? pem.run(rr, config, msg -> {}) : List.of();
+        // Reuse PassiveErrorModule's detection instead of a second copy of the same
+        // VerboseErrorDetector/status-code checks living here.
+        List<Finding> errorFindings = new PassiveErrorModule().run(rr, config, msg -> {});
         if (!errorFindings.isEmpty()) {
             Finding candidate = errorFindings.get(0);
             return confirmSmartEvidence(candidate.type(), candidate.description()) ? candidate : null;
         }
 
+        // XSS reflection — manual-evidence-only heuristic. Deliberately not part of the
+        // always-on background passive scan: any endpoint that legitimately echoes a
+        // search term back would make it noisy there, but it's a useful targeted nudge
+        // when the user is already looking at this specific request/response.
         String bodyStr = rr.response().bodyToString();
         for (var param : rr.request().parameters()) {
             String val = param.value();
@@ -100,11 +120,12 @@ public class EvidenceTriggerService {
     }
 
     private Finding blankManualFinding(HttpRequestResponse rr) {
-        Severity manualSeverity = parseSeverity(config.getString("evidence.manual_severity", "INFO"));
+        Severity manualSeverity = FindingsReviewDialog.parseSeverity(config.getString("evidence.manual_severity", "INFO"));
         return Finding.builder("Manual", "MANUAL_EVIDENCE")
                 .description("Manual evidence capture triggered by user.")
                 .severity(manualSeverity)
                 .category(Category.MANUAL)
+                .path(rr.request().path())
                 .evidence(rr)
                 .build();
     }
@@ -119,7 +140,7 @@ public class EvidenceTriggerService {
                 return;
             }
             Image raw = (Image) clipboard.getData(DataFlavor.imageFlavor);
-            BufferedImage image = toBufferedImage(raw);
+            java.awt.image.BufferedImage image = toBufferedImage(raw);
             evidenceCapture.captureInteractiveWithImage(blankManualFinding(rr), image);
         } catch (Exception e) {
             api.logging().logToError("Failed to read image from clipboard: " + e);
@@ -127,24 +148,17 @@ public class EvidenceTriggerService {
         }
     }
 
-    private BufferedImage toBufferedImage(Image img) {
-        if (img instanceof BufferedImage bi) return bi;
-        var bi = new BufferedImage(img.getWidth(null), img.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+    public void showEvidenceInteractive(Finding finding) {
+        evidenceCapture.captureInteractive(finding);
+    }
+
+    private java.awt.image.BufferedImage toBufferedImage(Image img) {
+        if (img instanceof java.awt.image.BufferedImage bi) return bi;
+        var bi = new java.awt.image.BufferedImage(img.getWidth(null), img.getHeight(null), java.awt.image.BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = bi.createGraphics();
         g2.drawImage(img, 0, 0, null);
         g2.dispose();
         return bi;
     }
 
-    public void showEvidenceInteractive(Finding finding) {
-        evidenceCapture.captureInteractive(finding);
-    }
-    
-    private Severity parseSeverity(String value) {
-        try {
-            return Severity.valueOf(value);
-        } catch (Exception e) {
-            return Severity.INFO;
-        }
-    }
 }

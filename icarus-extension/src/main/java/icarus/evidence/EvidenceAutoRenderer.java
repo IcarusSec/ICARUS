@@ -1,14 +1,13 @@
 package icarus.evidence;
 
-import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 
 import icarus.core.Category;
 import icarus.core.Finding;
-import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.util.Map;
 
 /**
@@ -17,14 +16,18 @@ import java.util.Map;
  * (a headless client can't take a screenshot), and reused by {@link ReportGenerator}/
  * {@link PdfReportGenerator} to auto-fill an image for any reportable finding that has no
  * manually-captured evidence, rather than leaving a "no screenshot captured" placeholder.
+ *
+ * Delegates to {@code capture}'s own bound renderers ({@link EvidenceCapture#imageRenderer},
+ * {@link EvidenceCapture#tableRenderer}, {@link EvidenceCapture#phase1Dialog}) rather than
+ * taking api/config directly, since those already carry the right MontoyaApi/ModuleConfig.
  */
 public final class EvidenceAutoRenderer {
 
     private EvidenceAutoRenderer() {}
 
     /** Renders with the finding's own title/description/severity and real captured traffic — no overrides. */
-    public static java.awt.image.BufferedImage render(MontoyaApi api, ModuleConfig config, Finding finding, boolean force1080) {
-        return render(api, config, finding, finding.type(), finding.description(), finding.severity().name(), null, null, force1080, null);
+    public static BufferedImage render(EvidenceCapture capture, Finding finding, boolean force1080) {
+        return render(capture, finding, null, null, null, null, null, force1080, null);
     }
 
     /**
@@ -34,10 +37,10 @@ public final class EvidenceAutoRenderer {
      *                   (see {@link RateLimitTableRenderer}), so a caller can target an annotation by name
      *                   instead of guessing coordinates it has no way to predict.
      */
-    public static java.awt.image.BufferedImage render(MontoyaApi api, ModuleConfig config, Finding finding,
-                                                        String title, String description, String severity,
-                                                        String requestTextOverride, String responseTextOverride,
-                                                        boolean force1080, Map<String, Rectangle> outAnchors) {
+    public static BufferedImage render(EvidenceCapture capture, Finding finding,
+                                        String title, String description, String severity,
+                                        String requestTextOverride, String responseTextOverride,
+                                        boolean force1080, Map<String, Rectangle> outAnchors) {
         String finalTitle = title != null && !title.isBlank() ? title : finding.type();
         String finalDescription = description != null && !description.isBlank() ? description : finding.description();
         String finalSeverity = severity != null && !severity.isBlank() ? severity : finding.severity().name();
@@ -52,19 +55,27 @@ public final class EvidenceAutoRenderer {
                     .evidence(finding.evidence());
             finding.metadata().forEach(builder::meta);
             finding.cweIds().forEach(builder::cwe);
-            return RateLimitTableRenderer.renderRateLimitTable(api, config, builder.build(), force1080, outAnchors);
+            return capture.tableRenderer.renderRateLimitTable(builder.build(), force1080, outAnchors);
         }
 
-        int imgHeight = force1080 ? 1080 : 800;
+        // Mirrors EvidenceImageRenderer.renderTextToImage's card layout metrics exactly, so these
+        // anchors point at the actual request/response cards ICARUS drew rather than a guess.
         // Computed unconditionally (not just when the caller wants outAnchors) — used below to
         // pick a default annotation baked into every auto-rendered image, not only ones a caller
         // explicitly annotates. ReportGenerator/PdfReportGenerator call this via the 4-arg
         // overload (outAnchors=null) to silently fill in evidence for any reportable finding
         // nobody ran capture_evidence on — that path used to render completely unannotated raw
         // traffic, which is what kept showing up as "still not annotating anything" in reports.
+        int imgHeight = force1080 ? 1080 : 800;
+        int padding = 20;
+        int cardY = 85;
+        int cardHeight = imgHeight - cardY - padding;
+        int cardWidth = (imgWidth / 2) - (padding * 3 / 2);
+        int reqCardX = padding;
+        int resCardX = imgWidth / 2 + padding / 2;
         Map<String, Rectangle> anchors = new java.util.LinkedHashMap<>();
-        anchors.put("request_column", new Rectangle(0, 70, imgWidth / 2 - 5, imgHeight - 70));
-        anchors.put("response_column", new Rectangle(imgWidth / 2 + 5, 70, imgWidth / 2 - 5, imgHeight - 70));
+        anchors.put("request_column", new Rectangle(reqCardX, cardY, cardWidth, cardHeight));
+        anchors.put("response_column", new Rectangle(resCardX, cardY, cardWidth, cardHeight));
 
         // Structural headers plus whatever single header this finding is actually about (so a
         // VERSION_DISCLOSURE finding's Server header, say, always survives the collapse below).
@@ -72,32 +83,32 @@ public final class EvidenceAutoRenderer {
         String relevantHeader = headerNameFromDescription(finalDescription);
         if (relevantHeader != null) keepHeaders.add(relevantHeader);
 
-        int wrapWidth = EvidenceImageRenderer.maxCharsForColumnWidth(imgWidth);
-        String reqText = EvidenceImageRenderer.wrapEvidenceText(
-                requestTextOverride != null ? requestTextOverride : filterNoisyHeaders(requestText(api, finding.evidence()), keepHeaders), wrapWidth);
-        String resText = EvidenceImageRenderer.wrapEvidenceText(
-                responseTextOverride != null ? responseTextOverride : filterNoisyHeaders(responseText(api, finding.evidence()), keepHeaders), wrapWidth);
+        int wrapWidth = capture.phase1Dialog.maxCharsForColumnWidth(imgWidth);
+        String reqText = capture.phase1Dialog.wrapEvidenceText(
+                requestTextOverride != null ? requestTextOverride : filterNoisyHeaders(requestText(capture, finding.evidence()), keepHeaders), wrapWidth);
+        String resText = capture.phase1Dialog.wrapEvidenceText(
+                responseTextOverride != null ? responseTextOverride : filterNoisyHeaders(responseText(capture, finding.evidence()), keepHeaders), wrapWidth);
 
-        int startY = 90 + 22; // matches colLabelY + 22 in EvidenceImageRenderer.renderTextToImage
-        int colWidth = imgWidth / 2 - 40;
+        int textStartY = cardY + 54;
+        int textWidth = cardWidth - 24;
         String[] reqLines = reqText.split("\n");
         String[] resLines = resText.split("\n");
-        anchors.putAll(lineAnchors(reqLines, 20, startY, colWidth, "request"));
-        anchors.putAll(lineAnchors(resLines, imgWidth / 2 + 20, startY, colWidth, "response"));
+        anchors.putAll(lineAnchors(reqLines, reqCardX + 24, textStartY, textWidth, "request"));
+        anchors.putAll(lineAnchors(resLines, resCardX + 24, textStartY, textWidth, "response"));
 
         String payload = finding.metadata().get("payload");
         if (payload != null && !payload.isBlank()) {
-            Rectangle reqRect = findTextRect(reqLines, payload, 20, startY);
+            Rectangle reqRect = findTextRect(reqLines, payload, reqCardX + 24, textStartY);
             if (reqRect != null) anchors.put("request_payload", reqRect);
-            Rectangle resRect = findTextRect(resLines, payload, imgWidth / 2 + 20, startY);
+            Rectangle resRect = findTextRect(resLines, payload, resCardX + 24, textStartY);
             if (resRect != null) anchors.put("response_payload", resRect);
         }
 
         if (outAnchors != null) outAnchors.putAll(anchors);
 
-        java.awt.image.BufferedImage rendered = EvidenceImageRenderer.renderTextToImage(api, config, reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
+        BufferedImage rendered = capture.imageRenderer.renderTextToImage(reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
         EvidenceAnnotator.Annotation defaultAnnotation = pickDefaultAnnotation(finding, anchors);
-        return defaultAnnotation == null ? rendered : EvidenceAnnotator.applyAnnotations(rendered, java.util.List.of(defaultAnnotation));
+        return defaultAnnotation == null ? rendered : capture.annotator.applyAnnotations(rendered, java.util.List.of(defaultAnnotation));
     }
 
     /**
@@ -197,9 +208,9 @@ public final class EvidenceAutoRenderer {
      * boundary) — callers should fall back to a coarser anchor in that case.
      */
     private static Rectangle findTextRect(String[] lines, String needle, int x, int startY) {
-        java.awt.image.BufferedImage probe = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        BufferedImage probe = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
         java.awt.Graphics2D g = probe.createGraphics();
-        g.setFont(EvidenceImageRenderer.MONO_FONT);
+        g.setFont(EvidenceCapture.MONO_FONT);
         java.awt.FontMetrics fm = g.getFontMetrics();
         try {
             for (int i = 0; i < lines.length; i++) {
@@ -256,21 +267,21 @@ public final class EvidenceAutoRenderer {
     }
 
     /** Mirrors {@link EvidencePhase1Dialog}'s reqText build so headless and interactive renders start from identical text. */
-    private static String requestText(MontoyaApi api, HttpRequestResponse rr) {
+    private static String requestText(EvidenceCapture capture, HttpRequestResponse rr) {
         String reqContentType = rr.request().headerValue("Content-Type");
         String reqLine = rr.request().method() + " " + rr.request().path() + " " + rr.request().httpVersion() + "\n";
         return reqLine + rr.request().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + EvidenceImageRenderer.formatBody(api, rr.request().body().getBytes(), reqContentType);
+                .reduce("", String::concat) + capture.imageRenderer.formatBody(rr.request().body().getBytes(), reqContentType);
     }
 
     /** Mirrors {@link EvidencePhase1Dialog}'s resText build. Empty if there's no response. */
-    private static String responseText(MontoyaApi api, HttpRequestResponse rr) {
+    private static String responseText(EvidenceCapture capture, HttpRequestResponse rr) {
         if (rr.response() == null) return "";
         String resContentType = rr.response().headerValue("Content-Type");
         String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
         return statusLine + rr.response().headers().stream()
                 .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + EvidenceImageRenderer.formatBody(api, rr.response().body().getBytes(), resContentType);
+                .reduce("", String::concat) + capture.imageRenderer.formatBody(rr.response().body().getBytes(), resContentType);
     }
 }

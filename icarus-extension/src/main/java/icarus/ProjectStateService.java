@@ -1,28 +1,51 @@
 package icarus;
 
 import burp.api.montoya.MontoyaApi;
-import icarus.core.ModuleConfig;
-import icarus.core.ReportTemplateConfig;
-import icarus.core.FindingRegistry;
+import burp.api.montoya.http.handler.*;
+import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider;
+import burp.api.montoya.ui.contextmenu.ContextMenuEvent;
+import burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse;
+import icarus.autoauth.AutoAuthModule;
+import icarus.core.*;
 import icarus.evidence.EvidenceCapture;
+import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ProjectStateCodec;
-import icarus.core.EvidencePaths;
+import icarus.evidence.ReportGenerator;
+import icarus.modules.PassiveErrorModule;
 import icarus.ui.ToastNotification;
-
 import javax.swing.*;
 import java.awt.*;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.Transferable;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.IOException;
 import java.nio.file.Files;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Consumer;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class ProjectStateService {
     private final MontoyaApi api;
-    private final ModuleConfig config;
-    private final EvidenceCapture evidenceCapture;
-    private final FindingRegistry findings;
+    private final icarus.core.ModuleConfig config;
+    private final icarus.evidence.EvidenceCapture evidenceCapture;
+    private final icarus.core.FindingRegistry findings;
 
-    public ProjectStateService(MontoyaApi api, ModuleConfig config, EvidenceCapture evidenceCapture, FindingRegistry findings) {
+    public ProjectStateService(MontoyaApi api, icarus.core.ModuleConfig config, icarus.evidence.EvidenceCapture evidenceCapture, icarus.core.FindingRegistry findings) {
         this.api = api;
         this.config = config;
         this.evidenceCapture = evidenceCapture;
@@ -136,4 +159,5 @@ public class ProjectStateService {
             }
         }.execute();
     }
+
 }

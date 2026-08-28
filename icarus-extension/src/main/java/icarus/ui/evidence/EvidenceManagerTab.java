@@ -6,8 +6,8 @@ import icarus.core.Finding;
 import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
+import icarus.core.I18n;
 import icarus.evidence.EvidenceCapture;
-import icarus.ui.ThemeHelper;
 
 import javax.swing.*;
 import java.awt.*;
@@ -15,6 +15,9 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseMotionAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -22,52 +25,85 @@ import java.util.List;
 import java.util.Map;
 
 public class EvidenceManagerTab {
-
-    private static final DataFlavor EVIDENCE_DRAG_FLAVOR =
-            new DataFlavor(EvidenceCapture.CapturedEvidence.class, "ICARUS Evidence Card");
-
-    private final MontoyaApi api;
-    private final ModuleConfig config;
-    private final EvidenceCapture evidenceCapture;
-    private final Orchestrator orchestrator;
-    private final ThemeHelper themeHelper;
     private final JPanel mainPanel;
+    private final Orchestrator orchestrator;
+    private final ModuleConfig config;
+    private final MontoyaApi api;
+    private Runnable onReload;
 
-    public EvidenceManagerTab(MontoyaApi api, ModuleConfig config, EvidenceCapture evidenceCapture, Orchestrator orchestrator, ThemeHelper themeHelper) {
-        this.api = api;
-        this.config = config;
-        this.evidenceCapture = evidenceCapture;
+    private static final DataFlavor EVIDENCE_DRAG_FLAVOR = new DataFlavor(EvidenceCapture.CapturedEvidence.class, "ICARUS Evidence Card");
+    private static final DataFlavor FINDING_DRAG_FLAVOR = new DataFlavor(String.class, "ICARUS Finding Hash");
+
+    public EvidenceManagerTab(Orchestrator orchestrator, ModuleConfig config, MontoyaApi api) {
         this.orchestrator = orchestrator;
-        this.themeHelper = themeHelper;
+        this.config = config;
+        this.api = api;
         this.mainPanel = new JPanel(new BorderLayout());
-        buildUI();
-    }
-
-    public Component getComponent() {
-        return mainPanel;
-    }
-
-    private void buildUI() {
+        
         List<String> hashOrder = new ArrayList<>();
         Map<String, List<EvidenceCapture.CapturedEvidence>> groups = new LinkedHashMap<>();
 
         DefaultListModel<String> masterModel = new DefaultListModel<>();
         JList<String> masterList = new JList<>(masterModel);
         masterList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        masterList.putClientProperty("FlatLaf.style", "arc: 8;");
+        
         masterList.setCellRenderer((list, hash, index, isSelected, hasFocus) -> {
-            JLabel l = new JLabel(findingLabel(hash, groups));
-            l.setOpaque(true);
-            l.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
-            l.setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
-            l.setForeground(isSelected ? list.getSelectionForeground() : list.getForeground());
-            return l;
+            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+            if (group == null || group.isEmpty()) return new JLabel("Error");
+            Finding display = group.get(group.size() - 1).finding(); 
+
+            JPanel panel = new JPanel(new BorderLayout(4, 4));
+            panel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+            panel.setOpaque(true);
+            panel.setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+            panel.setForeground(isSelected ? list.getSelectionForeground() : list.getForeground());
+
+            JLabel severityBadge = new JLabel(display.severity().name());
+            severityBadge.setOpaque(true);
+            severityBadge.setFont(severityBadge.getFont().deriveFont(Font.BOLD, 10f));
+            severityBadge.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+            severityBadge.putClientProperty("FlatLaf.style", "arc: 10;");
+            
+            Color badgeBg = switch(display.severity()) {
+                case CRITICAL, HIGH -> new Color(220, 53, 69);
+                case MEDIUM -> new Color(253, 126, 20);
+                case LOW -> new Color(13, 110, 253);
+                default -> new Color(108, 117, 125);
+            };
+            severityBadge.setBackground(badgeBg);
+            severityBadge.setForeground(Color.WHITE);
+
+            JLabel countLabel = new JLabel(group.size() + " img" + (group.size() == 1 ? "" : "s"));
+            countLabel.setForeground(isSelected ? panel.getForeground() : new Color(130, 130, 130));
+            countLabel.setFont(countLabel.getFont().deriveFont(10f));
+
+            JLabel titleLabel = new JLabel(display.type());
+            titleLabel.setForeground(panel.getForeground());
+            titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+
+            JPanel leftPanel = new JPanel(new BorderLayout(8, 0));
+            leftPanel.setOpaque(false);
+            leftPanel.add(severityBadge, BorderLayout.WEST);
+            leftPanel.add(titleLabel, BorderLayout.CENTER);
+
+            panel.add(leftPanel, BorderLayout.CENTER);
+            panel.add(countLabel, BorderLayout.EAST);
+            
+            panel.setPreferredSize(new Dimension(0, 40));
+            return panel;
         });
+        
         JScrollPane masterScroll = new JScrollPane(masterList);
+        masterScroll.setBorder(BorderFactory.createEmptyBorder());
 
         JPanel detailPanel = new JPanel();
         detailPanel.setLayout(new BoxLayout(detailPanel, BoxLayout.Y_AXIS));
+        detailPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        
         JScrollPane detailScroll = new JScrollPane(detailPanel);
         detailScroll.getVerticalScrollBar().setUnitIncrement(16);
+        detailScroll.setBorder(BorderFactory.createEmptyBorder());
 
         Runnable[] refreshAllRef = new Runnable[1];
 
@@ -75,7 +111,7 @@ public class EvidenceManagerTab {
             String selectedHash = masterList.getSelectedValue();
             hashOrder.clear();
             groups.clear();
-            for (var ce : evidenceCapture.getCaptured()) {
+            for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
                 String hash = ce.finding().similarityHash();
                 if (!groups.containsKey(hash)) hashOrder.add(hash);
                 groups.computeIfAbsent(hash, h -> new ArrayList<>()).add(ce);
@@ -93,21 +129,24 @@ public class EvidenceManagerTab {
             detailPanel.removeAll();
             String hash = masterList.getSelectedValue();
             if (hash == null) {
-                JLabel empty = new JLabel("Select a finding on the left to manage its evidence.");
-                empty.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+                JLabel empty = new JLabel(I18n.t("ui.evidence.lbl.select_finding"));
+                empty.setHorizontalAlignment(SwingConstants.CENTER);
+                empty.setFont(empty.getFont().deriveFont(Font.ITALIC, 14f));
+                empty.setForeground(new Color(150, 150, 150));
+                empty.setBorder(BorderFactory.createEmptyBorder(40, 12, 12, 12));
                 detailPanel.add(empty);
             } else {
                 List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
                 detailPanel.add(buildFindingHeader(hash, group, groups, refreshAllRef));
-                detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+                detailPanel.add(Box.createRigidArea(new Dimension(0, 12)));
                 
                 if (config.getBool("retest.enabled", false)) {
                     detailPanel.add(buildRetestStatusRow(hash));
-                    detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+                    detailPanel.add(Box.createRigidArea(new Dimension(0, 12)));
                 }
                 for (int i = 0; i < group.size(); i++) {
-                    detailPanel.add(buildEvidenceCard(group, i, hashOrder, groups, () -> refreshAllRef[0].run()));
-                    detailPanel.add(Box.createRigidArea(new Dimension(0, 8)));
+                    detailPanel.add(buildEvidenceCard(mainPanel, group, i, hashOrder, groups, () -> refreshAllRef[0].run()));
+                    detailPanel.add(Box.createRigidArea(new Dimension(0, 12)));
                 }
             }
             detailPanel.revalidate();
@@ -120,9 +159,19 @@ public class EvidenceManagerTab {
 
         refreshAllRef[0] = () -> { reload.run(); refreshDetail.run(); };
         refreshAllRef[0].run();
+        this.onReload = refreshAllRef[0];
 
-        JButton btnGroupUp = new JButton("▲ Move Finding Up");
-        themeHelper.styleButton(btnGroupUp);
+        this.orchestrator.getEvidenceCapture().addChangeListener(this::reload);
+        this.orchestrator.addListener(records -> this.reload());
+
+        JToolBar masterToolbar = new JToolBar();
+        masterToolbar.setFloatable(false);
+        masterToolbar.setOpaque(false);
+        masterToolbar.setBorder(BorderFactory.createEmptyBorder());
+
+        JButton btnGroupUp = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("chevron-up"));
+        btnGroupUp.setToolTipText(I18n.t("ui.evidence.btn.move_up"));
+        btnGroupUp.putClientProperty("JButton.buttonType", "toolBarButton");
         btnGroupUp.addActionListener(e -> {
             int idx = masterList.getSelectedIndex();
             if (idx > 0) {
@@ -131,8 +180,10 @@ public class EvidenceManagerTab {
                 refreshAllRef[0].run();
             }
         });
-        JButton btnGroupDown = new JButton("▼ Move Finding Down");
-        themeHelper.styleButton(btnGroupDown);
+        
+        JButton btnGroupDown = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("chevron-down"));
+        btnGroupDown.setToolTipText(I18n.t("ui.evidence.btn.move_down"));
+        btnGroupDown.putClientProperty("JButton.buttonType", "toolBarButton");
         btnGroupDown.addActionListener(e -> {
             int idx = masterList.getSelectedIndex();
             if (idx >= 0 && idx < hashOrder.size() - 1) {
@@ -142,150 +193,183 @@ public class EvidenceManagerTab {
             }
         });
 
-        masterList.setDropMode(DropMode.ON);
+        JButton btnPopOut = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("external-link"));
+        btnPopOut.setToolTipText(I18n.t("ui.evidence.btn.popout"));
+        btnPopOut.putClientProperty("JButton.buttonType", "toolBarButton");
+
+        JButton btnExportProject = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("download"));
+        btnExportProject.setToolTipText(I18n.t("ui.evidence.btn.export_project"));
+        btnExportProject.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnExportProject.addActionListener(e -> orchestrator.exportProjectStateInteractive(mainPanel, btnExportProject));
+
+        masterToolbar.add(btnGroupUp);
+        masterToolbar.add(btnGroupDown);
+        masterToolbar.addSeparator();
+        masterToolbar.add(btnPopOut);
+        masterToolbar.add(btnExportProject);
+        
+        masterList.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() != 2) return;
+                int idx = masterList.locationToIndex(e.getPoint());
+                if (idx < 0) return;
+                masterList.setSelectedIndex(idx);
+            }
+        });
+
+        masterList.setDragEnabled(true);
+        masterList.setDropMode(DropMode.ON_OR_INSERT);
         masterList.setTransferHandler(new TransferHandler() {
             @Override
+            public int getSourceActions(JComponent c) {
+                return MOVE;
+            }
+
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                String selectedHash = masterList.getSelectedValue();
+                if (selectedHash == null) return null;
+                return new Transferable() {
+                    @Override
+                    public DataFlavor[] getTransferDataFlavors() {
+                        return new DataFlavor[]{FINDING_DRAG_FLAVOR};
+                    }
+                    @Override
+                    public boolean isDataFlavorSupported(DataFlavor flavor) {
+                        return flavor.equals(FINDING_DRAG_FLAVOR);
+                    }
+                    @Override
+                    public Object getTransferData(DataFlavor flavor) {
+                        return selectedHash;
+                    }
+                };
+            }
+
+            @Override
             public boolean canImport(TransferSupport support) {
-                return support.isDrop() && support.isDataFlavorSupported(EVIDENCE_DRAG_FLAVOR);
+                return support.isDrop() && 
+                       (support.isDataFlavorSupported(EVIDENCE_DRAG_FLAVOR) || support.isDataFlavorSupported(FINDING_DRAG_FLAVOR));
             }
 
             @Override
             public boolean importData(TransferSupport support) {
                 if (!canImport(support)) return false;
                 try {
-                    var dragged = (EvidenceCapture.CapturedEvidence) support.getTransferable().getTransferData(EVIDENCE_DRAG_FLAVOR);
-                    int dropIndex = ((JList.DropLocation) support.getDropLocation()).getIndex();
-                    if (dropIndex < 0 || dropIndex >= hashOrder.size()) return false;
-                    String targetHash = hashOrder.get(dropIndex);
-                    if (targetHash.equals(dragged.finding().similarityHash())) return false; // dropped on its own finding
-                    Finding targetFinding = orchestrator.getFindingByHash(targetHash);
-                    if (targetFinding == null) return false;
-                    evidenceCapture.moveToFinding(dragged, targetFinding);
-                    refreshAllRef[0].run();
-                    return true;
+                    if (support.isDataFlavorSupported(EVIDENCE_DRAG_FLAVOR)) {
+                        var dragged = (EvidenceCapture.CapturedEvidence) support.getTransferable().getTransferData(EVIDENCE_DRAG_FLAVOR);
+                        int dropIndex = ((JList.DropLocation) support.getDropLocation()).getIndex();
+                        if (dropIndex < 0 || dropIndex >= hashOrder.size()) return false;
+                        String targetHash = hashOrder.get(dropIndex);
+                        if (targetHash.equals(dragged.finding().similarityHash())) return false; 
+                        Finding targetFinding = orchestrator.getFindingByHash(targetHash);
+                        if (targetFinding == null) return false;
+                        orchestrator.getEvidenceCapture().moveToFinding(dragged, targetFinding);
+                        refreshAllRef[0].run();
+                        return true;
+                    } else if (support.isDataFlavorSupported(FINDING_DRAG_FLAVOR)) {
+                        String draggedHash = (String) support.getTransferable().getTransferData(FINDING_DRAG_FLAVOR);
+                        int dropIndex = ((JList.DropLocation) support.getDropLocation()).getIndex();
+                        int sourceIndex = hashOrder.indexOf(draggedHash);
+                        if (sourceIndex == -1 || dropIndex < 0 || dropIndex > hashOrder.size()) return false;
+                        if (sourceIndex < dropIndex) dropIndex--;
+                        if (sourceIndex == dropIndex) return false;
+                        hashOrder.remove(sourceIndex);
+                        hashOrder.add(dropIndex, draggedHash);
+                        syncGroupsToCapture(hashOrder, groups);
+                        refreshAllRef[0].run();
+                        masterList.setSelectedValue(draggedHash, true);
+                        return true;
+                    }
+                    return false;
                 } catch (Exception ex) {
                     return false;
                 }
             }
         });
 
-        JPanel masterButtons = new JPanel(new GridLayout(2, 1, 0, 4));
-        themeHelper.applyTheme(masterButtons);
-        masterButtons.add(btnGroupUp);
-        masterButtons.add(btnGroupDown);
+        JPanel masterHeader = new JPanel(new BorderLayout());
+        masterHeader.setOpaque(false);
+        JLabel findingsLbl = new JLabel(I18n.t("ui.evidence.lbl.findings"));
+        findingsLbl.setFont(findingsLbl.getFont().deriveFont(Font.BOLD, 14f));
+        masterHeader.add(findingsLbl, BorderLayout.WEST);
+        masterHeader.add(masterToolbar, BorderLayout.EAST);
 
-        JPanel masterPanel = new JPanel(new BorderLayout(0, 4));
-        themeHelper.applyTheme(masterPanel);
-        masterPanel.add(new JLabel("Findings (report order)"), BorderLayout.NORTH);
-        masterPanel.add(masterScroll, BorderLayout.CENTER);
-        masterPanel.add(masterButtons, BorderLayout.SOUTH);
+        JPanel masterPanel = new JPanel(new BorderLayout(0, 8));
+        masterPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        masterPanel.add(masterHeader, BorderLayout.NORTH);
+        
+        JPanel masterListWrapper = new JPanel(new BorderLayout());
+        masterListWrapper.putClientProperty("FlatLaf.style", "arc: 8;");
+        masterListWrapper.setBorder(BorderFactory.createLineBorder(new Color(130, 130, 130, 60), 1, true));
+        masterListWrapper.add(masterScroll, BorderLayout.CENTER);
+        
+        masterPanel.add(masterListWrapper, BorderLayout.CENTER);
+
+        masterPanel.setMinimumSize(new Dimension(260, 150));
+        detailScroll.setMinimumSize(new Dimension(450, 150));
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, masterPanel, detailScroll);
-        split.setResizeWeight(0.28);
-        split.setDividerSize(10); // Better size for one-touch expandable
-        split.setOneTouchExpandable(true);
-        split.setBorder(BorderFactory.createEmptyBorder());
-
-        var initialRtc = icarus.core.ReportTemplateConfig.fromConfig(config);
-        String initialSummary = initialRtc.sections().stream()
-                .filter(s -> "Executive Summary".equals(s.title()))
-                .map(icarus.core.ReportTemplateConfig.Section::content)
-                .findFirst().orElse("");
-        JTextArea txtSummary = new JTextArea(initialSummary, 3, 0);
-        txtSummary.setLineWrap(true);
-        txtSummary.setWrapStyleWord(true);
-        themeHelper.styleTextArea(txtSummary);
-        txtSummary.setBorder(BorderFactory.createTitledBorder("Report Notes (optional executive summary, shown at the top of the report)"));
-        txtSummary.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            private void save() {
-                var rtc = icarus.core.ReportTemplateConfig.fromConfig(config);
-                List<icarus.core.ReportTemplateConfig.Section> sections = new ArrayList<>(rtc.sections());
-                var updated = new icarus.core.ReportTemplateConfig.Section("Executive Summary", txtSummary.getText());
-                int idx = -1;
-                for (int i = 0; i < sections.size(); i++) {
-                    if ("Executive Summary".equals(sections.get(i).title())) { idx = i; break; }
-                }
-                if (idx >= 0) sections.set(idx, updated); else sections.add(0, updated);
-                rtc.setSections(sections);
-                rtc.saveTo(config);
+        split.setResizeWeight(0.30);
+        split.setDividerSize(6);
+        split.putClientProperty("FlatLaf.style", "continuousLayout: true;");
+        SwingUtilities.invokeLater(() -> {
+            int initialWidth = split.getWidth();
+            if (initialWidth > 0) {
+                split.setDividerLocation((int)(initialWidth * 0.28));
             }
         });
-        JScrollPane summaryScroll = new JScrollPane(txtSummary);
-        summaryScroll.setPreferredSize(new Dimension(0, 80));
 
-        JPanel topPanel = new JPanel(new BorderLayout());
-        themeHelper.applyTheme(topPanel);
+        var initialRtc = icarus.core.ReportTemplateConfig.fromConfig(config);
 
-        JButton btnToggleSummary = new JButton("▼ Executive Summary");
-        themeHelper.styleButton(btnToggleSummary);
-        
-        JPanel summaryContainer = new JPanel(new BorderLayout());
-        summaryContainer.add(summaryScroll, BorderLayout.CENTER);
-        
-        btnToggleSummary.addActionListener(e -> {
-            boolean isVisible = summaryContainer.isVisible();
-            summaryContainer.setVisible(!isVisible);
-            btnToggleSummary.setText(isVisible ? "▶ Executive Summary" : "▼ Executive Summary");
-            topPanel.revalidate();
-        });
+        JLabel hint = new JLabel(I18n.t("ui.evidence.lbl.hint"));
+        hint.setFont(hint.getFont().deriveFont(11f));
+        hint.setForeground(new Color(140, 140, 140));
+        hint.setBorder(BorderFactory.createEmptyBorder(4, 10, 8, 10));
 
-        JLabel hint = new JLabel("  Select a finding on the left; manage its evidence cards on the right.");
-        hint.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-
-        JCheckBox chkRetest = new JCheckBox("Retest Mode (show resolution status; suppress configured sections in reports)",
+        JCheckBox chkRetest = new JCheckBox(I18n.t("ui.evidence.chk.retest"),
                 config.getBool("retest.enabled", false));
-        themeHelper.applyTheme(chkRetest);
         chkRetest.addActionListener(e -> {
             config.set("retest.enabled", chkRetest.isSelected());
             api.persistence().extensionData().setString("config", config.serialize());
             refreshAllRef[0].run();
         });
 
-        JButton btnPopOut = new JButton("Pop Out Evidence Manager");
-        themeHelper.styleButton(btnPopOut);
-
-        JPanel summaryHeader = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        themeHelper.applyTheme(summaryHeader);
-        summaryHeader.add(btnToggleSummary);
-        summaryHeader.add(btnPopOut);
-
-        topPanel.add(summaryHeader, BorderLayout.NORTH);
-        topPanel.add(summaryContainer, BorderLayout.CENTER);
+        JPanel headerPanel = new JPanel(new BorderLayout());
+        headerPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 0, 10));
         
-        JPanel bottomOfTop = new JPanel(new BorderLayout());
-        themeHelper.applyTheme(bottomOfTop);
-        JPanel chkPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        themeHelper.applyTheme(chkPanel);
-        chkPanel.add(chkRetest);
-        bottomOfTop.add(chkPanel, BorderLayout.NORTH);
-        bottomOfTop.add(hint, BorderLayout.SOUTH);
-        topPanel.add(bottomOfTop, BorderLayout.SOUTH);
+        JPanel headerLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        headerLeft.add(chkRetest);
+        
+        JPanel headerRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        
+        headerPanel.add(headerLeft, BorderLayout.WEST);
+        headerPanel.add(headerRight, BorderLayout.EAST);
+
+        JPanel topPanel = new JPanel(new BorderLayout());
+        topPanel.add(headerPanel, BorderLayout.NORTH);
+        topPanel.add(hint, BorderLayout.SOUTH);
 
         JPanel evidenceTab = new JPanel(new BorderLayout());
-        themeHelper.applyTheme(evidenceTab);
         evidenceTab.add(topPanel, BorderLayout.NORTH);
-
-        JTabbedPane compactTabs = new JTabbedPane();
-        themeHelper.applyTheme(compactTabs);
         
+        JTabbedPane compactTabs = new JTabbedPane();
+        compactTabs.putClientProperty("FlatLaf.style", "tabType: hidden;"); 
         boolean[] isCompactMode = { false };
 
         Runnable updateLayoutMode = () -> {
             int width = evidenceTab.getWidth();
-            if (width <= 0) return; // not laid out yet
+            if (width <= 0) return; 
 
             boolean shouldBeCompact = width < 1000;
-            if (isCompactMode[0] == shouldBeCompact && evidenceTab.getComponentCount() > 1) return; // already in correct state
+            if (isCompactMode[0] == shouldBeCompact && evidenceTab.getComponentCount() > 1) return; 
 
             isCompactMode[0] = shouldBeCompact;
             evidenceTab.remove(split);
             evidenceTab.remove(compactTabs);
             if (shouldBeCompact) {
-                compactTabs.addTab("1. Findings List", masterPanel);
-                compactTabs.addTab("2. Evidence Details", detailScroll);
+                compactTabs.addTab(I18n.t("ui.evidence.tab.findings"), masterPanel);
+                compactTabs.addTab(I18n.t("ui.evidence.tab.details"), detailScroll);
                 evidenceTab.add(compactTabs, BorderLayout.CENTER);
             } else {
                 split.setLeftComponent(masterPanel);
@@ -302,157 +386,108 @@ public class EvidenceManagerTab {
                 updateLayoutMode.run();
             }
         });
-
-        // Apply initial layout fallback just in case
         evidenceTab.add(split, BorderLayout.CENTER);
 
-        // When a finding is double clicked in compact mode, auto-switch to Evidence Details tab
-        masterList.addMouseListener(new MouseAdapter() {
+        masterList.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
-            public void mouseClicked(MouseEvent e) {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
                 if (e.getClickCount() == 2 && isCompactMode[0]) {
                     compactTabs.setSelectedIndex(1);
                 }
             }
         });
 
-        // Pop out logic
         btnPopOut.addActionListener(e -> {
-            Frame parent = api.userInterface().swingUtils().suiteFrame();
-            JFrame popOutFrame = new JFrame("ICARUS Evidence Manager (Detached)");
-            if (parent != null) popOutFrame.setIconImage(parent.getIconImage());
+            java.awt.Window winParent = javax.swing.SwingUtilities.getWindowAncestor(mainPanel);
+            JFrame popOutFrame = new JFrame(I18n.t("ui.evidence.title.detached"));
+            if (winParent instanceof java.awt.Frame) popOutFrame.setIconImage(((java.awt.Frame)winParent).getIconImage());
             
-            GraphicsConfiguration gc = mainPanel.getGraphicsConfiguration();
-            Rectangle screenBounds = gc != null ? gc.getBounds() : new Rectangle(Toolkit.getDefaultToolkit().getScreenSize());
+            java.awt.GraphicsConfiguration gc = mainPanel.getGraphicsConfiguration();
+            java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().getScreenSize());
             
             popOutFrame.setSize(Math.min(1200, screenBounds.width - 50), Math.min(800, screenBounds.height - 100));
-            popOutFrame.setLocationRelativeTo(parent);
+            popOutFrame.setLocationRelativeTo(winParent);
             popOutFrame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
-            // Re-parent the evidenceTab to the detached window
-            popOutFrame.add(evidenceTab);
-            
-            popOutFrame.addWindowListener(new java.awt.event.WindowAdapter() {
-                @Override
-                public void windowClosed(java.awt.event.WindowEvent e) {
-                    // When closed, re-parent the evidenceTab back to the main GUI
-                    JTabbedPane parentTabs = (JTabbedPane) mainPanel.getComponent(0);
-                    parentTabs.setComponentAt(0, evidenceTab);
+            Container parent = mainPanel.getParent();
+            if (parent instanceof JTabbedPane) {
+                JTabbedPane parentTabs = (JTabbedPane) parent;
+                int tabIdx = parentTabs.indexOfComponent(mainPanel);
+                
+                JPanel placeholder = new JPanel(new GridBagLayout());
+                JButton btnRestore = new JButton(I18n.t("ui.evidence.btn.restore"));
+                btnRestore.putClientProperty("FlatLaf.style", "arc: 8;");
+                btnRestore.addActionListener(ev -> popOutFrame.dispose());
+                placeholder.add(btnRestore);
+                
+                if (tabIdx >= 0) {
+                    parentTabs.setComponentAt(tabIdx, placeholder);
                 }
-            });
-
-            // Replace the evidence tab content with a placeholder button to pop it back in
-            JPanel placeholder = new JPanel(new GridBagLayout());
-            JButton btnRestore = new JButton("Restore Evidence Manager to Tab");
-            themeHelper.styleButton(btnRestore);
-            btnRestore.addActionListener(ev -> popOutFrame.dispose()); // will trigger windowClosed
-            placeholder.add(btnRestore);
-            
-            JTabbedPane parentTabs = (JTabbedPane) mainPanel.getComponent(0);
-            parentTabs.setComponentAt(0, placeholder);
-
-            popOutFrame.setVisible(true);
+                
+                popOutFrame.add(mainPanel);
+                
+                popOutFrame.addWindowListener(new java.awt.event.WindowAdapter() {
+                    @Override
+                    public void windowClosed(java.awt.event.WindowEvent ev) {
+                        if (tabIdx >= 0) {
+                            parentTabs.setComponentAt(tabIdx, mainPanel);
+                        }
+                    }
+                });
+                
+                popOutFrame.setVisible(true);
+            }
         });
 
         JTabbedPane tabs = new JTabbedPane();
-        themeHelper.applyTheme(tabs);
-        tabs.addTab("Evidence", evidenceTab);
-        tabs.addTab("Report Details", buildReportDetailsPanel(initialRtc));
+        tabs.putClientProperty("FlatLaf.style", "showTabSeparators: true;");
+        tabs.addTab(I18n.t("ui.tab.evidence"), evidenceTab);
+        tabs.addTab(I18n.t("ui.evidence.tab.report_details"), buildReportSectionsQuickEditPanel(initialRtc));
         mainPanel.add(tabs, BorderLayout.CENTER);
 
-        JButton btnImportProject = new JButton("Import Project…");
-        themeHelper.styleButton(btnImportProject);
+        JButton btnPreview = new JButton(I18n.t("ui.tab.results.btn.preview"));
+        btnPreview.putClientProperty("FlatLaf.style", "arc: 8;");
+        btnPreview.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreview));
+
+        JButton btnGenerate = new JButton(I18n.t("ui.tab.results.btn.generate_html"));
+        btnGenerate.putClientProperty("FlatLaf.style", "arc: 8;");
+        btnGenerate.addActionListener(e -> orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerate, orchestrator.getReportableFindings()));
+
+        JButton btnExportPdf = new JButton(I18n.t("ui.tab.results.btn.export_pdf"));
+        btnExportPdf.putClientProperty("FlatLaf.style", "arc: 8;");
+        btnExportPdf.addActionListener(e -> orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, orchestrator.getReportableFindings()));
+
+        JButton btnImportProject = new JButton(I18n.t("ui.evidence.btn.import_project"));
+        btnImportProject.putClientProperty("FlatLaf.style", "arc: 8;");
         btnImportProject.addActionListener(e -> orchestrator.importProjectStateInteractive(mainPanel, btnImportProject, () -> refreshAllRef[0].run()));
 
-        JButton btnExportProject = new JButton("Export Project…");
-        themeHelper.styleButton(btnExportProject);
-        btnExportProject.addActionListener(e -> orchestrator.exportProjectStateInteractive(mainPanel, btnExportProject));
-        
-        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        themeHelper.applyTheme(btnPanel);
-        btnPanel.add(btnImportProject);
-        btnPanel.add(btnExportProject);
-
-        JButton btnPreviewReport = new JButton("Preview");
-        themeHelper.styleButton(btnPreviewReport);
-        btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
-
-        JButton btnGenerateReport = new JButton("Generate HTML Report");
-        themeHelper.styleButton(btnGenerateReport);
-        btnGenerateReport.setBackground(new Color(62, 123, 184));
-        btnGenerateReport.setForeground(Color.WHITE);
-        btnGenerateReport.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel, "No evidence to include in a report yet.");
-                return;
-            }
-            orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);
+        JButton btnClose = new JButton(I18n.t("ui.evidence.btn.close"));
+        btnClose.putClientProperty("FlatLaf.style", "arc: 8;");
+        btnClose.addActionListener(e -> {
+            api.persistence().extensionData().setString("config", config.serialize());
         });
 
-        JButton btnExportPdf = new JButton("Export PDF");
-        themeHelper.styleButton(btnExportPdf);
-        btnExportPdf.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel, "No evidence to include in a report yet.");
-                return;
-            }
-            orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
-        });
+        JPanel btnPanel = new JPanel(new BorderLayout());
+        btnPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        btnPanel.add(btnPreviewReport);
-        btnPanel.add(btnGenerateReport);
-        btnPanel.add(btnExportPdf);
-        
+        JPanel leftBtns = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        leftBtns.add(btnImportProject);
+
+        JPanel rightBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        rightBtns.add(btnPreview);
+        rightBtns.add(btnGenerate);
+        rightBtns.add(btnExportPdf);
+        rightBtns.add(Box.createRigidArea(new Dimension(16, 0)));
+        rightBtns.add(btnClose);
+
+        btnPanel.add(leftBtns, BorderLayout.WEST);
+        btnPanel.add(rightBtns, BorderLayout.EAST);
         mainPanel.add(btnPanel, BorderLayout.SOUTH);
-
-        // Auto-update when findings change
-        orchestrator.addListener(records -> {
-            SwingUtilities.invokeLater(() -> refreshAllRef[0].run());
-        });
-        
-        // Auto-update when tab is shown
-        mainPanel.addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override
-            public void componentShown(java.awt.event.ComponentEvent e) {
-                refreshAllRef[0].run();
-            }
-        });
     }
 
-    private JPanel buildReportDetailsPanel(ReportTemplateConfig initialRtc) {
-        String[] labels = {"Project / Report Name:", "Author:", "Revisor:", "Ambient / Environment:", "Date:"};
-        String[] keys = {"projectName", "author", "revisor", "ambient", "reportDate"};
-
-        String existingDate = initialRtc.variables().get("reportDate");
-        if (existingDate == null || existingDate.isBlank()) {
-            initialRtc.variables().put("reportDate", java.time.LocalDate.now().toString());
-            initialRtc.saveTo(config);
-        }
-
-        JPanel form = new JPanel(new GridBagLayout());
-        form.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
-        themeHelper.applyTheme(form);
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(6, 6, 6, 6);
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        for (int i = 0; i < labels.length; i++) {
-            gbc.gridx = 0; gbc.gridy = i; gbc.weightx = 0;
-            form.add(new JLabel(labels[i]), gbc);
-            gbc.gridx = 1; gbc.weightx = 1;
-            form.add(reportDetailField(keys[i], initialRtc.variables().get(keys[i])), gbc);
-        }
-
-        JPanel wrapper = new JPanel(new BorderLayout());
-        themeHelper.applyTheme(wrapper);
-        wrapper.add(form, BorderLayout.NORTH);
-        return wrapper;
-    }
 
     private JTextField reportDetailField(String key, String initialValue) {
         JTextField field = new JTextField(initialValue != null ? initialValue : "");
-        themeHelper.applyTheme(field);
         field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
@@ -466,36 +501,427 @@ public class EvidenceManagerTab {
         return field;
     }
 
+    private String findingLabel(String hash, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
+        List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+        Finding display = group.get(group.size() - 1).finding(); 
+        return display.severity().name() + "  ·  " + display.type()
+                + "  (" + group.size() + " " + (group.size() == 1 ? I18n.t("ui.evidence.lbl.item") : I18n.t("ui.evidence.lbl.items")) + ")";
+    }
+
+    private JPanel buildRetestStatusRow(String hash) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 8));
+        row.putClientProperty("FlatLaf.style", "arc: 12;");
+        row.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(130, 130, 130, 60), 1, true),
+            BorderFactory.createEmptyBorder(2, 6, 2, 6)
+        ));
+
+        JLabel titleLbl = new JLabel(I18n.t("ui.evidence.border.retest_status") + ":");
+        titleLbl.setFont(titleLbl.getFont().deriveFont(Font.BOLD));
+        row.add(titleLbl);
+
+        List<String> statuses = ReportTemplateConfig.fromConfig(config).retestStatuses();
+        if (statuses.isEmpty()) {
+            row.add(new JLabel(I18n.t("ui.evidence.lbl.no_retest_status")));
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+            return row;
+        }
+
+        String key = "retest.status." + hash;
+        JComboBox<String> combo = new JComboBox<>(statuses.toArray(new String[0]));
+        combo.putClientProperty("FlatLaf.style", "arc: 8;");
+        String current = config.getString(key, "");
+        if (!current.isBlank()) combo.setSelectedItem(current);
+        else combo.setSelectedIndex(-1);
+        combo.addActionListener(e -> {
+            config.set(key, (String) combo.getSelectedItem());
+            api.persistence().extensionData().setString("config", config.serialize());
+        });
+        row.add(combo);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+        return row;
+    }
+
+    private void syncGroupsToCapture(List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
+        List<EvidenceCapture.CapturedEvidence> flat = new ArrayList<>();
+        for (String hash : hashOrder) flat.addAll(groups.get(hash));
+        orchestrator.getEvidenceCapture().reorderCaptured(flat);
+    }
+
+    private JPanel buildEvidenceCard(Component mainPanel, List<EvidenceCapture.CapturedEvidence> group, int indexInGroup,
+                                      List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups,
+                                      Runnable onChange) {
+        EvidenceCapture.CapturedEvidence[] ceRef = { group.get(indexInGroup) };
+
+        JPanel card = new JPanel(new BorderLayout(16, 12));
+        card.putClientProperty("FlatLaf.style", "arc: 8; margin: 8,10,8,10;");
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(130, 130, 130, 60), 1, true),
+                BorderFactory.createEmptyBorder(8, 10, 8, 10)));
+
+        Image scaled = ceRef[0].image().getScaledInstance(320, -1, Image.SCALE_SMOOTH);
+        JLabel thumb = new JLabel(new ImageIcon(scaled));
+        thumb.setToolTipText(I18n.t("ui.evidence.tooltip.drag"));
+        thumb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        thumb.setBorder(BorderFactory.createLineBorder(new Color(130, 130, 130, 40), 1));
+        
+        thumb.setTransferHandler(new TransferHandler() {
+            @Override
+            protected Transferable createTransferable(JComponent c) {
+                EvidenceCapture.CapturedEvidence dragged = ceRef[0];
+                return new Transferable() {
+                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{EVIDENCE_DRAG_FLAVOR}; }
+                    public boolean isDataFlavorSupported(DataFlavor flavor) { return EVIDENCE_DRAG_FLAVOR.equals(flavor); }
+                    public Object getTransferData(DataFlavor flavor) { return dragged; }
+                };
+            }
+            @Override
+            public int getSourceActions(JComponent c) { return MOVE; }
+        });
+        final Point[] dragStartPoint = new Point[1];
+        final boolean[] isDragStarted = new boolean[1];
+
+        thumb.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                dragStartPoint[0] = e.getPoint();
+                isDragStarted[0] = false;
+            }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON1 && !isDragStarted[0]) {
+                    EvidenceCapture.CapturedEvidence ce = ceRef[0];
+                    if (ce != null && ce.image() != null) {
+                        SwingUtilities.invokeLater(() -> showExpandedImageModal(ce.image(), ce.finding().type()));
+                    }
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                if (e.getButton() == MouseEvent.BUTTON1 && !isDragStarted[0] && dragStartPoint[0] != null) {
+                    double dist = e.getPoint().distance(dragStartPoint[0]);
+                    if (dist <= 5) {
+                        EvidenceCapture.CapturedEvidence ce = ceRef[0];
+                        if (ce != null && ce.image() != null) {
+                            SwingUtilities.invokeLater(() -> showExpandedImageModal(ce.image(), ce.finding().type()));
+                        }
+                    }
+                }
+                dragStartPoint[0] = null;
+            }
+        });
+
+        thumb.addMouseMotionListener(new MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (dragStartPoint[0] != null && !isDragStarted[0]) {
+                    double dist = e.getPoint().distance(dragStartPoint[0]);
+                    if (dist > 5) {
+                        isDragStarted[0] = true;
+                        thumb.getTransferHandler().exportAsDrag(thumb, e, TransferHandler.MOVE);
+                    }
+                }
+            }
+        });
+        
+        JPanel leftPanel = new JPanel(new BorderLayout());
+        leftPanel.add(thumb, BorderLayout.NORTH);
+        card.add(leftPanel, BorderLayout.WEST);
+
+        JPanel right = new JPanel(new BorderLayout(0, 10));
+
+        JTextArea txtCaption = new JTextArea(ceRef[0].caption(), 4, 30);
+        txtCaption.setLineWrap(true);
+        txtCaption.setWrapStyleWord(true);
+        txtCaption.putClientProperty("FlatLaf.style", "margin: 8,8,8,8; arc: 8;");
+        
+        JPanel captionPanel = new JPanel(new BorderLayout(0, 4));
+        JLabel captionLbl = new JLabel(I18n.t("ui.evidence.border.caption") + " " + (indexInGroup + 1));
+        captionLbl.setFont(captionLbl.getFont().deriveFont(Font.BOLD, 12f));
+        captionPanel.add(captionLbl, BorderLayout.NORTH);
+        
+        JScrollPane captionScroll = new JScrollPane(txtCaption);
+        captionScroll.putClientProperty("FlatLaf.style", "arc: 8;");
+        captionPanel.add(captionScroll, BorderLayout.CENTER);
+        
+        txtCaption.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
+            private void save() {
+                ceRef[0] = orchestrator.getEvidenceCapture().setCaption(ceRef[0], txtCaption.getText());
+                group.set(indexInGroup, ceRef[0]);
+            }
+        });
+        right.add(captionPanel, BorderLayout.CENTER);
+
+        JPanel controls = new JPanel(new BorderLayout());
+
+        JPanel leftCtrls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        JCheckBox chkInclude = new JCheckBox(I18n.t("ui.evidence.chk.include"), orchestrator.getEvidenceCapture().isIncluded(ceRef[0]));
+        chkInclude.addActionListener(e -> orchestrator.getEvidenceCapture().setIncluded(ceRef[0], chkInclude.isSelected()));
+        leftCtrls.add(chkInclude);
+
+        JToolBar cardActions = new JToolBar();
+        cardActions.setFloatable(false);
+        cardActions.setOpaque(false);
+        cardActions.setBorder(BorderFactory.createEmptyBorder());
+
+        JButton btnUp = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("arrow-up"));
+        btnUp.setToolTipText("Move Up");
+        btnUp.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnUp.setEnabled(indexInGroup > 0);
+        btnUp.addActionListener(e -> {
+            Collections.swap(group, indexInGroup, indexInGroup - 1);
+            syncGroupsToCapture(hashOrder, groups);
+            onChange.run();
+        });
+
+        JButton btnDown = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("arrow-down"));
+        btnDown.setToolTipText("Move Down");
+        btnDown.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnDown.setEnabled(indexInGroup < group.size() - 1);
+        btnDown.addActionListener(e -> {
+            Collections.swap(group, indexInGroup, indexInGroup + 1);
+            syncGroupsToCapture(hashOrder, groups);
+            onChange.run();
+        });
+        
+        JButton btnEdit = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("edit-2"));
+        btnEdit.setToolTipText(I18n.t("ui.evidence.btn.edit"));
+        btnEdit.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnEdit.addActionListener(e -> orchestrator.getEvidenceCapture().captureInteractive(ceRef[0].finding()));
+
+        JButton btnMove = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("corner-up-right"));
+        btnMove.setToolTipText(I18n.t("ui.evidence.btn.move_finding"));
+        btnMove.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnMove.addActionListener(e -> {
+            String ownHash = ceRef[0].finding().similarityHash();
+            List<String> targets = hashOrder.stream().filter(h -> !h.equals(ownHash)).toList();
+            if (targets.isEmpty()) {
+                JOptionPane.showMessageDialog(mainPanel, I18n.t("ui.evidence.dialog.move.no_finding"));
+                return;
+            }
+            String[] labels = targets.stream().map(h -> findingLabel(h, groups)).toArray(String[]::new);
+            String choice = (String) JOptionPane.showInputDialog(mainPanel, I18n.t("ui.evidence.dialog.move.msg"),
+                    I18n.t("ui.evidence.dialog.move.title"), JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
+            if (choice == null) return;
+            String targetHash = targets.get(java.util.List.of(labels).indexOf(choice));
+            Finding targetFinding = orchestrator.getFindingByHash(targetHash);
+            if (targetFinding == null) return; 
+            orchestrator.getEvidenceCapture().moveToFinding(ceRef[0], targetFinding);
+            onChange.run();
+        });
+
+        JButton btnRemove = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("trash-2"));
+        btnRemove.setToolTipText(I18n.t("ui.evidence.btn.remove"));
+        btnRemove.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnRemove.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(mainPanel,
+                    I18n.t("ui.evidence.dialog.remove.msg"),
+                    I18n.t("ui.evidence.dialog.remove.title"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (confirm != JOptionPane.YES_OPTION) return;
+            orchestrator.getEvidenceCapture().removeCaptured(ceRef[0]);
+            onChange.run();
+        });
+
+        cardActions.add(btnUp);
+        cardActions.add(btnDown);
+        cardActions.addSeparator();
+        cardActions.add(btnEdit);
+        cardActions.add(btnMove);
+        cardActions.addSeparator();
+        cardActions.add(btnRemove);
+
+        controls.add(leftCtrls, BorderLayout.WEST);
+        controls.add(cardActions, BorderLayout.EAST);
+        
+        right.add(controls, BorderLayout.SOUTH);
+        card.add(right, BorderLayout.CENTER);
+        return card;
+    }
+
+    public void reload() {
+        if (this.onReload != null) {
+            this.onReload.run();
+        }
+    }
+
+    public Component getUiComponent() {
+        return mainPanel;
+    }
+
+    private JComponent buildReportSectionsQuickEditPanel(ReportTemplateConfig initialRtc) {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+
+        Map<String, String> vars = initialRtc.variables();
+
+        String existingDate = vars.get("date");
+        if (existingDate == null || existingDate.isBlank()) {
+            vars.put("date", java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+            initialRtc.saveTo(config);
+        }
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.weightx = 1.0;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(0, 0, 16, 0);
+
+        JLabel resumoNote = new JLabel(I18n.t("ui.evidence.lbl.resumo_note"));
+        resumoNote.setFont(resumoNote.getFont().deriveFont(Font.ITALIC));
+        resumoNote.setForeground(new Color(130, 130, 130));
+        panel.add(resumoNote, gbc);
+
+        gbc.gridy++;
+        panel.add(fieldGroup(I18n.t("ui.evidence.section.controle"), vars, new String[][]{
+            {I18n.t("ui.evidence.lbl.projeto"), "project"},
+            {I18n.t("ui.evidence.lbl.data"), "date"},
+            {I18n.t("ui.evidence.lbl.versao"), "version"},
+            {I18n.t("ui.evidence.lbl.autor"), "author"},
+            {I18n.t("ui.evidence.lbl.revisor"), "reviewer"},
+            {I18n.t("ui.evidence.lbl.aprovado_por"), "approver"},
+        }), gbc);
+
+        gbc.gridy++;
+        JPanel escopoPanel = fieldGroup(I18n.t("ui.evidence.section.escopo"), vars, new String[][]{
+            {I18n.t("ui.evidence.lbl.eht"), "team"},
+            {I18n.t("ui.evidence.lbl.componente"), "component"},
+            {I18n.t("ui.evidence.lbl.solicitante"), "requester"},
+            {I18n.t("ui.evidence.lbl.responsavel"), "owner"},
+            {I18n.t("ui.evidence.lbl.ambiente"), "environment"},
+        });
+
+        GridBagConstraints eg = new GridBagConstraints();
+        eg.insets = new Insets(6, 6, 6, 6);
+        eg.fill = GridBagConstraints.HORIZONTAL;
+        eg.gridx = 0; eg.gridy = 5; eg.weightx = 0;
+        escopoPanel.add(new JLabel(I18n.t("ui.evidence.lbl.executor")), eg);
+
+        eg.gridx = 1; eg.weightx = 1;
+        JPanel executorWrapper = new JPanel(new BorderLayout(8, 0));
+
+        boolean isSame = config.getBool("executor.sameAsAuthor", true);
+        JCheckBox chkSame = new JCheckBox("Same as Author", isSame);
+        JTextField txtExecutor = reportDetailField("executor", vars.get("executor"));
+        txtExecutor.putClientProperty("FlatLaf.style", "margin: 6,8,6,8; arc: 8;");
+        txtExecutor.setEnabled(!isSame);
+
+        if (isSame) {
+            vars.put("executor", vars.get("author"));
+            txtExecutor.setText(vars.get("author"));
+        }
+
+        chkSame.addActionListener(e -> {
+            boolean same = chkSame.isSelected();
+            config.set("executor.sameAsAuthor", same);
+            api.persistence().extensionData().setString("config", config.serialize());
+            txtExecutor.setEnabled(!same);
+            if (same) {
+                txtExecutor.setText(vars.get("author"));
+                vars.put("executor", vars.get("author"));
+                ReportTemplateConfig.fromConfig(config).variables().put("executor", vars.get("author"));
+            }
+        });
+        
+        executorWrapper.add(txtExecutor, BorderLayout.CENTER);
+        executorWrapper.add(chkSame, BorderLayout.EAST);
+        escopoPanel.add(executorWrapper, eg);
+        
+        panel.add(escopoPanel, gbc);
+
+        JPanel alignPanel = new JPanel(new BorderLayout());
+        alignPanel.add(panel, BorderLayout.NORTH);
+        
+        JScrollPane scroll = new JScrollPane(alignPanel);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        return scroll;
+    }
+
+
+    private JPanel fieldGroup(String title, Map<String, String> vars, String[][] labelsAndKeys) {
+        JPanel form = new JPanel(new GridBagLayout());
+        form.putClientProperty("FlatLaf.style", "arc: 12;");
+        form.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(new Color(130, 130, 130, 50), 1, true),
+                title, 
+                javax.swing.border.TitledBorder.LEFT, 
+                javax.swing.border.TitledBorder.TOP, 
+                new Font("Dialog", Font.BOLD, 12)
+            ),
+            BorderFactory.createEmptyBorder(12, 12, 12, 12)
+        ));
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(6, 6, 6, 6);
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        for (int i = 0; i < labelsAndKeys.length; i++) {
+            gbc.gridx = 0; gbc.gridy = i; gbc.weightx = 0;
+            JLabel lbl = new JLabel(labelsAndKeys[i][0]);
+            form.add(lbl, gbc);
+            
+            gbc.gridx = 1; gbc.weightx = 1;
+            JTextField field = reportDetailField(labelsAndKeys[i][1], vars.get(labelsAndKeys[i][1]));
+            field.putClientProperty("FlatLaf.style", "margin: 6,8,6,8; arc: 8;");
+            form.add(field, gbc);
+        }
+        return form;
+    }
+
     private JPanel buildFindingHeader(String hash, List<EvidenceCapture.CapturedEvidence> group,
                                       Map<String, List<EvidenceCapture.CapturedEvidence>> groups, Runnable[] refreshAllRef) {
-        Finding current = group.get(group.size() - 1).finding(); // freshest edit
+        Finding current = group.get(group.size() - 1).finding(); 
 
-        JPanel header = new JPanel(new BorderLayout(8, 8));
-        header.setBorder(BorderFactory.createTitledBorder("Finding Metadata (auto-saves)"));
-        themeHelper.applyTheme(header);
+        JPanel header = new JPanel(new GridBagLayout());
+        header.putClientProperty("FlatLaf.style", "arc: 12;");
+        header.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(130, 130, 130, 60), 1, true),
+            BorderFactory.createEmptyBorder(12, 16, 12, 16)
+        ));
+        
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(4, 4, 4, 12);
+        
+        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0;
+        JLabel titleLbl = new JLabel(I18n.t("ui.evidence.lbl.title"));
+        titleLbl.setFont(titleLbl.getFont().deriveFont(Font.BOLD));
+        header.add(titleLbl, gbc);
+        
+        gbc.gridx = 1; gbc.weightx = 1.0; gbc.gridwidth = 3;
+        JTextField txtTitle = new JTextField(current.type());
+        txtTitle.putClientProperty("FlatLaf.style", "margin: 6,8,6,8; arc: 8;");
+        header.add(txtTitle, gbc);
 
-        JPanel form = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 4));
-        themeHelper.applyTheme(form);
-
-        form.add(new JLabel("Title:"));
-        JTextField txtTitle = new JTextField(current.type(), 25);
-        themeHelper.applyTheme(txtTitle);
-        form.add(txtTitle);
-
-        form.add(new JLabel("Severity:"));
+        gbc.gridwidth = 1;
+        gbc.gridy = 1; 
+        
+        gbc.gridx = 0; gbc.weightx = 0;
+        JLabel sevLbl = new JLabel(I18n.t("ui.evidence.lbl.severity"));
+        sevLbl.setFont(sevLbl.getFont().deriveFont(Font.BOLD));
+        header.add(sevLbl, gbc);
+        
+        gbc.gridx = 1; gbc.weightx = 0.5;
         JComboBox<Severity> comboSeverity = new JComboBox<>(Severity.values());
+        comboSeverity.putClientProperty("FlatLaf.style", "arc: 8;");
         comboSeverity.setSelectedItem(current.severity());
-        themeHelper.applyTheme(comboSeverity);
-        form.add(comboSeverity);
+        header.add(comboSeverity, gbc);
+        
+        gbc.gridx = 2; gbc.weightx = 0;
+        JLabel cweLbl = new JLabel(I18n.t("ui.evidence.lbl.cwes"));
+        cweLbl.setFont(cweLbl.getFont().deriveFont(Font.BOLD));
+        header.add(cweLbl, gbc);
+        
+        gbc.gridx = 3; gbc.weightx = 0.5;
+        JTextField txtCwe = new JTextField(String.join(", ", current.cweIds()));
+        txtCwe.putClientProperty("FlatLaf.style", "margin: 6,8,6,8; arc: 8;");
+        header.add(txtCwe, gbc);
 
-        form.add(new JLabel("CWEs:"));
-        JTextField txtCwe = new JTextField(String.join(", ", current.cweIds()), 10);
-        themeHelper.applyTheme(txtCwe);
-        form.add(txtCwe);
-
-        header.add(form, BorderLayout.CENTER);
-
-        // Auto-save logic
         Runnable save = () -> {
             String newTitle = txtTitle.getText().strip();
             if (newTitle.isEmpty()) return;
@@ -504,22 +930,16 @@ public class EvidenceManagerTab {
                     .map(String::strip).filter(s -> !s.isEmpty()).toList();
 
             Finding.Builder builder = Finding.builder(current.module(), newTitle)
-                    .description(current.description())
-                    .severity(newSeverity)
-                    .category(current.category())
-                    .path(current.path())
-                    .evidence(current.evidence());
-            current.metadata().forEach(builder::meta);
+                    .severity(newSeverity);
             newCweIds.forEach(builder::cwe);
             Finding updated = builder.build();
 
-            // Check if there was an actual change
             if (updated.type().equals(current.type()) && updated.severity() == current.severity() && updated.cweIds().equals(current.cweIds())) {
                 return;
             }
 
             for (var ce : group) {
-                evidenceCapture.moveToFinding(ce, updated);
+                orchestrator.getEvidenceCapture().moveToFinding(ce, updated);
             }
             orchestrator.updateFinding(updated);
             refreshAllRef[0].run();
@@ -535,171 +955,116 @@ public class EvidenceManagerTab {
         });
         txtCwe.addActionListener(e -> save.run());
 
+        header.setMaximumSize(new Dimension(Integer.MAX_VALUE, header.getPreferredSize().height));
         return header;
     }
 
-    private String findingLabel(String hash, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
-        List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
-        Finding display = group.get(group.size() - 1).finding(); // freshest edit
-        return display.severity().name() + "  ·  " + display.type()
-                + "  (" + group.size() + (group.size() == 1 ? " item)" : " items)");
-    }
+    private long lastModalOpenTime = 0;
 
-    private JPanel buildRetestStatusRow(String hash) {
-        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
-        row.setBorder(BorderFactory.createTitledBorder("Retest Status"));
-        themeHelper.applyTheme(row);
+    private void showExpandedImageModal(BufferedImage img, String title) {
+        if (img == null) return;
+        long now = System.currentTimeMillis();
+        if (now - lastModalOpenTime < 500) return;
+        lastModalOpenTime = now;
 
-        List<String> statuses = ReportTemplateConfig.fromConfig(config).retestStatuses();
-        if (statuses.isEmpty()) {
-            row.add(new JLabel("No retest statuses configured — add some in Settings → Reporting."));
-            return row;
+        Window parentWindow = SwingUtilities.getWindowAncestor(mainPanel);
+        JDialog dialog;
+        if (parentWindow instanceof Frame) {
+            dialog = new JDialog((Frame) parentWindow, title, false);
+        } else if (parentWindow instanceof Dialog) {
+            dialog = new JDialog((Dialog) parentWindow, title, false);
+        } else {
+            dialog = new JDialog((Frame) null, title, false);
         }
 
-        String key = "retest.status." + hash;
-        JComboBox<String> combo = new JComboBox<>(statuses.toArray(new String[0]));
-        themeHelper.applyTheme(combo);
-        String current = config.getString(key, "");
-        if (!current.isBlank()) combo.setSelectedItem(current);
-        else combo.setSelectedIndex(-1);
-        combo.addActionListener(e -> {
-            config.set(key, (String) combo.getSelectedItem());
-            api.persistence().extensionData().setString("config", config.serialize());
-        });
-        row.add(combo);
-        return row;
-    }
+        dialog.setUndecorated(true);
+        dialog.setLayout(new BorderLayout());
 
-    private void syncGroupsToCapture(List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
-        List<EvidenceCapture.CapturedEvidence> flat = new ArrayList<>();
-        for (String hash : hashOrder) flat.addAll(groups.get(hash));
-        evidenceCapture.reorderCaptured(flat);
-    }
-
-    private JPanel buildEvidenceCard(List<EvidenceCapture.CapturedEvidence> group, int indexInGroup,
-                                      List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups,
-                                      Runnable onChange) {
-        EvidenceCapture.CapturedEvidence[] ceRef = { group.get(indexInGroup) };
-
-        JPanel card = new JPanel(new BorderLayout(8, 8));
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(themeHelper.getBorderColor()),
-                BorderFactory.createEmptyBorder(8, 8, 8, 8)));
-        themeHelper.applyTheme(card);
-
-        Image scaled = ceRef[0].image().getScaledInstance(320, -1, Image.SCALE_SMOOTH);
-        JLabel thumb = new JLabel(new ImageIcon(scaled));
-        thumb.setToolTipText("Drag onto a finding on the left to move this evidence there");
-        thumb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        thumb.setTransferHandler(new TransferHandler() {
+        // Close when user clicks anywhere outside Burp/modal window focus
+        dialog.addWindowFocusListener(new java.awt.event.WindowAdapter() {
             @Override
-            protected Transferable createTransferable(JComponent c) {
-                EvidenceCapture.CapturedEvidence dragged = ceRef[0];
-                return new Transferable() {
-                    public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[]{EVIDENCE_DRAG_FLAVOR}; }
-                    public boolean isDataFlavorSupported(DataFlavor flavor) { return EVIDENCE_DRAG_FLAVOR.equals(flavor); }
-                    public Object getTransferData(DataFlavor flavor) { return dragged; }
-                };
+            public void windowLostFocus(java.awt.event.WindowEvent e) {
+                dialog.dispose();
             }
+        });
 
+        JPanel rootPanel = new JPanel(new BorderLayout());
+        rootPanel.setBackground(new Color(18, 24, 36)); // ICARUS dark palette COLOR_BACKGROUND (#121824)
+        rootPanel.setBorder(BorderFactory.createLineBorder(new Color(0, 47, 108), 2)); // COLOR_PRIMARY_NAVY (#002F6C)
+
+        // Close on clicking root panel background
+        rootPanel.addMouseListener(new MouseAdapter() {
             @Override
-            public int getSourceActions(JComponent c) { return MOVE; }
+            public void mouseClicked(MouseEvent e) {
+                dialog.dispose();
+            }
         });
-        thumb.addMouseListener(new MouseAdapter() {
+
+        JPanel topBar = new JPanel(new BorderLayout());
+        topBar.setOpaque(false);
+        topBar.setBorder(BorderFactory.createEmptyBorder(12, 16, 12, 16));
+
+        JLabel lblTitle = new JLabel(title != null && !title.isBlank() ? title : I18n.t("ui.evidence.modal.title", "Evid\u00eancia Ampliada"));
+        lblTitle.setFont(lblTitle.getFont().deriveFont(Font.BOLD, 14f));
+        lblTitle.setForeground(Color.WHITE);
+        topBar.add(lblTitle, BorderLayout.WEST);
+
+        JButton btnClose = new JButton();
+        btnClose.setIcon(icarus.evidence.EvidenceUiHelpers.createIcon("x", 20, Color.WHITE));
+        btnClose.setToolTipText("Fechar (ESC)");
+        btnClose.setBorderPainted(false);
+        btnClose.setContentAreaFilled(false);
+        btnClose.setFocusPainted(false);
+        btnClose.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnClose.addActionListener(e -> dialog.dispose());
+        topBar.add(btnClose, BorderLayout.EAST);
+
+        rootPanel.add(topBar, BorderLayout.NORTH);
+
+        Dimension burpBounds = (parentWindow != null && parentWindow.getWidth() > 300)
+                ? parentWindow.getSize()
+                : Toolkit.getDefaultToolkit().getScreenSize();
+
+        int maxWidth = Math.max(400, (int) (burpBounds.width * 0.85));
+        int maxHeight = Math.max(300, (int) (burpBounds.height * 0.85));
+
+        int imgW = img.getWidth();
+        int imgH = img.getHeight();
+
+        double scale = Math.min(1.0, Math.min((double) maxWidth / imgW, (double) maxHeight / imgH));
+        int targetW = Math.max(100, (int) (imgW * scale));
+        int targetH = Math.max(100, (int) (imgH * scale));
+
+        Image scaledImg = img.getScaledInstance(targetW, targetH, Image.SCALE_SMOOTH);
+        JLabel imgLabel = new JLabel(new ImageIcon(scaledImg));
+        imgLabel.setHorizontalAlignment(SwingConstants.CENTER);
+
+        JScrollPane scrollPane = new JScrollPane(imgLabel);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder(0, 16, 16, 16));
+
+        // Close on clicking empty space inside scroll pane
+        scrollPane.addMouseListener(new MouseAdapter() {
             @Override
-            public void mousePressed(MouseEvent e) {
-                thumb.getTransferHandler().exportAsDrag(thumb, e, TransferHandler.MOVE);
+            public void mouseClicked(MouseEvent e) {
+                dialog.dispose();
             }
         });
-        card.add(thumb, BorderLayout.WEST);
 
-        JPanel right = new JPanel(new BorderLayout(4, 4));
-        themeHelper.applyTheme(right);
+        rootPanel.add(scrollPane, BorderLayout.CENTER);
 
-        JTextArea txtCaption = new JTextArea(ceRef[0].caption(), 3, 30);
-        txtCaption.setLineWrap(true);
-        txtCaption.setWrapStyleWord(true);
-        themeHelper.styleTextArea(txtCaption);
-        txtCaption.setBorder(BorderFactory.createTitledBorder("Caption #" + (indexInGroup + 1)));
-        txtCaption.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { save(); }
-            private void save() {
-                ceRef[0] = evidenceCapture.setCaption(ceRef[0], txtCaption.getText());
-                group.set(indexInGroup, ceRef[0]);
-            }
-        });
-        right.add(new JScrollPane(txtCaption), BorderLayout.CENTER);
+        // Bind ESC key to close
+        dialog.getRootPane().registerKeyboardAction(
+                e -> dialog.dispose(),
+                KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
+                JComponent.WHEN_IN_FOCUSED_WINDOW
+        );
 
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
-        themeHelper.applyTheme(controls);
-
-        JCheckBox chkInclude = new JCheckBox("Include in report", evidenceCapture.isIncluded(ceRef[0]));
-        themeHelper.applyTheme(chkInclude);
-        chkInclude.addActionListener(e -> evidenceCapture.setIncluded(ceRef[0], chkInclude.isSelected()));
-        controls.add(chkInclude);
-
-        JButton btnUp = new JButton("▲");
-        themeHelper.styleButton(btnUp);
-        btnUp.setEnabled(indexInGroup > 0);
-        btnUp.addActionListener(e -> {
-            Collections.swap(group, indexInGroup, indexInGroup - 1);
-            syncGroupsToCapture(hashOrder, groups);
-            onChange.run();
-        });
-        controls.add(btnUp);
-
-        JButton btnDown = new JButton("▼");
-        themeHelper.styleButton(btnDown);
-        btnDown.setEnabled(indexInGroup < group.size() - 1);
-        btnDown.addActionListener(e -> {
-            Collections.swap(group, indexInGroup, indexInGroup + 1);
-            syncGroupsToCapture(hashOrder, groups);
-            onChange.run();
-        });
-        controls.add(btnDown);
-
-        JButton btnEdit = new JButton("Edit / Re-annotate…");
-        themeHelper.styleButton(btnEdit);
-        btnEdit.addActionListener(e -> evidenceCapture.captureInteractive(ceRef[0].finding()));
-        controls.add(btnEdit);
-
-        JButton btnMove = new JButton("Move to Finding…");
-        themeHelper.styleButton(btnMove);
-        btnMove.addActionListener(e -> {
-            String ownHash = ceRef[0].finding().similarityHash();
-            List<String> targets = hashOrder.stream().filter(h -> !h.equals(ownHash)).toList();
-            if (targets.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel, "There's no other finding to move this evidence to.");
-                return;
-            }
-            String[] labels = targets.stream().map(h -> findingLabel(h, groups)).toArray(String[]::new);
-            String choice = (String) JOptionPane.showInputDialog(mainPanel, "Move this evidence to:",
-                    "Move to Finding", JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
-            if (choice == null) return;
-            String targetHash = targets.get(java.util.List.of(labels).indexOf(choice));
-            Finding targetFinding = orchestrator.getFindingByHash(targetHash);
-            if (targetFinding == null) return; 
-            evidenceCapture.moveToFinding(ceRef[0], targetFinding);
-            onChange.run();
-        });
-        controls.add(btnMove);
-
-        JButton btnRemove = new JButton("Remove");
-        themeHelper.styleButton(btnRemove);
-        btnRemove.addActionListener(e -> {
-            int confirm = JOptionPane.showConfirmDialog(mainPanel,
-                    "Remove this screenshot from the report? The finding itself stays in the Results tab.",
-                    "Confirm Remove", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-            if (confirm != JOptionPane.YES_OPTION) return;
-            evidenceCapture.removeCaptured(ceRef[0]);
-            onChange.run();
-        });
-        controls.add(btnRemove);
-
-        right.add(controls, BorderLayout.SOUTH);
-        card.add(right, BorderLayout.CENTER);
-        return card;
+        dialog.setContentPane(rootPanel);
+        dialog.pack();
+        dialog.setSize(Math.min(maxWidth, targetW + 60), Math.min(maxHeight, targetH + 100));
+        dialog.setLocationRelativeTo(parentWindow);
+        dialog.setVisible(true);
     }
 }

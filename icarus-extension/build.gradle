@@ -4,16 +4,16 @@ plugins {
 }
 
 group = 'com.icarus'
-version = '1.4.0'
+version = '1.6.0'
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(19)
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    options.release = 21
+    options.release = 19
 }
 
 repositories {
@@ -23,13 +23,20 @@ repositories {
 dependencies {
     compileOnly 'net.portswigger.burp.extensions:montoya-api:2025.6'
 
-    // shadowJar bundles this into the shipped jar (Burp doesn't provide it, unlike Montoya).
-    // icu4j excluded: a mandatory transitive dependency of OpenPDF used for RTL/complex-script
-    // text layout, which this extension's reports never need -- confirmed Document/Paragraph/
-    // PdfPTable/Image all work without it. Saves ~15MB in the shaded jar for a ~2MB library.
-    implementation('com.github.librepdf:openpdf:3.0.5') {
+    implementation('com.github.librepdf:openpdf:2.0.2') {
         exclude group: 'com.ibm.icu', module: 'icu4j'
     }
+    
+    implementation 'org.commonmark:commonmark:0.30.0'
+
+    implementation('io.modelcontextprotocol.sdk:mcp-core:1.1.3') {
+        exclude group: 'com.networknt', module: 'json-schema-validator'
+    }
+    implementation('io.modelcontextprotocol.sdk:mcp-json-jackson2:1.1.3') {
+        exclude group: 'com.networknt', module: 'json-schema-validator'
+    }
+    
+    implementation 'org.jsoup:jsoup:1.17.2'
 }
 
 shadowJar {

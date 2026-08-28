@@ -83,7 +83,7 @@ public class RateLimitModule implements IcarusModule {
                         " ", chkDontAsk
                     };
 
-                    int option = JOptionPane.showConfirmDialog(null, message, "Rate Limit Tester Configuration", JOptionPane.OK_CANCEL_OPTION);
+                    int option = JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(), message, "Rate Limit Tester Configuration", JOptionPane.OK_CANCEL_OPTION);
                     if (option == JOptionPane.OK_OPTION) {
                         try {
                             params[0] = Integer.parseInt(txtCount.getText().trim());
@@ -166,6 +166,29 @@ public class RateLimitModule implements IcarusModule {
             double rps = detection.requestsSent / seconds;
             String rpsStr = String.format("%.1f RPS", rps);
 
+            if (detection.dominantStatus == 403 || detection.dominantStatus == 401 || detection.dominantStatus == 503) {
+                findings.add(Finding.builder(name(), "BASELINE_FORBIDDEN")
+                        .description(String.format("Baseline request inherently returned status %d. Cannot determine if rate limiting exists.", detection.dominantStatus))
+                        .severity(Severity.INFO)
+                        .category(Category.RATE_LIMIT)
+                        .path(path)
+                        .evidence(requestResponse)
+                        .meta("requests_sent", String.valueOf(detection.requestsSent))
+                        .meta("concurrency", String.valueOf(concurrency))
+                        .meta("all_status", String.valueOf(detection.dominantStatus))
+                        .meta("rps", rpsStr)
+                        .meta("blast_log", detection.serializedLog)
+                        .meta("start_time", startTime)
+                        .meta("end_time", endTime)
+                        .build());
+                if (exportLog) {
+                    exportAuditLog(config, path, totalRequests, concurrency, maxRps, detection,
+                            "Baseline request inherently returned status " + detection.dominantStatus + ". Cannot determine if rate limiting exists.",
+                            "", startTime, endTime);
+                }
+                return findings;
+            }
+
             // No rate limiting detected — that IS a finding. RPS isn't repeated here since
             // the evidence image already appends it from the "rps" meta field below.
             findings.add(Finding.builder(name(), "NO_RATE_LIMIT")
@@ -197,24 +220,24 @@ public class RateLimitModule implements IcarusModule {
 
         // ── Phase 3: Bypass Attempts (skipped in detect-only mode, or if stopped mid-Phase-1) ──
         icarus.ScanRunner.waitIfPaused();
-        if (!detectOnly && !Thread.currentThread().isInterrupted()) {
+        if (!detectOnly && !icarus.ScanRunner.isCancelled()) {
             // Wait for cooldown before bypass attempts
             try { Thread.sleep(Math.min(cooldownMs, 5000)); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
 
-            if (config.getBool("rl.bypass_headers", true) && !Thread.currentThread().isInterrupted()) {
+            if (config.getBool("rl.bypass_headers", true) && !icarus.ScanRunner.isCancelled()) {
                 tryHeaderBypass(baseRequest, detection, totalRequests, concurrency, maxRps, bypassLog, path, logger);
             }
 
-            if (config.getBool("rl.bypass_path", true) && !Thread.currentThread().isInterrupted()) {
+            if (config.getBool("rl.bypass_path", true) && !icarus.ScanRunner.isCancelled()) {
                 tryPathBypass(baseRequest, detection, totalRequests, concurrency, maxRps, bypassLog, path, cooldownMs, logger);
             }
 
-            if (config.getBool("rl.bypass_query", true) && !Thread.currentThread().isInterrupted()) {
+            if (config.getBool("rl.bypass_query", true) && !icarus.ScanRunner.isCancelled()) {
                 tryQueryBypass(baseRequest, detection, totalRequests, concurrency, maxRps, bypassLog, path, cooldownMs, logger);
             }
         }
-        if (Thread.currentThread().isInterrupted()) {
-            logger.accept("Rate Limit Tester stopped by user — reporting on partial results.");
+        if (icarus.ScanRunner.isCancelled()) {
+            logger.accept("Rate Limit Testing aborted by user — reporting on partial results.");
         }
 
         endTime = LocalDateTime.now().format(dtf);
@@ -308,7 +331,7 @@ public class RateLimitModule implements IcarusModule {
                 // target doesn't get hammered with the rest of `count` requests. Same skip on
                 // a user-requested stop: pool.shutdownNow() interrupts in-progress tasks, but a
                 // still-queued task starting after that needs its own check too.
-                if (blockCount.get() >= 3 || crashCount.get() >= 3 || Thread.currentThread().isInterrupted()) {
+                if (blockCount.get() >= 3 || crashCount.get() >= 3 || icarus.ScanRunner.isCancelled()) {
                     return new SingleResult(idx, SKIPPED_STATUS, 0, 0, 0, null);
                 }
                 // Counted before sendRequest() so a mid-request exception still counts as sent.
@@ -324,7 +347,7 @@ public class RateLimitModule implements IcarusModule {
                         try { Thread.sleep(waitMs); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
                     }
                 }
-                if (Thread.currentThread().isInterrupted()) {
+                if (icarus.ScanRunner.isCancelled()) {
                     return new SingleResult(idx, SKIPPED_STATUS, 0, 0, 0, null);
                 }
 

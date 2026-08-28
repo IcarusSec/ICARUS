@@ -138,7 +138,7 @@ public final class Finding {
         public Builder severity(Severity v)   { this.severity = v;   return this; }
         public Builder category(Category v)   { this.category = v;   return this; }
         public Builder path(String v)         { this.path = v;       return this; }
-        public Builder evidence(HttpRequestResponse v) { this.evidence = v; return this; }
+        public Builder evidence(HttpRequestResponse v) { this.evidence = v != null ? v.copyToTempFile() : null; return this; }
         public Builder meta(String key, String value)  { this.metadata.put(key, value); return this; }
         public Builder cwe(String cweId)      { if (!this.cweIds.contains(cweId)) this.cweIds.add(cweId); return this; }
 

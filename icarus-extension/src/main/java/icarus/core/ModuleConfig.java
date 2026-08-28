@@ -62,26 +62,6 @@ public final class ModuleConfig {
         catch (NumberFormatException e) { return defaultValue; }
     }
 
-    /**
-     * Reads a JSON-valued key (e.g. a structured config blob like
-     * {@code report.template_config.json}) and parses it via {@link Json}.
-     * Returns {@code null} if the key is unset or contains invalid JSON.
-     */
-    public Object getJson(String key) {
-        String v = values.get(key);
-        if (v == null || v.isBlank()) return null;
-        try {
-            return Json.parse(v);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /** Serializes {@code value} via {@link Json} and stores it under {@code key}. */
-    public void setJson(String key, Object value) {
-        values.put(key, Json.write(value));
-    }
-
     public List<String> getStringList(String key) {
         String v = values.get(key);
         if (v == null || v.isBlank()) return List.of();
@@ -89,6 +69,56 @@ public final class ModuleConfig {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
+    }
+
+    /**
+     * Reads a JSON-valued key (e.g. a structured config blob like
+     * {@code report.template_config.json}) and parses it via {@link JsonParser}.
+     * Returns {@code null} if the key is unset or contains invalid JSON.
+     */
+    public Object getJson(String key) {
+        String v = values.get(key);
+        if (v == null || v.isBlank()) return null;
+        try {
+            return JsonParser.parse(v);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Serializes {@code value} via {@link JsonParser} and stores it under {@code key}. */
+    public void setJson(String key, Object value) {
+        values.put(key, JsonParser.write(value));
+    }
+
+    /** Persistence key for the structured report config blob. */
+    public static final String REPORT_TEMPLATE_CONFIG_KEY = "report.template_config.json";
+
+    /** Persistence key for UI language. */
+    public static final String UI_LANGUAGE_KEY = "ui.language";
+
+    /**
+     * One-time migration: if no {@code report.template_config.json} exists yet,
+     * synthesize a default one.
+     * Safe to call on every startup — no-ops once the key is present.
+     */
+    public void migrateReportTemplateConfigIfNeeded() {
+        if (getJson(REPORT_TEMPLATE_CONFIG_KEY) != null) return;
+
+        Map<String, Object> theme = new LinkedHashMap<>();
+        theme.put("primaryColor", null);
+        theme.put("secondaryColor", null);
+        theme.put("customCssPath", null);
+
+        Map<String, Object> defaultConfig = new LinkedHashMap<>();
+        defaultConfig.put("sections", List.of());
+        defaultConfig.put("variables", new LinkedHashMap<>());
+        defaultConfig.put("theme", theme);
+        defaultConfig.put("retestStatuses", List.of("Fixed", "Not Fixed"));
+        defaultConfig.put("retestSuppressedSections", List.of());
+        defaultConfig.put("tocEnabled", true);
+
+        setJson(REPORT_TEMPLATE_CONFIG_KEY, defaultConfig);
     }
 
     /** Removes all entries. Used by "Reset to Default" before re-applying defaults. */
@@ -123,40 +153,5 @@ public final class ModuleConfig {
         for (String name : props.stringPropertyNames()) {
             values.put(name, props.getProperty(name));
         }
-    }
-
-    // ── Report template config migration ────────────────────────
-
-    /** Persistence key for the structured report config blob (see {@link Json}). */
-    public static final String REPORT_TEMPLATE_CONFIG_KEY = "report.template_config.json";
-
-    /**
-     * One-time migration: if no {@code report.template_config.json} exists yet,
-     * synthesize a default one, folding any existing {@code evidence.executive_summary}
-     * text in as the initial "Executive Summary" section so upgrading users don't
-     * lose it. Safe to call on every startup — no-ops once the key is present.
-     */
-    public void migrateReportTemplateConfigIfNeeded() {
-        if (getJson(REPORT_TEMPLATE_CONFIG_KEY) != null) return;
-
-        Map<String, Object> section = new LinkedHashMap<>();
-        section.put("title", "Executive Summary");
-        section.put("content", getString("evidence.executive_summary", ""));
-        section.put("order", 0);
-
-        Map<String, Object> theme = new LinkedHashMap<>();
-        theme.put("primaryColor", null);
-        theme.put("secondaryColor", null);
-        theme.put("customCssPath", null);
-
-        Map<String, Object> defaultConfig = new LinkedHashMap<>();
-        defaultConfig.put("sections", List.of(section));
-        defaultConfig.put("variables", new LinkedHashMap<>());
-        defaultConfig.put("theme", theme);
-        defaultConfig.put("retestStatuses", List.of("Fixed", "Not Fixed"));
-        defaultConfig.put("retestSuppressedSections", List.of());
-        defaultConfig.put("tocEnabled", true);
-
-        setJson(REPORT_TEMPLATE_CONFIG_KEY, defaultConfig);
     }
 }

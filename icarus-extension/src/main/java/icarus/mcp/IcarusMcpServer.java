@@ -7,19 +7,17 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.nio.file.Path;
+import icarus.core.Severity;
 import icarus.Icarus;
 import icarus.Orchestrator;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
+import icarus.core.ProjectContextDetector;
 import icarus.core.ReportTemplateConfig;
-import icarus.core.Severity;
-import icarus.core.VerboseErrorDetector;
-import icarus.evidence.EvidenceAutoRenderer;
 import icarus.evidence.EvidenceCapture;
-import icarus.evidence.EvidenceAnnotator;
 import icarus.modules.ParamValidatorModule;
-import icarus.modules.SensitiveHeaderModule;
 
 import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper;
@@ -80,58 +78,143 @@ public final class IcarusMcpServer {
      * can't be known ahead of render time.
      */
     private static final String MCP_INSTRUCTIONS = """
-            You're connected to ICARUS, a Burp Suite extension. Every tool here reflects a real \
-            capability — there is no generic multi-vulnerability exploitation engine behind this \
-            server, so don't assume one exists for a vuln class you don't see a tool/finding type for.
+            # Role: Senior Offensive Security Specialist / Lead Penetration Tester
 
-            FINDINGS: list_findings / get_finding / get_reportable_findings / get_passive_findings \
-            return what ICARUS's modules already detected. generate_report includes every finding \
-            that hasn't been suppressed — validate_finding/exploit_finding are optional extra \
-            confirmation, not a prerequisite for a finding to appear in the report. Every included \
-            finding gets an evidence image either way, auto-rendered from its captured traffic when \
-            nobody captured one manually.
+            **Objective:** Perform automated project identification and classification, technical vulnerability validation, impact escalation (PoC), triage and false-positive suppression, dynamic customization of report sections and templates via MCP, contextual enrichment of findings, and compilation of the final executive report (PDF) in the ICARUS standard.
 
-            EVIDENCE: capture_evidence renders its own image from the finding's real captured \
-            traffic — omit image_base64 (the normal path) rather than trying to supply a screenshot \
-            yourself. Leave request_text/response_text unset unless you specifically need to redact \
-            one value in place; never rewrite or summarize the captured traffic, that destroys what \
-            the report needs to show. For annotations, prefer "anchor" over guessed x/y/width/height \
-            whenever the tool's response lists one available — dynamically positioned text (e.g. a \
-            rate-limit RPS badge) has pixel coordinates you cannot predict from outside the renderer. \
-            An ARROW pointing at the specific line/value that matters does more for a reader than any \
-            box — add one whenever you can name the target coordinates, instead of only outlining a \
-            whole pane. There is no fill/wash annotation kind (HIGHLIGHT was removed — it always read \
-            as a muddy smear rather than a pointer); use a BOX outline instead, an ARROW pointing at \
-            it, or both. Prefer the tightest available anchor over a full column — \
-            request_payload/response_payload circles just the finding's own injected/reflected value \
-            (the right choice for almost every injection finding — note the payload for a body \
-            parameter, e.g. STRING_SQLI, lives in the REQUEST, so use request_payload there, not \
-            response_payload), request_header:<name>/response_header:<name> circles exactly one \
-            header line, request_status_line/response_status_line circles just the request/status \
-            line, request_headers/response_headers boxes only the header block. A box is supposed to \
-            point at something specific, not outline half the image. Boilerplate request/response \
-            headers unrelated to the finding are already collapsed into a single truncation marker \
-            by the renderer, so the payload/body is visible by default without a CROP for that — CROP \
-            is still useful for a large or noisy body.
+            ---
 
-            VALIDATION — read-only, no approval needed, safe to call unattended (e.g. in CI/CD): \
-            validate_finding re-sends a finding's captured request and re-checks whether the same \
-            signal still fires. Only gives a real true/false for ParamValidator's own detectors \
-            (XSS reflection, CMDi/SSTI signatures, SSRF, time-based SQLi, IDOR-adjacent-ID); every \
-            other type returns the fresh response for manual review, not a guess. find_attack_chains \
-            / simulate_attack_chain correlate findings ICARUS already produced into known-dangerous \
-            combinations — advisory only, no execution, no invented probability/risk numbers.
+            ### [GENERAL EXECUTION GUIDELINES]
 
-            EXPLOITATION — requires a human at the keyboard, do not call from an unattended pipeline: \
-            exploit_finding ALWAYS blocks on a Swing approval dialog inside Burp before sending \
-            anything; it will be denied or hang with no one there to click Approve. It only supports \
-            the same finding types validate_finding does — for anything else it returns an explicit \
-            "not supported" error rather than attempting something it can't back. To act on a chain \
-            from simulate_attack_chain, call exploit_finding yourself for each step in order; there \
-            is no separate execution tool.
+            - Adopt a strictly technical, formal, analytical, business-risk-oriented tone.
+            - Follow the sequential flow of steps 1 through 7 rigorously.
+            - Actively use the ICARUS MCP toolset (`icarus.mcp`) and ColorStrike (`mcp-colorstrike`) for inspection, manipulation, and configuration.
+            - Sanitize strings and metadata containing special characters to avoid breaking the PDF/HTML renderer.
 
-            Never claim a capability this server doesn't expose, and never fabricate a result (a \
-            confirmed exploit, a chain probability, a validated finding) these tools didn't produce.""";
+            ---
+
+            ### 1. Project Context, Scope & Metadata Auto-Detection
+
+            1. **Automated Discovery via MCP:**
+               - Run the `get_project_context` tool (or inspect the `auto_detected_context` object returned by `get_report_config`) to get a heuristic diagnosis of the environment.
+               - Validate the detected data against your organization's own classification rules. `ProjectContextDetector` ships with a few example naming-convention patterns (e.g. `PROJ-0000`, `RETEST-0000`, `THIRDPARTY-0000`) — adapt them to match your organization's actual project-code conventions:
+                 - **Test Type Classification:** derive from your project-code pattern, or fall back to a generic **"Offensive Security Assessment"** and ask the user to confirm if the pattern doesn't match anything known.
+                 - **Environment Detection:** if the hosts/URLs contain `uat`, `homol`, `dev`, `staging`, or a `-h.` suffix, classify as **`UAT / Staging`**. If they match a known production hostname pattern for this engagement, classify as **`Production`**.
+
+            2. **Report Metadata & Responsibility Matrix:**
+               - **Project / Code:** the identifier extracted above (e.g. `PROJ-1234`).
+               - **Report Title:** `Technical Security Report - [Project] - [Test Type]`
+               - **Author / Executor / Owner:** ask the user, or derive from the local system/VCS identity — never hardcode a name.
+               - **Approver:** ask the user; leave blank if not provided.
+               - **Requester / Team:** the team or requesting party for this engagement, if known.
+               - **Date:** today's date, `DD/MM/YYYY`.
+               - **Method:** e.g. `Black Box / Greybox`.
+               - **Classification:** e.g. `Confidential`.
+               - **Reviewer:** look for a reviewer's name in project history; if not explicit, ask the user interactively without interrupting the rest of the flow.
+
+            ---
+
+            ### 2. Dynamic Section Management & Template Customization (MCP)
+
+            1. **Inspect the Current Configuration:**
+               - Call `get_report_config` to inspect the active sections (`sections`), persisted variables (`templateVariables`), and finding templates (`findingTemplates`).
+
+            2. **Granular Section Management (`update_report_config`):**
+               - **Editing Mandatory Sections:** update the Markdown content of mandatory sections (*Executive Summary*, *Document Control*, *Scope*) via `update_section`. *(Mandatory sections accept content updates but are protected against deletion.)*
+               - **Adding Custom Sections:** add sections relevant to the engagement's scope (e.g. *Solution Architecture*, *Specific Methodology*, *UAT Environment Limitations*) via `add_section`, specifying `title`, `content`, and optionally `index`.
+               - **Removing Optional Sections:** remove sections not applicable to this test via `remove_section`.
+
+            3. **Standardizing Vulnerability Templates (`finding_templates`):**
+               - If you need to standardize descriptions, impacts, or remediations for recurring vulnerability types (e.g. *Insecure CORS*, *BOLA/IDOR*, *Missing Security Headers*), update the `finding_templates` map in `update_report_config` to automatically enrich findings of that type.
+
+            ---
+
+            ### 3. Cross-Analysis & High-Precision Traffic Inspection (ColorStrike)
+
+            1. **Initial Findings Mapping:**
+               - Run `list_findings` in ICARUS to extract every alert and vulnerability initially detected in the project.
+
+            2. **Detailed Inspection with ColorStrike (`mcp-colorstrike`):**
+               - When you need to dissect complex flows (e.g. JWT tokens, WebSocket sessions, serialized payloads, GraphQL APIs):
+                 - Use `get_requests_by_color` or `get_proxy_http_history` to isolate flows the operator highlighted.
+                 - Use `get_request_by_index` to inspect complete requests and responses (authorization headers, cookies, and raw body, untruncated).
+                 - Use `send_request` or `create_repeater_tab` to replay and modify requests in Burp Suite.
+
+            ---
+
+            ### 4. Active Validation & Impact Escalation (PoC)
+
+            1. **Practical Escalation Protocol:**
+               - Prove the maximum real impact of the flaw (don't report purely theoretically):
+                 - **IDOR / BOLA / BAC:** manipulate other accounts' identifiers and prove the data segregation break.
+                 - **Privilege Escalation:** attempt to hit administrative endpoints using lower-privilege/partner tokens.
+                 - **Injection / Business-Logic Bypass:** test schema-validation bypasses, transactional rules, and operational limits.
+               - **Sandbox / WAF / Mock Limitations:** if an endpoint responds with static mock/stub data in UAT, or is blocked by a WAF preventing exploitation confirmation, explicitly note that limitation in the report.
+
+            ---
+
+            ### 5. Critical Triage, Suppression & Finding Enrichment
+
+            1. **False-Positive Suppression Criteria:**
+               - **Verbose Error Disclosure:** keep `HTTP 500` / `Server Error` findings **only if they expose internal infrastructure data** (full stack traces with code paths, internal regexes, references to config/YAML files, internal library versions). Generic or handled 500 errors should be suppressed.
+               - **Mock/Stub Endpoints in UAT:** suppress *Missing Input Validation* alerts if the endpoint accepts any input because there's no real backend behind the mock.
+               - **Traceability Headers:** headers like `x-request-id`, `traceparent`, `x-correlation-id` do **not** constitute sensitive information disclosure.
+               - **JWT/Crypto Heuristic Alerts:** suppress informational alerts (`RSA_SIG`, `HAS_KID`, `MISSING_NBF`) if contextual analysis shows the token follows the pattern accepted in this engagement's scope.
+               - **Action:** for each false positive/accepted risk, call `suppress_finding` and always fill in the `reason` parameter with a technical justification.
+
+            2. **Enriching Individual Confirmed Findings (`update_finding`):**
+               - For each vulnerability confirmed as active:
+                 - **`description`:** detail the observed architecture at the endpoint (methods, routes, and manipulated parameters), avoiding generic definitions.
+                 - **`impact`:** size the business impact for this engagement (e.g. customer data leakage, contract manipulation, transactional fraud, audit bypass) in terms specific to the client's domain.
+                 - **`recommendations` / `remediation`:** provide actionable steps that fit the client's actual stack (e.g. validation via the organization's JWT claims, attribute-based access control, sanitization via standard libraries).
+
+            ---
+
+            ### 6. Consolidating & Annotating Technical Evidence
+
+            1. **Linking Proof of Concept:**
+               - Make sure every valid finding in `get_reportable_findings` has its evidence HTTP requests/responses properly attached.
+
+            2. **Visual Exploitation Highlighting:**
+               - Configure anchor points using selectors (`request_payload`, `response_payload`, `request_header:<name>`).
+               - Add visual annotations: arrows (`ARROW`) and boxes (`BOX`) pointing exactly at the exploited parameter or payload.
+               - Keep irrelevant HTTP headers collapsed to keep the PoC clean and readable.
+
+            ---
+
+            ### 7. Executive Report Generation (PDF) & Chat Presentation
+
+            1. **Compiling via ICARUS (`generate_icarus_report`):**
+               - Call the `generate_icarus_report` tool with `format: "pdf"`, explicitly providing every needed template variable:
+                 ```json
+                 {
+                   "format": "pdf",
+                   "project": "PROJ-1234",
+                   "report_title": "Technical Security Report - PROJ-1234 - API Test",
+                   "date": "28/08/2026",
+                   "assessment_period": "24/08/2026 to 28/08/2026",
+                   "method": "Black Box / Greybox",
+                   "classification": "Confidential",
+                   "version": "1.0",
+                   "author": "[Author name]",
+                   "owner": "[Owner name]",
+                   "approver": "[Approver name]",
+                   "reviewer": "[Reviewer name]",
+                   "requester": "[Requesting team]",
+                   "team": "[Team]",
+                   "environment": "UAT / Staging"
+                 }
+                 ```
+
+            2. **Executive Summary Presentation in Chat:**
+               - After generating the PDF, present a structured, visual, direct summary in the chat containing:
+                 - **Metadata Table:** Project, Test Type, Environment, Period, and Responsibility Matrix (Author, Reviewer, Approver).
+                 - **Sections & Customizations Summary:** which sections were created/edited and which templates were applied.
+                 - **Triage Metrics:** total raw findings vs. total suppressed findings (with a summary of the justifications).
+                 - **Escalation & Real Impact Summary:** which escalation tests were performed and their results.
+                 - **Active Findings Table:** a table with ID, Vulnerability, Severity (Critical, High, Medium, Low, Info), and Affected Endpoint.
+                 - **Final File:** the absolute path or link to the PDF file ICARUS generated.
+            """;
 
     public IcarusMcpServer(MontoyaApi api, Orchestrator orchestrator) {
         this.api = api;
@@ -163,13 +246,14 @@ public final class IcarusMcpServer {
                     msg -> api.logging().logToError(msg), jsonMapper, "/mcp");
 
             McpServerFeatures.SyncToolSpecification[] tools = {
-                    listFindingsTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
+                    listFindingsTool(), addFindingTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
                     getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
                     getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
-                    getReportConfigTool(), updateReportConfigTool(),
+                    getReportConfigTool(), updateReportConfigTool(), getProjectContextTool(),
+                    upsertKbVulnerabilityTool(), createFindingFromKbTool(),
                     validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool()
             };
 
@@ -214,7 +298,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            Object rawFilter = request.arguments().get("severity_filter");
+            var args = request.arguments() != null ? request.arguments() : Map.of();
+            Object rawFilter = args.get("severity_filter");
             String severityFilter = rawFilter instanceof String s ? s : null;
 
             List<Object> findings = new ArrayList<>();
@@ -325,7 +410,8 @@ public final class IcarusMcpServer {
         var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
         var tool = new McpSchema.Tool("get_reportable_findings",
                 "Get ICARUS reportable findings",
-                "Lists the findings that would be included in a generated report: manually captured/applied evidence, not every passive detection.",
+                "Lists the findings that would be included in a generated report: manually captured/applied evidence, not every passive detection "
+                        + "(see generate_icarus_report's description).",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
@@ -359,29 +445,56 @@ public final class IcarusMcpServer {
         });
     }
 
+    private static String sanitizeVariableInput(String input) {
+        if (input == null) return null;
+        return input.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;");
+    }
+
     private McpServerFeatures.SyncToolSpecification generateReportTool() {
-        var inputSchema = new McpSchema.JsonSchema("object",
-                Map.of(
-                        "format", Map.of("type", "string", "description", "Report format: html or pdf"),
-                        "output_path", Map.of("type", "string", "description", "Absolute filesystem path to write the report to")),
-                List.of("format", "output_path"), false, null, null);
-        var tool = new McpSchema.Tool("generate_report",
+        Map<String, Object> stringProp = Map.of("type", "string");
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("format", Map.of("type", "string", "description", "\"html\" or \"pdf\" (default \"html\")"));
+        for (String key : List.of("classification", "report_title", "project", "version", "date", "author", "reviewer",
+                "approver", "team", "component", "requester", "owner", "environment", "assessment_period", "method")) {
+            properties.put(key, stringProp);
+        }
+        var inputSchema = new McpSchema.JsonSchema("object", properties, List.of(), false, null, null);
+        var tool = new McpSchema.Tool("generate_icarus_report",
                 "Generate ICARUS report",
-                "Writes an HTML or PDF report to the given path, overwriting it if it exists. Includes every finding that hasn't been suppressed — "
-                        + "validate_finding/exploit_finding are optional extra confirmation, not a prerequisite. Every included finding gets an evidence "
-                        + "image either way — auto-rendered from its captured traffic if nobody captured one manually.",
+                "Compiles currently reportable findings into an HTML or PDF report, hydrating template "
+                        + "fields (classification, report_title, project, date, team, requester, etc.) "
+                        + "from arguments. Accepts any template variable key.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String format = (String) request.arguments().get("format");
-            String outputPath = (String) request.arguments().get("output_path");
+            Map<String, Object> args = request.arguments();
+            String format = args.get("format") instanceof String s ? s : "html";
+
+            Map<String, String> templateVariables = new LinkedHashMap<>();
+            for (Map.Entry<String, Object> entry : args.entrySet()) {
+                if ("format".equalsIgnoreCase(entry.getKey())) continue;
+                if (entry.getValue() instanceof String s && !s.isBlank()) {
+                    templateVariables.put(entry.getKey(), sanitizeVariableInput(s));
+                }
+            }
+
             try {
-                boolean written = orchestrator.generateReport(format, java.nio.file.Path.of(outputPath));
-                return written
-                        ? McpSchema.CallToolResult.builder().addTextContent("Report written to " + outputPath).build()
-                        : McpSchema.CallToolResult.builder().addTextContent("No report was written — either that format is disabled in Settings, or there are no unsuppressed findings to include.").isError(true).build();
+                Path written = orchestrator.generateReport(format, templateVariables);
+                if (written == null) {
+                    return McpSchema.CallToolResult.builder()
+                            .addTextContent("No report was written — there are no unsuppressed findings to include.")
+                            .isError(true)
+                            .build();
+                }
+                return McpSchema.CallToolResult.builder().addTextContent(written.toString()).build();
             } catch (Exception e) {
-                return McpSchema.CallToolResult.builder().addTextContent("Report generation failed: " + e.getMessage()).isError(true).build();
+                api.logging().logToError("MCP generate_icarus_report failed: " + e);
+                return McpSchema.CallToolResult.builder()
+                        .addTextContent("Report generation failed: " + e.getMessage())
+                        .isError(true)
+                        .build();
             }
         });
     }
@@ -512,7 +625,7 @@ public final class IcarusMcpServer {
 
                 Object rawAnnotations = request.arguments().get("annotations");
                 if (rawAnnotations instanceof List<?> list && !list.isEmpty()) {
-                    List<EvidenceAnnotator.Annotation> annotations = new ArrayList<>();
+                    List<icarus.evidence.EvidenceAnnotator.Annotation> annotations = new ArrayList<>();
                     for (Object o : list) {
                         Map<?, ?> m = (Map<?, ?>) o;
                         String kind = (String) m.get("kind");
@@ -525,9 +638,9 @@ public final class IcarusMcpServer {
                                                 + (anchors.isEmpty() ? " (none — anchors are only available when ICARUS renders the image itself, i.e. image_base64 was omitted)" : "")
                                 ).isError(true).build();
                             }
-                            annotations.add(new EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
+                            annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
                         } else {
-                            annotations.add(new EvidenceAnnotator.Annotation(
+                            annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(
                                     kind,
                                     ((Number) m.get("x")).intValue(),
                                     ((Number) m.get("y")).intValue(),
@@ -535,7 +648,7 @@ public final class IcarusMcpServer {
                                     ((Number) m.get("height")).intValue()));
                         }
                     }
-                    image = EvidenceAnnotator.applyAnnotations(image, annotations);
+                    image = orchestrator.getEvidenceCapture().annotator.applyAnnotations(image, annotations);
                 }
 
                 orchestrator.captureEvidence(finding.withoutMeta("blast_log"), image, caption);
@@ -548,11 +661,11 @@ public final class IcarusMcpServer {
     }
 
     /** Headless counterpart to {@link icarus.evidence.EvidencePhase1Dialog}'s "Apply"/"Annotate" render step —
-     *  delegates to {@link EvidenceAutoRenderer}, shared with report auto-rendering, so headless capture and
-     *  a report's auto-filled image never drift into two different render paths. */
+     *  delegates to {@link icarus.evidence.EvidenceAutoRenderer}, shared with report auto-rendering, so
+     *  headless capture and a report's auto-filled image never drift into two different render paths. */
     private BufferedImage renderEvidenceImage(Finding finding, Map<String, Object> args, Map<String, Rectangle> outAnchors) {
         boolean force1080 = !(args.get("force_1080") instanceof Boolean b) || b;
-        return EvidenceAutoRenderer.render(api, orchestrator.getConfig(), finding,
+        return icarus.evidence.EvidenceAutoRenderer.render(orchestrator.getEvidenceCapture(), finding,
                 args.get("title") instanceof String s1 ? s1 : null,
                 args.get("description") instanceof String s2 ? s2 : null,
                 args.get("severity") instanceof String s3 ? s3 : null,
@@ -705,11 +818,24 @@ public final class IcarusMcpServer {
         });
     }
 
+    private McpServerFeatures.SyncToolSpecification getProjectContextTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
+        var tool = new McpSchema.Tool("get_project_context",
+                "Get auto-detected project metadata",
+                "Extracts project identifiers ([REDACTED], AVIT, AVPF), test type, target scope, environment, and suggested report variables from active Burp state.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            var ctx = ProjectContextDetector.detectContext(api, orchestrator.getAllFindingRecords());
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(ctx)).build();
+        });
+    }
+
     private McpServerFeatures.SyncToolSpecification getReportConfigTool() {
         var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
         var tool = new McpSchema.Tool("get_report_config",
                 "Get ICARUS report config",
-                "Returns the current report template: title/author/etc. variables, custom sections, theme colors, and table-of-contents setting.",
+                "Returns the current report template: title/author/etc. variables, custom sections, theme colors, TOC settings, and auto-detected project context.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) ->
@@ -724,19 +850,32 @@ public final class IcarusMcpServer {
                         "content", Map.of("type", "string", "description", "Markdown content")),
                 "required", List.of("title", "content"));
 
+        Map<String, Object> findingTemplateSchema = Map.of(
+                "type", "object",
+                "properties", Map.of(
+                        "descricao", Map.of("type", "string"),
+                        "impacto", Map.of("type", "string"),
+                        "recomendacao", Map.of("type", "string"),
+                        "severidade", Map.of("type", "string")
+                )
+        );
+
         var inputSchema = new McpSchema.JsonSchema("object",
                 Map.of(
-                        "variables", Map.of("type", "object", "description", "Template variables to set/merge in, e.g. projectName, author, revisor, ambient, reportDate"),
+                        "variables", Map.of("type", "object", "description", "Template variables to set/merge in, e.g. project, date, author, reviewer, environment, report_title"),
                         "sections", Map.of("type", "array", "description", "Full replacement list of custom report sections, in order", "items", sectionItemSchema),
+                        "add_section", Map.of("type", "object", "description", "Add a section: {title, content, index}"),
+                        "remove_section", Map.of("type", "object", "description", "Remove a section by title: {title}"),
+                        "update_section", Map.of("type", "object", "description", "Update an existing section: {title, new_title, new_content}"),
                         "primary_color", Map.of("type", "string", "description", "Hex accent color, e.g. #3e7bb8"),
                         "secondary_color", Map.of("type", "string", "description", "Hex secondary color"),
                         "theme_name", Map.of("type", "string", "description", "light or dark"),
-                        "toc_enabled", Map.of("type", "boolean", "description", "Whether the report includes a table of contents")),
+                        "toc_enabled", Map.of("type", "boolean", "description", "Whether the report includes a table of contents"),
+                        "findingTemplates", Map.of("type", "object", "description", "Map of finding types to their templates", "additionalProperties", findingTemplateSchema)),
                 List.of(), false, null, null);
         var tool = new McpSchema.Tool("update_report_config",
                 "Update ICARUS report config",
-                "Updates report template settings. Only provided fields are changed. variables are merged into the existing set; "
-                        + "sections, if provided, fully replaces the current section list.",
+                "Updates report template settings. Only provided fields are changed. Supports granular section operations (add_section, remove_section, update_section).",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
@@ -747,6 +886,25 @@ public final class IcarusMcpServer {
                 vars.forEach((k, v) -> merged.put(String.valueOf(k), String.valueOf(v)));
                 rtc.setVariables(merged);
             }
+
+            // Granular section operations
+            if (request.arguments().get("add_section") instanceof Map<?, ?> addSec) {
+                String title = addSec.get("title") instanceof String s ? s : null;
+                String content = addSec.get("content") instanceof String s ? s : "";
+                Integer index = addSec.get("index") instanceof Number n ? n.intValue() : null;
+                rtc.addSection(title, content, index);
+            }
+            if (request.arguments().get("remove_section") instanceof Map<?, ?> remSec) {
+                String title = remSec.get("title") instanceof String s ? s : null;
+                rtc.removeSection(title);
+            }
+            if (request.arguments().get("update_section") instanceof Map<?, ?> upSec) {
+                String title = upSec.get("title") instanceof String s ? s : null;
+                String newTitle = upSec.get("new_title") instanceof String s ? s : null;
+                String newContent = upSec.get("new_content") instanceof String s ? s : null;
+                rtc.updateSection(title, newTitle, newContent);
+            }
+
             if (request.arguments().get("sections") instanceof List<?> sections) {
                 List<ReportTemplateConfig.Section> parsed = new ArrayList<>();
                 for (Object o : sections) {
@@ -759,6 +917,21 @@ public final class IcarusMcpServer {
             if (request.arguments().get("secondary_color") instanceof String s) rtc.setSecondaryColor(s);
             if (request.arguments().get("theme_name") instanceof String s) rtc.setThemeName(s);
             if (request.arguments().get("toc_enabled") instanceof Boolean b) rtc.setTocEnabled(b);
+
+            if (request.arguments().get("findingTemplates") instanceof Map<?, ?> templatesMap) {
+                Map<String, ReportTemplateConfig.FindingTemplate> parsedTemplates = new LinkedHashMap<>(rtc.findingTemplates());
+                for (Map.Entry<?, ?> entry : templatesMap.entrySet()) {
+                    if (entry.getValue() instanceof Map<?, ?> t) {
+                        parsedTemplates.put(String.valueOf(entry.getKey()), new ReportTemplateConfig.FindingTemplate(
+                                t.get("descricao") instanceof String s ? s : null,
+                                t.get("impacto") instanceof String s ? s : null,
+                                t.get("recomendacao") instanceof String s ? s : null,
+                                t.get("severidade") instanceof String s ? s : null
+                        ));
+                    }
+                }
+                rtc.setFindingTemplates(parsedTemplates);
+            }
 
             orchestrator.saveReportTemplateConfig(rtc);
             return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(reportConfigToMap(rtc))).build();
@@ -776,7 +949,7 @@ public final class IcarusMcpServer {
         return McpSchema.CallToolResult.builder().addTextContent("No evidence found for image_path: " + imagePath).isError(true).build();
     }
 
-    private static Map<String, Object> reportConfigToMap(ReportTemplateConfig rtc) {
+    private Map<String, Object> reportConfigToMap(ReportTemplateConfig rtc) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("variables", rtc.variables());
         List<Object> sections = new ArrayList<>();
@@ -786,6 +959,21 @@ public final class IcarusMcpServer {
         m.put("secondaryColor", rtc.secondaryColor());
         m.put("themeName", rtc.themeName());
         m.put("tocEnabled", rtc.tocEnabled());
+
+        Map<String, Object> findingTemplates = new LinkedHashMap<>();
+        for (var entry : rtc.findingTemplates().entrySet()) {
+            Map<String, String> t = new LinkedHashMap<>();
+            t.put("descricao", entry.getValue().descricao());
+            t.put("impacto", entry.getValue().impacto());
+            t.put("recomendacao", entry.getValue().recomendacao());
+            t.put("severidade", entry.getValue().severidade());
+            findingTemplates.put(entry.getKey(), t);
+        }
+        m.put("findingTemplates", findingTemplates);
+
+        var ctx = ProjectContextDetector.detectContext(api, orchestrator.getAllFindingRecords());
+        m.put("auto_detected_context", ctx);
+
         return m;
     }
 
@@ -806,6 +994,57 @@ public final class IcarusMcpServer {
         return f;
     }
 
+private McpServerFeatures.SyncToolSpecification addFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object", Map.of(
+                "title", Map.of("type", "string", "description", "Short finding title, e.g. \"Reflected XSS in term parameter\""),
+                "description", Map.of("type", "string", "description", "What the vulnerability is and its impact"),
+                "severity", Map.of("type", "string", "description", "CRITICAL, HIGH, MEDIUM, LOW, or INFO"),
+                "cwe_id", Map.of("type", "string", "description", "Optional CWE identifier, e.g. \"CWE-79\""),
+                "raw_request", Map.of("type", "string", "description",
+                        "The exact HTTP request that reproduces the finding, verbatim (request line, headers, "
+                                + "body). Do NOT summarize it, rewrite it, or add your own comments/annotations "
+                                + "into it — paste the real bytes/text you sent. You may trim clearly irrelevant "
+                                + "parts (e.g. an unrelated large binary body) if needed, but never rewrite or "
+                                + "annotate what you keep."),
+                "raw_response", Map.of("type", "string", "description",
+                        "The exact HTTP response that proves the finding, verbatim (status line, headers, body). "
+                                + "Same rule as raw_request: no summarizing, no rewriting, no inline commentary — "
+                                + "trimming clearly irrelevant parts is fine, editorializing is not.")
+        ), List.of("title", "description", "severity", "raw_request"), false, null, null);
+        var tool = new McpSchema.Tool("add_finding",
+                "Add ICARUS finding",
+                "Records a vulnerability the LLM confirmed itself (outside any ICARUS module) as a ICARUS "
+                        + "finding, so it shows up in list_findings and gets included in generate_icarus_report. "
+                        + "raw_request/raw_response are rendered into the report's REQUEST/RESPONSE evidence "
+                        + "columns exactly as given — they must be the real request/response text, not a "
+                        + "description of it.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            Map<String, Object> args = request.arguments();
+            String title = String.valueOf(args.get("title"));
+            String description = String.valueOf(args.get("description"));
+            String cweId = args.get("cwe_id") instanceof String s && !s.isBlank() ? s : null;
+            String rawRequest = args.get("raw_request") instanceof String s ? s : "";
+            String rawResponse = args.get("raw_response") instanceof String s ? s : "";
+
+            Severity severity;
+            try {
+                severity = Severity.valueOf(String.valueOf(args.get("severity")).toUpperCase());
+            } catch (IllegalArgumentException e) {
+                return McpSchema.CallToolResult.builder()
+                        .addTextContent("Invalid severity — use CRITICAL, HIGH, MEDIUM, LOW, or INFO.")
+                        .isError(true)
+                        .build();
+            }
+
+            orchestrator.addFinding(title, description, severity,
+                    cweId != null ? List.of(cweId) : List.of(), rawRequest, rawResponse);
+
+            return McpSchema.CallToolResult.builder().addTextContent("Finding added: " + title).build();
+        });
+    }
+
     // ── Stage 2: validation, exploitation confirmation, attack-chain correlation ──
 
     /** Finding types exploit_finding will act on — resending a live payload only makes sense for
@@ -816,8 +1055,8 @@ public final class IcarusMcpServer {
 
     /** Finding types validate_finding can give a real reproduced=true/false for — the exploitable
      *  types above, plus SensitiveHeaderModule's deterministic missing-header/cookie-flag checks
-     *  (see {@link SensitiveHeaderModule#isNowPresent}). Everything else returns the fresh
-     *  response for manual review rather than a fabricated verdict. */
+     *  (see {@link icarus.modules.SensitiveHeaderModule#isNowPresent}). Everything else returns the
+     *  fresh response for manual review rather than a fabricated verdict. */
     private static final List<String> VALIDATABLE_TYPES = List.of(
             "STRING_XSS", "STRING_CMDI", "STRING_SSTI", "STRING_SSRF_HEURISTIC", "STRING_SSRF", "STRING_SQLI", "STRING_SQLI_TIME", "IDOR_ADJACENT_ID",
             "Missing Input Validation", "NO_RATE_LIMIT",
@@ -947,18 +1186,18 @@ public final class IcarusMcpServer {
                         hit ? "Still returns HTTP " + freshStatus + "." : "Now returns HTTP " + freshStatus + " — may have been fixed.", fresh);
             }
             case "VERBOSE_ERROR_LEAK" -> {
-                String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(bodyStr);
+                String verboseMatch = icarus.core.VerboseErrorDetector.getVerboseErrorMatch(bodyStr);
                 yield new RecheckResult(verboseMatch != null,
                         verboseMatch != null ? "Still leaking: " + verboseMatch : "No verbose error pattern found on the fresh response.", fresh);
             }
             case "VERSION_DISCLOSURE" -> {
-                boolean hit = SensitiveHeaderModule.hasVersionDisclosure(fresh.response());
+                boolean hit = icarus.modules.SensitiveHeaderModule.hasVersionDisclosure(fresh.response());
                 yield new RecheckResult(hit,
                         hit ? "Version-disclosing header still present." : "No version-disclosing header found on the fresh response — may have been fixed.", fresh);
             }
             case "MISSING_HSTS", "MISSING_CSP", "MISSING_XCTO", "MISSING_XFO", "MISSING_RP", "MISSING_PP",
                  "COOKIE_MISSING_SECURE", "COOKIE_MISSING_HTTPONLY", "COOKIE_MISSING_SAMESITE" -> {
-                Boolean present = SensitiveHeaderModule.isNowPresent(finding.type(), fresh.response());
+                Boolean present = icarus.modules.SensitiveHeaderModule.isNowPresent(finding.type(), fresh.response());
                 if (present == null) {
                     yield new RecheckResult(null, "No Set-Cookie header on the fresh response — can't determine this cookie flag's current state.", fresh);
                 }
@@ -987,12 +1226,98 @@ public final class IcarusMcpServer {
         return builder.build();
     }
 
+    private McpServerFeatures.SyncToolSpecification upsertKbVulnerabilityTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of(
+                        "name", Map.of("type", "string", "description", "Vulnerability name (primary key)"),
+                        "severity", Map.of("type", "string", "description", "Severity: CRITICAL, HIGH, MEDIUM, LOW, or INFO"),
+                        "description", Map.of("type", "string", "description", "Vulnerability description"),
+                        "impact", Map.of("type", "string", "description", "Vulnerability impact (text)"),
+                        "recommendation", Map.of("type", "string", "description", "Remediation recommendation"),
+                        "impactLevel", Map.of("type", "string", "description", "Impact level (e.g. ALTO, MEDIO)"),
+                        "probLevel", Map.of("type", "string", "description", "Probability level (e.g. ALTO, MEDIO)"),
+                        "cwe", Map.of("type", "string", "description", "CWE identifier (e.g. 79)")
+                ),
+                List.of("name", "severity"), false, null, null);
+        var tool = new McpSchema.Tool("upsert_kb_vulnerability",
+                "Upsert a vulnerability into the Knowledge Base",
+                "Creates or updates a vulnerability in the mutable local overlay. Requires human approval.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            Map<String, Object> args = request.arguments();
+            String name = (String) args.get("name");
+            String severityStr = (String) args.get("severity");
+            Severity severity;
+            try {
+                severity = Severity.valueOf(severityStr.toUpperCase());
+            } catch (Exception e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Invalid severity: " + severityStr).isError(true).build();
+            }
+
+            icarus.core.KnowledgeBaseEntry entry = new icarus.core.KnowledgeBaseEntry(
+                    name, severity.name(),
+                    args.get("description") instanceof String s ? s : "",
+                    args.get("impact") instanceof String s ? s : "",
+                    args.get("recommendation") instanceof String s ? s : "",
+                    args.get("impactLevel") instanceof String s ? s : "",
+                    args.get("probLevel") instanceof String s ? s : "",
+                    args.get("cwe") instanceof String s ? s : "",
+                    false
+            );
+
+            if (!HumanApprovalGate.requestApproval(api, "Knowledge Base Modification", 
+                    "Allow MCP agent to upsert vulnerability:\n\nName: " + name + "\nSeverity: " + severity)) {
+                return McpSchema.CallToolResult.builder().addTextContent("Action denied by human operator.").isError(true).build();
+            }
+
+            orchestrator.upsertKnowledgeBaseEntry(entry);
+            return McpSchema.CallToolResult.builder().addTextContent("Vulnerability '" + name + "' upserted successfully.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification createFindingFromKbTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("name", Map.of("type", "string", "description", "Name of the vulnerability in the KB")),
+                List.of("name"), false, null, null);
+        var tool = new McpSchema.Tool("create_finding_from_kb",
+                "Create a finding from the Knowledge Base",
+                "Looks up a vulnerability by name in the KB and creates a new manual Finding from its details.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String name = (String) request.arguments().get("name");
+            icarus.core.KnowledgeBaseEntry entry = orchestrator.getKnowledgeBaseEntry(name);
+
+            if (entry == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No vulnerability found in KB with name: " + name).isError(true).build();
+            }
+
+            Severity severity;
+            try {
+                severity = Severity.valueOf(entry.severity().toUpperCase());
+            } catch (Exception e) {
+                severity = Severity.INFO;
+            }
+
+            Finding finding = Finding.builder("Manual", entry.name())
+                    .description(entry.description())
+                    .severity(severity)
+                    .category(icarus.core.Category.MANUAL)
+                    .path("/")
+                    .build();
+
+            orchestrator.updateFinding(finding);
+            return McpSchema.CallToolResult.builder().addTextContent("Created finding for '" + name + "'. Hash: " + finding.similarityHash()).build();
+        });
+    }
+
     private McpServerFeatures.SyncToolSpecification validateFindingTool() {
         var inputSchema = new McpSchema.JsonSchema("object",
                 Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("validate_finding",
-                "Re-check an ICARUS finding",
+                "Re-check a ICARUS finding",
                 "Re-sends the finding's exact captured request live and checks whether the same signal that originally flagged it still reproduces. "
                         + "Read-only — no new payloads beyond what's already in the finding's evidence, no approval needed, safe to run unattended (e.g. "
                         + "in a CI/CD pipeline). Only " + VALIDATABLE_TYPES + " get a definite reproduced=true/false; every other finding type returns the "
@@ -1030,7 +1355,7 @@ public final class IcarusMcpServer {
                 Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("exploit_finding",
-                "Attempt exploitation confirmation of an ICARUS finding (requires human approval)",
+                "Attempt exploitation confirmation of a ICARUS finding (requires human approval)",
                 "Re-sends the finding's exact captured payload live to confirm the same signal still fires. Unlike validate_finding, this ALWAYS blocks on "
                         + "a Swing approval dialog on the analyst's screen inside Burp, showing exactly what request is about to be sent, before sending "
                         + "anything — it does not run unattended, and will not work called from an unattended CI/CD job since there's no one there to "

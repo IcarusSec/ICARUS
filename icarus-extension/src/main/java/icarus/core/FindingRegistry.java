@@ -191,4 +191,110 @@ public final class FindingRegistry {
             }
         });
     }
+
+    public String serializeState() {
+        Map<String, Object> root = new java.util.LinkedHashMap<>();
+        synchronized (auditLog) {
+            root.put("auditLog", new ArrayList<>(auditLog));
+        }
+        
+        List<Object> recordsJson = new ArrayList<>();
+        for (Map.Entry<String, FindingRecord> entry : activeFindings.entrySet()) {
+            FindingRecord r = entry.getValue();
+            Finding f = r.getFinding();
+            Map<String, Object> recordMap = new java.util.LinkedHashMap<>();
+            recordMap.put("hash", entry.getKey());
+            recordMap.put("count", String.valueOf(r.getCount()));
+            recordMap.put("suppressed", r.isSuppressed());
+            
+            Map<String, Object> findingMap = new java.util.LinkedHashMap<>();
+            findingMap.put("module", f.module());
+            findingMap.put("type", f.type());
+            findingMap.put("description", f.description());
+            findingMap.put("severity", f.severity().name());
+            findingMap.put("category", f.category().name());
+            findingMap.put("path", f.path());
+            findingMap.put("cweIds", new ArrayList<>(f.cweIds()));
+            findingMap.put("metadata", new java.util.LinkedHashMap<>(f.metadata()));
+            
+            if (f.evidence() != null && f.evidence().request() != null) {
+                Map<String, Object> evidenceJson = new java.util.LinkedHashMap<>();
+                evidenceJson.put("request", java.util.Base64.getEncoder().encodeToString(f.evidence().request().toByteArray().getBytes()));
+                if (f.evidence().response() != null) {
+                    evidenceJson.put("response", java.util.Base64.getEncoder().encodeToString(f.evidence().response().toByteArray().getBytes()));
+                }
+                findingMap.put("evidence", evidenceJson);
+            }
+            
+            recordMap.put("finding", findingMap);
+            recordsJson.add(recordMap);
+        }
+        root.put("activeFindings", recordsJson);
+        return JsonParser.write(root);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void deserializeState(String json) {
+        if (json == null || json.isEmpty()) return;
+        try {
+            Object parsed = JsonParser.parse(json);
+            if (!(parsed instanceof Map<?, ?> root)) return;
+            
+            List<Object> log = (List<Object>) root.get("auditLog");
+            if (log != null) {
+                synchronized (auditLog) {
+                    auditLog.clear();
+                    for (Object o : log) auditLog.add(String.valueOf(o));
+                }
+            }
+            
+            List<Object> records = (List<Object>) root.get("activeFindings");
+            if (records != null) {
+                for (Object o : records) {
+                    Map<String, Object> rMap = (Map<String, Object>) o;
+                    String hash = String.valueOf(rMap.get("hash"));
+                    int count = Integer.parseInt(String.valueOf(rMap.get("count")));
+                    boolean suppressed = Boolean.TRUE.equals(rMap.get("suppressed"));
+                    
+                    Map<String, Object> fMap = (Map<String, Object>) rMap.get("finding");
+                    if (fMap != null) {
+                        Finding.Builder builder = Finding.builder(String.valueOf(fMap.get("module")), String.valueOf(fMap.get("type")))
+                            .description(String.valueOf(fMap.getOrDefault("description", "")))
+                            .severity(Severity.valueOf(String.valueOf(fMap.get("severity"))))
+                            .category(Category.valueOf(String.valueOf(fMap.get("category"))))
+                            .path(String.valueOf(fMap.getOrDefault("path", "")));
+                            
+                        Object cweRaw = fMap.get("cweIds");
+                        if (cweRaw instanceof List<?> list) list.forEach(id -> builder.cwe(String.valueOf(id)));
+                        
+                        Object metaRaw = fMap.get("metadata");
+                        if (metaRaw instanceof Map<?, ?> map) map.forEach((k, v) -> builder.meta(String.valueOf(k), String.valueOf(v)));
+                        
+                        Object evidenceRaw = fMap.get("evidence");
+                        if (evidenceRaw instanceof Map<?, ?> evidenceMap) {
+                            Object reqB64 = evidenceMap.get("request");
+                            if (reqB64 != null) {
+                                burp.api.montoya.http.message.requests.HttpRequest request = burp.api.montoya.http.message.requests.HttpRequest.httpRequest(burp.api.montoya.core.ByteArray.byteArray(java.util.Base64.getDecoder().decode(String.valueOf(reqB64))));
+                                burp.api.montoya.http.message.responses.HttpResponse response = null;
+                                Object resB64 = evidenceMap.get("response");
+                                if (resB64 != null) {
+                                    response = burp.api.montoya.http.message.responses.HttpResponse.httpResponse(burp.api.montoya.core.ByteArray.byteArray(java.util.Base64.getDecoder().decode(String.valueOf(resB64))));
+                                }
+                                builder.evidence(burp.api.montoya.http.message.HttpRequestResponse.httpRequestResponse(request, response));
+                            }
+                        }
+                        
+                        FindingRecord record = new FindingRecord(builder.build());
+                        for (int i = 1; i < count; i++) record.incrementCount();
+                        record.setSuppressed(suppressed);
+                        
+                        activeFindings.put(hash, record);
+                    }
+                }
+            }
+            notifyListenersOfUpdate();
+        } catch (Exception e) {
+            api.logging().logToError("Failed to deserialize state: " + e);
+        }
+    }
 }

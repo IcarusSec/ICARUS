@@ -127,6 +127,10 @@ public class JwtCheckerModule implements IcarusModule {
                     "JWT Checker — Active Tests", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             proceed[0] = (option == JOptionPane.YES_OPTION);
             remember[0] = chkRemember.isSelected();
+
+            if (remember[0]) {
+                extData.setBoolean(projPrefix + "active_tests_allowed", proceed[0]);
+            }
         };
 
         try {
@@ -138,10 +142,6 @@ public class JwtCheckerModule implements IcarusModule {
         } catch (Exception e) {
             api.logging().logToError("Failed to show JWT active-test confirmation dialog: " + e);
             return false;
-        }
-
-        if (remember[0]) {
-            extData.setBoolean(projPrefix + "active_tests_allowed", proceed[0]);
         }
 
         return proceed[0];
@@ -249,7 +249,7 @@ public class JwtCheckerModule implements IcarusModule {
 
                 if (lowered.contains("password") || lowered.contains("secret") || lowered.contains("apikey") ||
                     lowered.contains("api_key") || lowered.contains("token") || lowered.contains("hash")) {
-                    boolean redact = config.getBool("jwt.redact_sensitive_claims", true);
+                    boolean redact = config.getBool("jwt.redact_sensitive_claims", false);
                     String displayValue = redact ? "[REDACTED]" : valuePreview;
                     findings.add(createFinding("SENSITIVE_CLAIM", "Possible sensitive data in JWT claim: " + key + "=" + displayValue, Severity.HIGH, baseRR));
                 }
@@ -269,7 +269,7 @@ public class JwtCheckerModule implements IcarusModule {
         // Active Tests
         BiConsumer<String, String> testToken = (label, tokenToSend) -> {
             icarus.ScanRunner.waitIfPaused();
-            if (Thread.currentThread().isInterrupted()) return;
+            if (icarus.ScanRunner.isCancelled()) return;
             logger.accept("Testing " + humanizeLabel(label) + "...");
             try {
                 String newHeaderValue = candidate.headerValue.replace(candidate.token, tokenToSend);

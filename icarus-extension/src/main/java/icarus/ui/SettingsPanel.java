@@ -4,21 +4,18 @@ import burp.api.montoya.MontoyaApi;
 import icarus.Icarus;
 import icarus.autoauth.AutoAuthModule;
 import icarus.core.EvidencePaths;
+import icarus.core.I18n;
 import icarus.core.ModuleConfig;
-import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
 import icarus.evidence.EvidenceColorScheme;
+import icarus.evidence.EvidenceUiHelpers;
 import icarus.mcp.IcarusMcpServer;
 
 import javax.swing.*;
-import javax.swing.event.DocumentEvent;
-import javax.swing.event.DocumentListener;
+import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.io.File;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 public class SettingsPanel {
 
@@ -27,10 +24,9 @@ public class SettingsPanel {
     private final ThemeHelper themeHelper;
     private final AutoAuthModule autoAuth;
     private final IcarusMcpServer mcpServer;
-    private final JPanel mainPanel;
+    private final JPanel rootPanel;
 
     private final List<Runnable> saveHooks = new ArrayList<>();
-    private final List<JComponent> expandableLists = new ArrayList<>();
 
     public SettingsPanel(MontoyaApi api, ModuleConfig config, ThemeHelper themeHelper, AutoAuthModule autoAuth, IcarusMcpServer mcpServer) {
         this.api = api;
@@ -38,15 +34,23 @@ public class SettingsPanel {
         this.themeHelper = themeHelper;
         this.autoAuth = autoAuth;
         this.mcpServer = mcpServer;
-        this.mainPanel = new JPanel(new BorderLayout(0, 10));
-        this.mainPanel.setBorder(BorderFactory.createEmptyBorder(15, 15, 15, 15));
-        themeHelper.applyTheme(this.mainPanel);
-
-        buildUI();
+        
+        // Root Panel with BorderLayout. Center = Tabs, South = Footer
+        this.rootPanel = new JPanel(new BorderLayout());
+        themeHelper.applyTheme(this.rootPanel);
+        // Apply the container background to root panel to act as Canvas
+        this.rootPanel.setBackground(themeHelper.getBackgroundColor());
+        
+        // Initialize UI on EDT
+        if (SwingUtilities.isEventDispatchThread()) {
+            buildUI();
+        } else {
+            SwingUtilities.invokeLater(this::buildUI);
+        }
     }
 
     public Component getComponent() {
-        return mainPanel;
+        return rootPanel;
     }
 
     private Component wrapInScroll(Component content) {
@@ -58,379 +62,366 @@ public class SettingsPanel {
     }
 
     private void buildUI() {
-        JPanel pnlTop = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        themeHelper.applyTheme(pnlTop);
-
-        JCheckBox chkExpand = new JCheckBox("Expand payload lists");
-        themeHelper.applyTheme(chkExpand);
-        chkExpand.addActionListener(e -> {
-            boolean visible = chkExpand.isSelected();
-            for (JComponent c : expandableLists) {
-                c.setVisible(visible);
-            }
-            mainPanel.revalidate();
-            mainPanel.repaint();
-        });
-        pnlTop.add(chkExpand);
-
-        JButton btnSave = new JButton("Save Settings");
-        themeHelper.styleButton(btnSave);
-        btnSave.addActionListener(e -> saveAll());
-        pnlTop.add(btnSave);
-
-        JButton btnReset = new JButton("Reset to Default");
-        themeHelper.styleButton(btnReset);
-        btnReset.addActionListener(e -> resetToDefault());
-        pnlTop.add(btnReset);
-
-        mainPanel.add(pnlTop, BorderLayout.NORTH);
-
         JTabbedPane settingsTabs = new JTabbedPane();
+        settingsTabs.putClientProperty("JTabbedPane.tabType", "underlined");
         themeHelper.applyTheme(settingsTabs);
-        mainPanel.add(settingsTabs, BorderLayout.CENTER);
+        rootPanel.add(settingsTabs, BorderLayout.CENTER);
 
-        // Global Toggles
-        JPanel pnlGlobal = createSection("General & Modules");
-        addCheckbox(pnlGlobal, "ui.show_popups", "Show pop-up dialog with findings after an active scan completes");
-        addCheckbox(pnlGlobal, "verbose.enabled", "Verbose Mode (live step-by-step scan logging)");
-        addCheckbox(pnlGlobal, "pv.enabled", "ParamValidator (JSON Mutation Fuzzer)");
-        addCheckbox(pnlGlobal, "hv.enabled", "HTTP Verb Tester");
-        addCheckbox(pnlGlobal, "jwt.enabled", "JWT / Bearer Token Checker");
-        addCheckbox(pnlGlobal, "sh.enabled", "Sensitive Headers (Active)");
-        addCheckbox(pnlGlobal, "sh.passive", "Sensitive Headers (Passive / Background)");
-        addCheckbox(pnlGlobal, "export.enabled", "Postman Export");
-        addCheckbox(pnlGlobal, "rl.enabled", "Rate Limit Tester");
-        addCheckbox(pnlGlobal, "autoauth.enabled", "AutoAuth (background token refresh/injection)");
-        addCheckbox(pnlGlobal, "pem.enabled", "Passive Error Detector (Active)");
-        addCheckbox(pnlGlobal, "pem.passive", "Passive Error Detector (Passive / Background)");
-
-        // WAF & Safe Lists
-        JPanel pnlWaf = createSection("WAF Evasion & Safe Lists");
-        addCheckbox(pnlWaf, "waf.detect_akamai", "Detect Akamai and prompt for Safe Mode");
-        addTextArea(pnlWaf, "waf.safelist_payloads", "Safe List Payloads (one per line):", true);
-
+        // 1. General & Integrations
         JPanel pnlGeneralTab = new JPanel();
         pnlGeneralTab.setLayout(new BoxLayout(pnlGeneralTab, BoxLayout.Y_AXIS));
-        themeHelper.applyTheme(pnlGeneralTab);
-        pnlGeneralTab.add(pnlGlobal);
-        pnlGeneralTab.add(Box.createRigidArea(new Dimension(0, 10)));
-        pnlGeneralTab.add(pnlWaf);
-        settingsTabs.addTab("General", wrapInScroll(pnlGeneralTab));
+        pnlGeneralTab.setBorder(new EmptyBorder(16, 16, 16, 16));
+        pnlGeneralTab.setBackground(themeHelper.getBackgroundColor());
+        
+        CardPanel cardGlobal = new CardPanel(I18n.t("settings.section.general_and_modules"), "shield");
+        addComboBoxToForm(cardGlobal, ModuleConfig.UI_LANGUAGE_KEY, I18n.t("settings.combo.language"), new String[]{"pt-BR", "en"});
+        
+        JPanel pnlGlobalGrid = new JPanel(new GridBagLayout());
+        pnlGlobalGrid.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
+        
+        gbc.gridx = 0; gbc.gridy = 0; addCheckboxToGrid(pnlGlobalGrid, gbc, "ui.show_popups", I18n.t("settings.checkbox.show_popups"), false);
+        gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "verbose.enabled", I18n.t("settings.checkbox.verbose_mode"), true);
+        gbc.gridx = 0; gbc.gridy = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "pv.enabled", I18n.t("settings.checkbox.pv_enabled"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "hv.enabled", I18n.t("settings.checkbox.hv_enabled"), true);
+        gbc.gridx = 0; gbc.gridy = 2; addCheckboxToGrid(pnlGlobalGrid, gbc, "jwt.enabled", I18n.t("settings.checkbox.jwt_enabled"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "sh.enabled", I18n.t("settings.checkbox.sh_enabled"), true);
+        gbc.gridx = 0; gbc.gridy = 3; addCheckboxToGrid(pnlGlobalGrid, gbc, "sh.passive", I18n.t("settings.checkbox.sh_passive"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "export.enabled", I18n.t("settings.checkbox.export_enabled"), true);
+        gbc.gridx = 0; gbc.gridy = 4; addCheckboxToGrid(pnlGlobalGrid, gbc, "rl.enabled", I18n.t("settings.checkbox.rl_enabled"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "autoauth.enabled", I18n.t("settings.checkbox.autoauth_enabled"), true);
+        gbc.gridx = 0; gbc.gridy = 5; addCheckboxToGrid(pnlGlobalGrid, gbc, "pem.enabled", I18n.t("settings.checkbox.pem_enabled"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "pem.passive", I18n.t("settings.checkbox.pem_passive"), true);
+        
+        // Add horizontal glue to compact the grid to the left
+        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 1.0;
+        pnlGlobalGrid.add(Box.createHorizontalGlue(), gbc);
+        
+        cardGlobal.addFormRow(pnlGlobalGrid);
 
-        // ParamValidator
-        JPanel pnlPv = createSection("ParamValidator");
-        addCheckbox(pnlPv, "pv.structural", "Structural mutations");
-        addCheckbox(pnlPv, "pv.type_confusion", "Type confusion");
-        addCheckbox(pnlPv, "pv.boundary", "Boundary mutations");
-        addCheckbox(pnlPv, "pv.injection", "Injection mutations");
-        addCheckbox(pnlPv, "pv.behavioral_analysis", "Behavioral Analysis (Detect anomalies via diffing)");
-        addField(pnlPv, "pv.max_mutations", "Max mutations per request:");
-        addField(pnlPv, "pv.max_repeater", "Max Repeater tabs:");
+        CardPanel cardWaf = new CardPanel(I18n.t("settings.section.waf_evasion"), "shield");
+        addCheckboxToForm(cardWaf, "waf.detect_akamai", I18n.t("settings.checkbox.detect_akamai"), true);
+        addTextAreaToForm(cardWaf, "waf.safelist_payloads", I18n.t("settings.textarea.safelist_payloads"));
 
-        // Expandable payload lists
-        addTextArea(pnlPv, "pv.payload_sqli", "SQLi Payloads:", true);
-        addTextArea(pnlPv, "pv.payload_xss", "XSS Payloads:", true);
-        addTextArea(pnlPv, "pv.payload_path_traversal", "Path Traversal Payloads:", true);
-        addTextArea(pnlPv, "pv.payload_nosqli", "NoSQLi Payloads:", true);
-        addTextArea(pnlPv, "pv.payload_format_string", "Format String Payloads:", true);
-
-        settingsTabs.addTab("ParamValidator", wrapInScroll(pnlPv));
-
-        // HTTP Verb
-        JPanel pnlHv = createSection("HTTP Verb Tester");
-        addCheckbox(pnlHv, "hv.test_get", "Test GET");
-        addCheckbox(pnlHv, "hv.test_post", "Test POST");
-        addCheckbox(pnlHv, "hv.test_put", "Test PUT");
-        addCheckbox(pnlHv, "hv.test_delete", "Test DELETE");
-        addCheckbox(pnlHv, "hv.test_options", "Test OPTIONS");
-        addCheckbox(pnlHv, "hv.test_trace", "Test TRACE");
-        addCheckbox(pnlHv, "hv.enable_state_changing", "Enable state-changing methods (POST/PUT/DELETE/PATCH)");
-        addComboBox(pnlHv, "hv.body_strategy", "Body Strategy:", new String[]{"AUTO", "KEEP", "REMOVE"});
-        settingsTabs.addTab("HTTP Verb", wrapInScroll(pnlHv));
-
-        // JWT Checker
-        JPanel pnlJwt = createSection("JWT / Bearer Token Checker");
-        addCheckbox(pnlJwt, "jwt.redact_sensitive_claims", "Redact sensitive claim values in findings/logs/reports (show key only)");
-        settingsTabs.addTab("JWT", wrapInScroll(pnlJwt));
-
-        // Sensitive Headers - CWE-200
-        JPanel pnlSh = createSection("Sensitive Headers - CWE-200 Detection");
-        addCheckbox(pnlSh, "sh.check_cwe200_pii", "PII / National ID leaks (SSN, NINO, SIN, CPF, NIR)");
-        addCheckbox(pnlSh, "sh.check_cwe200_financial", "Financial data leaks (credit cards, IBAN)");
-        addCheckbox(pnlSh, "sh.check_cwe200_backend", "Backend stack trace / framework error leaks");
-        addCheckbox(pnlSh, "sh.check_cwe200_infra", "Internal IP / internal domain leaks");
-        addCheckbox(pnlSh, "sh.redact_pii_values", "Redact PII values in findings (show header name only)");
-        settingsTabs.addTab("Sensitive Headers", wrapInScroll(pnlSh));
-
-        // Rate Limit Tester
-        JPanel pnlRl = createSection("Rate Limit Tester");
-        addField(pnlRl, "rl.request_count", "Requests per blast:");
-        addField(pnlRl, "rl.concurrency", "Concurrent threads:");
-        addField(pnlRl, "rl.cooldown_wait_ms", "Cooldown between bypasses (ms):");
-        addField(pnlRl, "rl.max_rps", "Max RPS (0 = unlimited):");
-        addCheckbox(pnlRl, "rl.bypass_headers", "Try IP header rotation bypass (X-Forwarded-For, etc.)");
-        addCheckbox(pnlRl, "rl.bypass_path", "Try path normalization bypass (/api/./v1, //api, etc.)");
-        addCheckbox(pnlRl, "rl.bypass_query", "Try cache-buster query param bypass (?_icarus=N)");
-        settingsTabs.addTab("Rate Limit", wrapInScroll(pnlRl));
-
-        // AutoAuth
-        JPanel pnlAuto = createSection("AutoAuth");
-        addField(pnlAuto, "autoauth.refresh_minutes", "Refresh token every X minutes:");
-        JLabel autoAuthStatus = addStatusLabel(pnlAuto, autoAuth.statusSummary());
-        addButton(pnlAuto, "Clear Active Config", () -> {
+        CardPanel cardAuto = new CardPanel(I18n.t("settings.section.autoauth"), "key");
+        addSpinnerToForm(cardAuto, "autoauth.refresh_minutes", I18n.t("settings.field.autoauth.refresh_minutes"), 10, 1, 1440, 1);
+        JLabel autoAuthStatus = new JLabel(autoAuth.statusSummary());
+        autoAuthStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
+        cardAuto.addFormRow(autoAuthStatus);
+        
+        JButton btnClearAuth = new JButton(I18n.t("settings.button.clear_active_config"));
+        btnClearAuth.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnClearAuth.addActionListener(e -> {
             autoAuth.clearSession();
             autoAuthStatus.setText(autoAuth.statusSummary());
         });
-        settingsTabs.addTab("AutoAuth", wrapInScroll(pnlAuto));
+        cardAuto.addFormRow(btnClearAuth);
 
-        // MCP (AI agent access) — live toggle (starts/stops mcpServer immediately) rather than
-        // addCheckbox's save-on-click-Save pattern, since flipping this opens/closes a real
-        // localhost port and the status label needs to reflect that right away.
-        JPanel pnlMcp = createSection("AI Integration (MCP Server)");
-        JLabel mcpHint = new JLabel("Let AI agents query ICARUS findings over a local MCP connection.");
-        themeHelper.applyTheme(mcpHint);
-        ((JPanel) pnlMcp.getComponent(0)).add(mcpHint);
-        JLabel mcpStatus = addStatusLabel(pnlMcp, mcpServer.statusSummary());
+        CardPanel cardMcp = new CardPanel(I18n.t("settings.section.mcp"), "cpu");
+        JLabel mcpStatusBadge = new JLabel(mcpServer.isRunning() ? "● ATIVO" : "● PARADO");
+        mcpStatusBadge.setFont(mcpStatusBadge.getFont().deriveFont(Font.BOLD));
+        mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
+        
+        JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        headerPanel.setOpaque(false);
+        headerPanel.add(mcpStatusBadge);
+        headerPanel.add(Box.createRigidArea(new Dimension(8, 0)));
+        headerPanel.add(new JLabel(I18n.t("settings.label.mcp_hint")));
+        cardMcp.addFormRow(headerPanel);
 
-        JPanel pnlMcpPort = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        themeHelper.applyTheme(pnlMcpPort);
-        pnlMcpPort.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel mcpPortLbl = new JLabel("Port (0 = auto-assign):");
-        themeHelper.applyTheme(mcpPortLbl);
-        pnlMcpPort.add(mcpPortLbl);
-        JTextField txtMcpPort = new JTextField(String.valueOf(config.getInt("mcp.port", 61337)), 6);
-        themeHelper.applyTheme(txtMcpPort);
-        pnlMcpPort.add(txtMcpPort);
-        ((JPanel) pnlMcp.getComponent(0)).add(pnlMcpPort);
+        JSpinner spinMcpPort = new JSpinner(new SpinnerNumberModel(config.getInt("mcp.port", 61337), 1024, 65535, 1));
+        spinMcpPort.setEditor(new JSpinner.NumberEditor(spinMcpPort, "#"));
+        JCheckBox chkMcp = new JCheckBox(I18n.t("settings.checkbox.mcp_enabled"), config.getBool("mcp.enabled", false));
+        chkMcp.setOpaque(false);
+        
+        JPanel mcpPortPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        mcpPortPanel.setOpaque(false);
+        mcpPortPanel.add(new JLabel(I18n.t("settings.label.mcp_port") + " "));
+        mcpPortPanel.add(spinMcpPort);
+        mcpPortPanel.add(Box.createRigidArea(new Dimension(16, 0)));
+        mcpPortPanel.add(chkMcp);
+        cardMcp.addFormRow(mcpPortPanel);
 
-        JCheckBox chkMcp = new JCheckBox("Enable Local MCP Server", config.getBool("mcp.enabled", false));
-        themeHelper.applyTheme(chkMcp);
-        chkMcp.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        Runnable applyMcpPort = () -> {
-            int requestedPort;
-            try {
-                requestedPort = Integer.parseInt(txtMcpPort.getText().trim());
-            } catch (NumberFormatException ex) {
-                requestedPort = -1;
-            }
-            if (requestedPort < 0 || requestedPort > 65535) {
-                JOptionPane.showMessageDialog(mainPanel, "Port must be between 0 and 65535 (0 = auto-assign).",
-                        "Invalid MCP Port", JOptionPane.ERROR_MESSAGE);
-                txtMcpPort.setText(String.valueOf(config.getInt("mcp.port", 61337)));
-                return;
-            }
-            config.set("mcp.port", requestedPort);
-            api.persistence().extensionData().setString("config", config.serialize());
-            if (mcpServer.isRunning()) {
-                mcpServer.stop();
-                mcpServer.start(requestedPort);
-            }
-            mcpStatus.setText(mcpServer.statusSummary());
-        };
-
-        chkMcp.addActionListener(e -> {
+        JButton btnRestartMcp = new JButton("Reiniciar Servidor", EvidenceUiHelpers.createIcon("refresh-cw"));
+        btnRestartMcp.addActionListener(e -> {
+            btnRestartMcp.setEnabled(false);
+            btnRestartMcp.setText("Reiniciando...");
+            
             boolean enabled = chkMcp.isSelected();
+            int port = (int) spinMcpPort.getValue();
             config.set("mcp.enabled", enabled);
+            config.set("mcp.port", port);
             api.persistence().extensionData().setString("config", config.serialize());
-            if (enabled) mcpServer.start(config.getInt("mcp.port", 61337)); else mcpServer.stop();
-            mcpStatus.setText(mcpServer.statusSummary());
+            
+            SwingWorker<Void, Void> worker = new SwingWorker<>() {
+                @Override
+                protected Void doInBackground() {
+                    mcpServer.stop();
+                    if (enabled) {
+                        mcpServer.start(port);
+                    }
+                    return null;
+                }
+                
+                @Override
+                protected void done() {
+                    mcpStatusBadge.setText(mcpServer.isRunning() ? "● ATIVO" : "● PARADO");
+                    mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
+                    btnRestartMcp.setText("Reiniciar Servidor");
+                    btnRestartMcp.setEnabled(true);
+                }
+            };
+            worker.execute();
         });
-        ((JPanel) pnlMcp.getComponent(0)).add(chkMcp);
+        cardMcp.addFormRow(btnRestartMcp);
 
-        addButton(pnlMcp, "Apply Port / Restart Server", applyMcpPort);
-
-        settingsTabs.addTab("MCP", wrapInScroll(pnlMcp));
-
-        // Evidence
-        JPanel pnlEvidence = createSection("Evidence Capture");
-        addOutputDirField(pnlEvidence);
-        addComboBox(pnlEvidence, "evidence.colorscheme", "Screenshot Color Scheme:", EvidenceColorScheme.names());
-        addCheckbox(pnlEvidence, "evidence.include_project_name", "Include Project Name in Evidence/Report");
-        addComboBox(pnlEvidence, "evidence.manual_severity", "Manual \"Create Evidence\" Severity:",
+        CardPanel cardEvidence = new CardPanel(I18n.t("settings.section.evidence"), "camera");
+        addOutputDirField(cardEvidence);
+        addComboBoxToForm(cardEvidence, "evidence.colorscheme", I18n.t("settings.combo.evidence.colorscheme"), EvidenceColorScheme.names());
+        addCheckboxToForm(cardEvidence, "evidence.auto_capture", I18n.t("settings.checkbox.evidence.auto_capture"), true);
+        addCheckboxToForm(cardEvidence, "evidence.include_project_name", I18n.t("settings.checkbox.evidence.include_project_name"), false);
+        addComboBoxToForm(cardEvidence, "evidence.manual_severity", I18n.t("settings.combo.evidence.manual_severity"),
                 java.util.Arrays.stream(Severity.values()).map(Enum::name).toArray(String[]::new));
-        settingsTabs.addTab("Evidence", wrapInScroll(pnlEvidence));
 
-        // Initially hide expandable lists
-        for (JComponent c : expandableLists) {
-            c.setVisible(false);
-        }
+        JPanel pnlReset = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        pnlReset.setOpaque(false);
+        JButton btnReset = new JButton(I18n.t("settings.button.reset_to_default"));
+        btnReset.putClientProperty("JButton.buttonType", "toolBarButton");
+        btnReset.addActionListener(e -> resetToDefault());
+        pnlReset.add(btnReset);
+
+        pnlGeneralTab.add(cardGlobal);
+        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(cardWaf);
+        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(cardAuto);
+        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(cardMcp);
+        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(cardEvidence);
+        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(pnlReset);
+        pnlGeneralTab.add(Box.createVerticalGlue());
+        settingsTabs.addTab("Geral & Integrações", wrapInScroll(pnlGeneralTab));
+
+        // 2. Active Scanners
+        JPanel pnlActiveTab = new JPanel();
+        pnlActiveTab.setLayout(new BoxLayout(pnlActiveTab, BoxLayout.Y_AXIS));
+        pnlActiveTab.setBorder(new EmptyBorder(16, 16, 16, 16));
+        pnlActiveTab.setBackground(themeHelper.getBackgroundColor());
+
+        CardPanel cardPv = new CardPanel(I18n.t("settings.section.paramvalidator"), "sliders");
+        
+        JPanel pnlPvGrid = new JPanel(new GridBagLayout());
+        pnlPvGrid.setOpaque(false);
+        gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
+        
+        gbc.gridx = 0; gbc.gridy = 0; addCheckboxToGrid(pnlPvGrid, gbc, "pv.structural", I18n.t("settings.checkbox.pv.structural"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.type_confusion", I18n.t("settings.checkbox.pv.type_confusion"), true);
+        gbc.gridx = 0; gbc.gridy = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.boundary", I18n.t("settings.checkbox.pv.boundary"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.injection", I18n.t("settings.checkbox.pv.injection"), true);
+        gbc.gridx = 0; gbc.gridy = 2; addCheckboxToGrid(pnlPvGrid, gbc, "pv.ssrf", I18n.t("settings.checkbox.pv.ssrf"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.idor", I18n.t("settings.checkbox.pv.idor"), true);
+        gbc.gridx = 0; gbc.gridy = 3; addCheckboxToGrid(pnlPvGrid, gbc, "pv.cmdi", I18n.t("settings.checkbox.pv.cmdi"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.ssti", I18n.t("settings.checkbox.pv.ssti"), true);
+        gbc.gridx = 0; gbc.gridy = 4; addCheckboxToGrid(pnlPvGrid, gbc, "pv.behavioral_analysis", I18n.t("settings.checkbox.pv.behavioral_analysis"), true);
+        
+        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 1.0;
+        pnlPvGrid.add(Box.createHorizontalGlue(), gbc);
+        cardPv.addFormRow(pnlPvGrid);
+        
+        addSpinnerToForm(cardPv, "pv.max_mutations", I18n.t("settings.field.pv.max_mutations"), 500, 1, 100000, 10);
+        addSpinnerToForm(cardPv, "pv.max_repeater", I18n.t("settings.field.pv.max_repeater"), 5, 1, 100, 1);
+
+        JTabbedPane pvTabs = new JTabbedPane();
+        pvTabs.putClientProperty("JTabbedPane.tabType", "underlined");
+        pvTabs.addTab("SQLi", createTabbedTextArea("pv.payload_sqli"));
+        pvTabs.addTab("XSS", createTabbedTextArea("pv.payload_xss"));
+        pvTabs.addTab("Path Traversal", createTabbedTextArea("pv.payload_path_traversal"));
+        pvTabs.addTab("NoSQLi", createTabbedTextArea("pv.payload_nosqli"));
+        pvTabs.addTab("Format String", createTabbedTextArea("pv.payload_format_string"));
+        pvTabs.addTab("SSRF", createTabbedTextArea("pv.payload_ssrf_heuristic"));
+        pvTabs.addTab("CMDi", createTabbedTextArea("pv.payload_cmdi"));
+        pvTabs.addTab("SSTI", createTabbedTextArea("pv.payload_ssti"));
+        cardPv.addFormRow(pvTabs);
+
+        CardPanel cardHv = new CardPanel(I18n.t("settings.section.http_verb"), "activity");
+        addCheckboxToForm(cardHv, "hv.test_get", I18n.t("settings.checkbox.hv.test_get"), true);
+        addCheckboxToForm(cardHv, "hv.test_post", I18n.t("settings.checkbox.hv.test_post"), true);
+        addCheckboxToForm(cardHv, "hv.test_put", I18n.t("settings.checkbox.hv.test_put"), true);
+        addCheckboxToForm(cardHv, "hv.test_delete", I18n.t("settings.checkbox.hv.test_delete"), true);
+        addCheckboxToForm(cardHv, "hv.test_options", I18n.t("settings.checkbox.hv.test_options"), true);
+        addCheckboxToForm(cardHv, "hv.test_trace", I18n.t("settings.checkbox.hv.test_trace"), true);
+        addCheckboxToForm(cardHv, "hv.enable_state_changing", I18n.t("settings.checkbox.hv.enable_state_changing"), false);
+        addComboBoxToForm(cardHv, "hv.body_strategy", I18n.t("settings.combo.hv.body_strategy"), new String[]{"AUTO", "KEEP", "REMOVE"});
+
+        CardPanel cardRl = new CardPanel(I18n.t("settings.section.rate_limit"), "activity");
+        addSpinnerToForm(cardRl, "rl.request_count", I18n.t("settings.field.rl.request_count"), 100, 10, 10000, 10);
+        addSpinnerToForm(cardRl, "rl.concurrency", I18n.t("settings.field.rl.concurrency"), 10, 1, 100, 1);
+        addSpinnerToForm(cardRl, "rl.cooldown_wait_ms", I18n.t("settings.field.rl.cooldown_wait_ms"), 0, 0, 60000, 100);
+        addSpinnerToForm(cardRl, "rl.max_rps", I18n.t("settings.field.rl.max_rps"), 0, 0, 10000, 10);
+        addCheckboxToForm(cardRl, "rl.bypass_headers", I18n.t("settings.checkbox.rl.bypass_headers"), true);
+        addCheckboxToForm(cardRl, "rl.bypass_path", I18n.t("settings.checkbox.rl.bypass_path"), true);
+        addCheckboxToForm(cardRl, "rl.bypass_query", I18n.t("settings.checkbox.rl.bypass_query"), true);
+
+        pnlActiveTab.add(cardPv);
+        pnlActiveTab.add(Box.createVerticalStrut(16));
+        pnlActiveTab.add(cardHv);
+        pnlActiveTab.add(Box.createVerticalStrut(16));
+        pnlActiveTab.add(cardRl);
+        pnlActiveTab.add(Box.createVerticalGlue());
+        settingsTabs.addTab("Scanners Ativos", wrapInScroll(pnlActiveTab));
+
+        // 3. Passive Scanners & Checks
+        JPanel pnlPassiveTab = new JPanel();
+        pnlPassiveTab.setLayout(new BoxLayout(pnlPassiveTab, BoxLayout.Y_AXIS));
+        pnlPassiveTab.setBorder(new EmptyBorder(16, 16, 16, 16));
+        pnlPassiveTab.setBackground(themeHelper.getBackgroundColor());
+
+        CardPanel cardJwt = new CardPanel(I18n.t("settings.section.jwt"), "lock");
+        addCheckboxToForm(cardJwt, "jwt.redact_sensitive_claims", I18n.t("settings.checkbox.jwt.redact_sensitive_claims"), false);
+
+        CardPanel cardSh = new CardPanel(I18n.t("settings.section.sensitive_headers"), "file-text");
+        addCheckboxToForm(cardSh, "sh.check_cwe200_pii", I18n.t("settings.checkbox.sh.check_cwe200_pii"), true);
+        addCheckboxToForm(cardSh, "sh.check_cwe200_financial", I18n.t("settings.checkbox.sh.check_cwe200_financial"), true);
+        addCheckboxToForm(cardSh, "sh.check_cwe200_backend", I18n.t("settings.checkbox.sh.check_cwe200_backend"), true);
+        addCheckboxToForm(cardSh, "sh.check_cwe200_infra", I18n.t("settings.checkbox.sh.check_cwe200_infra"), true);
+        addCheckboxToForm(cardSh, "sh.redact_pii_values", I18n.t("settings.checkbox.sh.redact_pii_values"), false);
+
+        pnlPassiveTab.add(cardJwt);
+        pnlPassiveTab.add(Box.createVerticalStrut(16));
+        pnlPassiveTab.add(cardSh);
+        pnlPassiveTab.add(Box.createVerticalGlue());
+        settingsTabs.addTab("Scanners Passivos", wrapInScroll(pnlPassiveTab));
+
     }
 
-    private JPanel createSection(String title) {
-        JPanel panel = new JPanel();
-        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.setBorder(themeHelper.createSectionBorder(title));
-        themeHelper.applyTheme(panel);
-
-        JPanel wrapper = new JPanel(new BorderLayout());
-        themeHelper.applyTheme(wrapper);
-        wrapper.add(panel, BorderLayout.NORTH);
-        wrapper.setAlignmentX(Component.LEFT_ALIGNMENT);
-        wrapper.setMaximumSize(new Dimension(800, 1200));
-        return wrapper;
-    }
-
-    private void addCheckbox(JPanel parent, String key, String label) {
-        JCheckBox cb = new JCheckBox(label, config.getBool(key, true));
-        themeHelper.applyTheme(cb);
-        cb.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JPanel p = (JPanel) parent.getComponent(0); // The inner BoxLayout panel
-        p.add(cb);
-        p.add(Box.createRigidArea(new Dimension(0, 5)));
-
+    private void addCheckboxToGrid(JPanel grid, GridBagConstraints gbc, String key, String label, boolean defaultValue) {
+        JCheckBox cb = new JCheckBox(label, config.getBool(key, defaultValue));
+        cb.setOpaque(false);
+        grid.add(cb, gbc);
         saveHooks.add(() -> config.set(key, cb.isSelected()));
+        cb.addItemListener(e -> saveAll());
     }
 
-    private void addField(JPanel parent, String key, String label) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        themeHelper.applyTheme(p);
-        p.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel(label);
-        themeHelper.applyTheme(lbl);
-        p.add(lbl);
-
-        JTextField tf = new JTextField(config.getString(key, ""), 20);
-        themeHelper.applyTheme(tf);
-        p.add(tf);
-
-        JPanel inner = (JPanel) parent.getComponent(0);
-        inner.add(p);
-
-        saveHooks.add(() -> config.set(key, tf.getText()));
+    private void addCheckboxToForm(CardPanel card, String key, String label, boolean defaultValue) {
+        JCheckBox cb = new JCheckBox(label, config.getBool(key, defaultValue));
+        cb.setOpaque(false);
+        card.addFormRow(cb);
+        saveHooks.add(() -> config.set(key, cb.isSelected()));
+        cb.addItemListener(e -> saveAll());
     }
 
-    /**
-     * "evidence.output_dir" gets its own field instead of {@link #addField}: it needs a
-     * folder-picker button, and shows {@link EvidencePaths#defaultOutputDir} — the folder
-     * actually in effect right now, whether the user pinned one explicitly or it's still
-     * auto-resolved from the open project — not just whatever raw string (possibly blank)
-     * happens to be in config.
-     */
-    private void addOutputDirField(JPanel parent) {
+    private void addSpinnerToForm(CardPanel card, String key, String label, int defaultVal, int min, int max, int step) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        row.setOpaque(false);
+        row.add(new JLabel(label + " "));
+        
+        JSpinner spinner = new JSpinner(new SpinnerNumberModel(config.getInt(key, defaultVal), min, max, step));
+        spinner.setEditor(new JSpinner.NumberEditor(spinner, "#"));
+        row.add(spinner);
+        
+        card.addFormRow(row);
+        
+        saveHooks.add(() -> config.set(key, (int) spinner.getValue()));
+        spinner.addChangeListener(e -> saveAll());
+    }
+
+    private void addComboBoxToForm(CardPanel card, String key, String label, String[] options) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        row.setOpaque(false);
+        row.add(new JLabel(label + " "));
+        
+        JComboBox<String> combo = new JComboBox<>(options);
+        combo.setSelectedItem(config.getString(key, options[0]));
+        row.add(combo);
+        
+        card.addFormRow(row);
+        
+        saveHooks.add(() -> config.set(key, (String) combo.getSelectedItem()));
+        combo.addItemListener(e -> saveAll());
+    }
+
+    private void addTextAreaToForm(CardPanel card, String key, String label) {
+        card.addFormRow(new JLabel(label));
+        JTextArea ta = new JTextArea(config.getString(key, ""), 4, 40);
+        setupScrollableTextArea(ta);
+        card.addFormRow(new JScrollPane(ta));
+        
+        saveHooks.add(() -> config.set(key, ta.getText()));
+        ta.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent evt) { saveAll(); }
+        });
+    }
+
+    private JScrollPane createTabbedTextArea(String key) {
+        JTextArea ta = new JTextArea(config.getString(key, ""), 6, 40);
+        setupScrollableTextArea(ta);
+        saveHooks.add(() -> config.set(key, ta.getText()));
+        ta.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent evt) { saveAll(); }
+        });
+        
+        JScrollPane scroll = new JScrollPane(ta);
+        scroll.setBorder(BorderFactory.createLineBorder(themeHelper.getBorderColor()));
+        return scroll;
+    }
+
+    private void setupScrollableTextArea(JTextArea ta) {
+        themeHelper.styleTextArea(ta);
+        ta.setLineWrap(true);
+        ta.setWrapStyleWord(true);
+        ta.addMouseWheelListener(e -> {
+            Component parent = SwingUtilities.getAncestorOfClass(JScrollPane.class, ta.getParent() != null ? ta.getParent().getParent() : ta);
+            if (parent != null) {
+                parent.dispatchEvent(SwingUtilities.convertMouseEvent(ta, e, parent));
+            }
+        });
+    }
+
+    private void addOutputDirField(CardPanel card) {
         JPanel row = new JPanel(new BorderLayout(4, 0));
-        themeHelper.applyTheme(row);
-        row.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel("Evidence Output Folder:");
-        themeHelper.applyTheme(lbl);
-        row.add(lbl, BorderLayout.WEST);
+        row.setOpaque(false);
+        row.add(new JLabel(I18n.t("settings.label.evidence_output_folder")), BorderLayout.WEST);
 
         JTextField tf = new JTextField(EvidencePaths.defaultOutputDir(api, config));
         themeHelper.applyTheme(tf);
         row.add(tf, BorderLayout.CENTER);
 
-        JButton btnBrowse = new JButton("Browse…");
+        JButton btnBrowse = new JButton(I18n.t("settings.button.browse"));
         themeHelper.styleButton(btnBrowse);
         btnBrowse.addActionListener(e -> {
             JFileChooser fc = new JFileChooser(tf.getText());
             fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-            if (fc.showOpenDialog(mainPanel) == JFileChooser.APPROVE_OPTION) {
+            if (fc.showOpenDialog(rootPanel) == JFileChooser.APPROVE_OPTION) {
                 tf.setText(fc.getSelectedFile().getAbsolutePath());
+                saveAll();
             }
         });
 
-        JButton btnAuto = new JButton("Auto");
+        JButton btnAuto = new JButton(I18n.t("settings.button.auto"));
         themeHelper.styleButton(btnAuto);
-        btnAuto.setToolTipText("Clear to auto-detect from the open project folder each time");
-        btnAuto.addActionListener(e -> tf.setText(""));
+        btnAuto.addActionListener(e -> {
+            tf.setText("");
+            saveAll();
+        });
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        themeHelper.applyTheme(buttons);
+        buttons.setOpaque(false);
         buttons.add(btnBrowse);
         buttons.add(btnAuto);
         row.add(buttons, BorderLayout.EAST);
 
-        JPanel inner = (JPanel) parent.getComponent(0);
-        inner.add(row);
-        inner.add(Box.createRigidArea(new Dimension(0, 5)));
+        card.addFormRow(row);
 
-        // Blank persists as blank (not this call's resolved default) — EvidencePaths treats a
-        // blank/unset value as "keep auto-resolving," which is exactly what "Auto" means here.
         saveHooks.add(() -> config.set("evidence.output_dir", tf.getText()));
-    }
-
-    private void addComboBox(JPanel parent, String key, String label, String[] options) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        themeHelper.applyTheme(p);
-        p.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-        JLabel lbl = new JLabel(label);
-        themeHelper.applyTheme(lbl);
-        p.add(lbl);
-
-        JComboBox<String> combo = new JComboBox<>(options);
-        combo.setSelectedItem(config.getString(key, options[0]));
-        themeHelper.applyTheme(combo);
-        p.add(combo);
-
-        JPanel inner = (JPanel) parent.getComponent(0);
-        inner.add(p);
-
-        saveHooks.add(() -> config.set(key, (String) combo.getSelectedItem()));
-    }
-
-    private JLabel addStatusLabel(JPanel parent, String initialText) {
-        JLabel lbl = new JLabel(initialText);
-        themeHelper.applyTheme(lbl);
-        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
-        lbl.setBorder(BorderFactory.createEmptyBorder(0, 0, 5, 0));
-
-        JPanel inner = (JPanel) parent.getComponent(0);
-        inner.add(lbl);
-        return lbl;
-    }
-
-    private void addButton(JPanel parent, String label, Runnable action) {
-        JButton btn = new JButton(label);
-        themeHelper.styleButton(btn);
-        btn.setAlignmentX(Component.LEFT_ALIGNMENT);
-        btn.addActionListener(e -> action.run());
-
-        JPanel inner = (JPanel) parent.getComponent(0);
-        inner.add(btn);
-    }
-
-    private void addTextArea(JPanel parent, String key, String label, boolean expandable) {
-        JPanel p = new JPanel(new BorderLayout(5, 5));
-        themeHelper.applyTheme(p);
-        p.setAlignmentX(Component.LEFT_ALIGNMENT);
-        p.setBorder(BorderFactory.createEmptyBorder(5, 5, 10, 5));
-
-        JLabel lbl = new JLabel(label);
-        themeHelper.applyTheme(lbl);
-        p.add(lbl, BorderLayout.NORTH);
-
-        JTextArea ta = new JTextArea(config.getString(key, ""), 5, 40);
-        themeHelper.styleTextArea(ta);
-
-        JScrollPane scroll = new JScrollPane(ta);
-        themeHelper.applyTheme(scroll);
-        
-        scroll.addMouseWheelListener(e -> {
-            JScrollBar vbar = scroll.getVerticalScrollBar();
-            if (!vbar.isVisible() || 
-                (e.getWheelRotation() < 0 && vbar.getValue() == 0) || 
-                (e.getWheelRotation() > 0 && vbar.getValue() >= vbar.getMaximum() - vbar.getVisibleAmount())) {
-                
-                Container ancestorScroll = SwingUtilities.getAncestorOfClass(JScrollPane.class, scroll);
-                if (ancestorScroll != null) {
-                    ancestorScroll.dispatchEvent(SwingUtilities.convertMouseEvent(scroll, e, ancestorScroll));
-                }
-            }
+        tf.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent evt) { saveAll(); }
         });
-        
-        p.add(scroll, BorderLayout.CENTER);
-
-        JPanel inner = (JPanel) parent.getComponent(0);
-        inner.add(p);
-        saveHooks.add(() -> config.set(key, ta.getText()));
-
-        if (expandable) {
-            expandableLists.add(p);
-        }
     }
 
     private void saveAll() {
@@ -438,26 +429,68 @@ public class SettingsPanel {
             hook.run();
         }
         api.persistence().extensionData().setString("config", config.serialize());
-        api.logging().logToOutput("Settings saved.");
+        api.logging().logToOutput(I18n.t("settings.log.settings_saved"));
     }
 
     private void resetToDefault() {
-        int confirm = JOptionPane.showConfirmDialog(mainPanel,
-                "Reset all settings to their default values? This cannot be undone.",
-                "Reset to Default", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        int confirm = JOptionPane.showConfirmDialog(rootPanel,
+                I18n.t("settings.dialog.reset.message"),
+                I18n.t("settings.dialog.reset.title"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (confirm != JOptionPane.YES_OPTION) return;
 
         config.clear();
         Icarus.applyDefaults(config);
         api.persistence().extensionData().setString("config", config.serialize());
 
-        saveHooks.clear();
-        expandableLists.clear();
-        mainPanel.removeAll();
-        buildUI();
-        mainPanel.revalidate();
-        mainPanel.repaint();
+        SwingUtilities.invokeLater(() -> {
+            saveHooks.clear();
+            rootPanel.removeAll();
+            buildUI();
+            rootPanel.revalidate();
+            rootPanel.repaint();
+        });
+        api.logging().logToOutput(I18n.t("settings.log.settings_reset"));
+    }
 
-        api.logging().logToOutput("Settings reset to default.");
+    // --- CardPanel Component ---
+    private class CardPanel extends JPanel {
+        public CardPanel(String title, String iconName) {
+            setLayout(new GridBagLayout());
+            setBorder(new EmptyBorder(12, 14, 12, 14));
+            setBackground(themeHelper.getContainerBackgroundColor());
+            putClientProperty("FlatLaf.style", "arc: 12; borderWidth: 1; borderColor: $Component.borderColor");
+            
+            JPanel header = new JPanel(new BorderLayout(0, 8));
+            header.setOpaque(false);
+            
+            JLabel lblTitle = new JLabel(title);
+            lblTitle.setFont(lblTitle.getFont().deriveFont(Font.BOLD, 14f));
+            if (iconName != null && !iconName.isEmpty()) {
+                lblTitle.setIcon(EvidenceUiHelpers.createIcon(iconName));
+                lblTitle.setIconTextGap(8);
+            }
+            header.add(lblTitle, BorderLayout.NORTH);
+            header.add(new JSeparator(), BorderLayout.SOUTH);
+            
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0; gbc.gridy = 0;
+            gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.insets = new Insets(0, 0, 12, 0); // space below header
+            add(header, gbc);
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+        }
+
+        public void addFormRow(Component comp) {
+            GridBagConstraints gbc = new GridBagConstraints();
+            gbc.gridx = 0; gbc.gridy = getComponentCount();
+            gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
+            gbc.insets = new Insets(0, 0, 8, 0);
+            gbc.anchor = GridBagConstraints.NORTHWEST;
+            add(comp, gbc);
+        }
     }
 }

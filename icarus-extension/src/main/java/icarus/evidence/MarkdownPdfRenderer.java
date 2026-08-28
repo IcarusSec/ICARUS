@@ -13,11 +13,11 @@ import org.commonmark.node.SoftLineBreak;
 import org.commonmark.node.StrongEmphasis;
 import org.commonmark.node.Text;
 
-import org.openpdf.text.Chunk;
-import org.openpdf.text.Element;
-import org.openpdf.text.Font;
-import org.openpdf.text.List;
-import org.openpdf.text.Paragraph;
+import com.lowagie.text.Chunk;
+import com.lowagie.text.Element;
+import com.lowagie.text.Font;
+import com.lowagie.text.List;
+import com.lowagie.text.Paragraph;
 
 import java.awt.Color;
 import java.util.ArrayList;
@@ -159,7 +159,7 @@ final class MarkdownPdfRenderer extends AbstractVisitor {
 
     @Override
     public void visit(ListItem listItem) {
-        org.openpdf.text.ListItem pdfItem = new org.openpdf.text.ListItem();
+        com.lowagie.text.ListItem pdfItem = new com.lowagie.text.ListItem();
         Paragraph prev = currentParagraph;
         currentParagraph = pdfItem;
         visitChildren(listItem);

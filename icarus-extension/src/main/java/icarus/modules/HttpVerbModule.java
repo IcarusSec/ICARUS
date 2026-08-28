@@ -53,8 +53,8 @@ public class HttpVerbModule implements IcarusModule {
 
         for (int i = 0; i < methodsToTest.size(); i++) {
             icarus.ScanRunner.waitIfPaused();
-            if (Thread.currentThread().isInterrupted()) {
-                logger.accept("Stopped by user — " + (methodsToTest.size() - i) + " verb(s) skipped.");
+            if (icarus.ScanRunner.isCancelled()) {
+                logger.accept("Stopped by user — skipping remaining HTTP verbs.");
                 break;
             }
             String method = methodsToTest.get(i);

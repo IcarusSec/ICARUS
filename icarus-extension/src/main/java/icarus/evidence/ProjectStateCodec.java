@@ -7,7 +7,7 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 
 import icarus.core.Category;
 import icarus.core.Finding;
-import icarus.core.Json;
+import icarus.core.JsonParser;
 import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
@@ -58,7 +58,7 @@ public final class ProjectStateCodec {
         root.put("formatVersion", 1.0);
         root.put("findings", findingsJson);
         root.put("reportTemplateConfig", rtcJson);
-        return Json.write(root);
+        return JsonParser.write(root);
     }
 
     private static Map<String, Object> findingToJson(CapturedEvidence ce, boolean included) {
@@ -100,7 +100,7 @@ public final class ProjectStateCodec {
 
     @SuppressWarnings("unchecked")
     public static ImportResult importFrom(String json) {
-        Object parsed = Json.parse(json);
+        Object parsed = JsonParser.parse(json);
         if (!(parsed instanceof Map<?, ?> rootRaw)) {
             throw new IllegalArgumentException("Not a valid ICARUS project file");
         }

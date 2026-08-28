@@ -42,10 +42,24 @@ public final class ScanRunner {
     // Static because ScanRunner is a singleton (one instance per Orchestrator) and modules
     // (icarus.modules.*) need to poll this without each one being handed a ScanRunner reference.
     private static volatile boolean paused = false;
+    private static volatile boolean stopRequested = false;
+    private static volatile boolean skipRequested = false;
     private static final Object PAUSE_LOCK = new Object();
 
     public static boolean isPaused() {
         return paused;
+    }
+
+    public static boolean isStopRequested() {
+        return stopRequested;
+    }
+
+    public static boolean isSkipRequested() {
+        return skipRequested;
+    }
+
+    public static boolean isCancelled() {
+        return Thread.currentThread().isInterrupted() || stopRequested || skipRequested;
     }
 
     /** Toggled by the live log window's Pause button. */
@@ -98,15 +112,24 @@ public final class ScanRunner {
      * pool, since that runs on separate threads this interrupt wouldn't otherwise reach.
      */
     public void stopCurrent() {
-        Future<?> task = currentTask;
-        if (task != null && !task.isDone()) {
-            task.cancel(true);
+        stopRequested = true;
+        if (currentTask != null && !currentTask.isDone()) {
+            currentTask.cancel(true); // This sets the interrupt flag
         }
         // Don't leave the next run starting out paused because this one was stopped mid-pause.
         if (paused) togglePause();
     }
 
+    public void shutdown() {
+        stopCurrent();
+        if (executor != null) {
+            executor.shutdownNow();
+        }
+    }
+
     public void runScan(HttpRequestResponse target, boolean isManual) {
+        stopRequested = false;
+        skipRequested = false;
         currentTask = executor.submit(() -> {
             Thread.interrupted(); // clear any stale flag left by a previous cancellation
             try {
@@ -118,6 +141,8 @@ public final class ScanRunner {
     }
 
     public void runModule(IcarusModule module, HttpRequestResponse target, boolean isManual) {
+        stopRequested = false;
+        skipRequested = false;
         currentTask = executor.submit(() -> {
             Thread.interrupted();
             try {
@@ -181,7 +206,7 @@ public final class ScanRunner {
 
             if (isAkamai) {
                 int[] choiceHolder = { -1 };
-                runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(null,
+                runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(api.userInterface().swingUtils().suiteFrame(),
                         "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",
                         "WAF Detected",
                         JOptionPane.YES_NO_OPTION,
@@ -204,8 +229,9 @@ public final class ScanRunner {
         }
 
         for (var module : modules) {
+            skipRequested = false;
             waitIfPaused();
-            if (Thread.currentThread().isInterrupted()) {
+            if (Thread.currentThread().isInterrupted() || stopRequested) {
                 log.accept("ICARUS scan stopped by user.");
                 break;
             }
@@ -276,16 +302,29 @@ public final class ScanRunner {
                 textArea.setCaretPosition(textArea.getDocument().getLength());
             });
 
+            JButton btnSkip = new JButton("Skip Current");
+            btnSkip.addActionListener(e -> {
+                textArea.append("Skipping current module...\n");
+                textArea.setCaretPosition(textArea.getDocument().getLength());
+                skipRequested = true;
+                // currentTask.cancel(true) would kill the whole scan, so we interrupt the thread manually
+                // But since we don't have the thread ref, we can just let the flag do the work on next iteration,
+                // or if it's blocking, we wait for it. Let's just rely on the flag.
+            });
+
             JButton btnStop = new JButton("Stop");
             btnStop.addActionListener(e -> {
                 textArea.append("Stopping — cancelling current test...\n");
                 textArea.setCaretPosition(textArea.getDocument().getLength());
                 btnStop.setEnabled(false);
                 btnPause.setEnabled(false);
+                btnSkip.setEnabled(false);
                 stopCurrent();
             });
+            
             JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.RIGHT));
             bottomBar.add(btnPause);
+            bottomBar.add(btnSkip);
             bottomBar.add(btnStop);
             frame.add(bottomBar, BorderLayout.SOUTH);
 

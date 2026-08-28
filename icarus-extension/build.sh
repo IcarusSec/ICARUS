@@ -17,9 +17,10 @@ fi
 # of OpenPDF but is only needed for RTL/complex-script text layout we don't use; confirmed
 # Document/Paragraph/PdfPTable/Image all work fine without it, so it's deliberately not
 # downloaded here (it's a ~15MB jar vs. OpenPDF's own ~2MB).
-if [ ! -f "libs/openpdf-3.0.5.jar" ]; then
+rm -f libs/openpdf-3*.jar
+if [ ! -f "libs/openpdf-2.0.2.jar" ]; then
     echo "[*] Downloading OpenPDF..."
-    wget -q -O libs/openpdf-3.0.5.jar "https://repo1.maven.org/maven2/com/github/librepdf/openpdf/3.0.5/openpdf-3.0.5.jar"
+    wget -q -O libs/openpdf-2.0.2.jar "https://repo1.maven.org/maven2/com/github/librepdf/openpdf/2.0.2/openpdf-2.0.2.jar"
 fi
 
 # 1c. Download commonmark-java (Markdown parsing for report sections) if not present.
@@ -28,6 +29,28 @@ if [ ! -f "libs/commonmark-0.30.0.jar" ]; then
     echo "[*] Downloading commonmark-java..."
     wget -q -O libs/commonmark-0.30.0.jar "https://repo1.maven.org/maven2/org/commonmark/commonmark/0.30.0/commonmark-0.30.0.jar"
 fi
+
+if [ ! -f "libs/commons-csv-1.10.0.jar" ]; then
+    echo "[*] Downloading commons-csv..."
+    wget -q -O libs/commons-csv-1.10.0.jar "https://repo1.maven.org/maven2/org/apache/commons/commons-csv/1.10.0/commons-csv-1.10.0.jar"
+fi
+
+EXTRA_LIBS=(
+  "com/formdev/flatlaf-extras/3.4.1/flatlaf-extras-3.4.1.jar"
+  "com/github/weisj/jsvg/1.4.0/jsvg-1.4.0.jar"
+  "com/fifesoft/rsyntaxtextarea/3.3.3/rsyntaxtextarea-3.3.3.jar"
+  "org/jsoup/jsoup/1.17.2/jsoup-1.17.2.jar"
+)
+COMPILE_ONLY_LIBS=(
+  "com/formdev/flatlaf/3.4.1/flatlaf-3.4.1.jar"
+)
+for path in "${EXTRA_LIBS[@]}" "${COMPILE_ONLY_LIBS[@]}"; do
+    jarfile="libs/$(basename "$path")"
+    if [ ! -f "$jarfile" ]; then
+        echo "[*] Downloading $(basename "$path")..."
+        wget -q -O "$jarfile" "https://repo1.maven.org/maven2/${path}"
+    fi
+done
 
 # 1d. Download the official Java MCP SDK (mcp-core) + its minimal required deps, so ICARUS
 # can run a local MCP server for AI agents. Deliberately NOT downloading mcp's own default
@@ -69,9 +92,11 @@ echo "[+] Found $SOURCE_COUNT Java files"
 # 4. Compile
 echo "[*] Compiling sources..."
 MCP_CP=$(printf ':libs/%s' "${MCP_LIBS[@]##*/}")
+EXTRA_CP=$(printf ':libs/%s' "${EXTRA_LIBS[@]##*/}")
+COMPILE_ONLY_CP=$(printf ':libs/%s' "${COMPILE_ONLY_LIBS[@]##*/}")
 javac -d build_manual/classes \
-      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-3.0.5.jar:libs/commonmark-0.30.0.jar${MCP_CP}" \
-      --release 21 \
+      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}" \
+      --release 19 \
       @build_manual/sources.txt
 
 # 4b. Copy resources onto the classpath
@@ -84,17 +109,25 @@ fi
 # alongside icarus's in the packaged jar. META-INF is excluded so its MANIFEST.MF/module-info
 # don't clobber ours.
 echo "[*] Bundling OpenPDF classes..."
-unzip -q -o libs/openpdf-3.0.5.jar -d build_manual/classes -x "META-INF/*"
+unzip -q -o libs/openpdf-2.0.2.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling commonmark-java classes..."
 unzip -q -o libs/commonmark-0.30.0.jar -d build_manual/classes -x "META-INF/*"
+echo "[*] Bundling commons-csv classes..."
+unzip -q -o libs/commons-csv-1.10.0.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling MCP SDK classes..."
 for path in "${MCP_LIBS[@]}"; do
+    unzip -q -o "libs/$(basename "$path")" -d build_manual/classes -x "META-INF/*"
+done
+echo "[*] Bundling EXTRA classes..."
+for path in "${EXTRA_LIBS[@]}"; do
     unzip -q -o "libs/$(basename "$path")" -d build_manual/classes -x "META-INF/*"
 done
 
 # 5. Package into JAR
 echo "[*] Packaging JAR..."
 cd build_manual/classes
+mkdir -p META-INF/services
+echo "icarus.Icarus" > META-INF/services/burp.api.montoya.BurpExtension
 jar cf "../libs/icarus-${VERSION}.jar" .
 cd ../..
 

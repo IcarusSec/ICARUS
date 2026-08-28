@@ -97,7 +97,7 @@ public final class IcarusMcpServer {
 
             1. **Automated Discovery via MCP:**
                - Run the `get_project_context` tool (or inspect the `auto_detected_context` object returned by `get_report_config`) to get a heuristic diagnosis of the environment.
-               - Validate the detected data against your organization's own classification rules. `ProjectContextDetector` ships with a few example naming-convention patterns (e.g. `PROJ-0000`, `RETEST-0000`, `THIRDPARTY-0000`) — adapt them to match your organization's actual project-code conventions:
+               - Validate the detected data against your organization's own classification rules. `ProjectContextDetector` extracts a generic `PREFIX-1234`-style project code by default — adapt its pattern/classification logic to match your organization's actual project-code conventions:
                  - **Test Type Classification:** derive from your project-code pattern, or fall back to a generic **"Offensive Security Assessment"** and ask the user to confirm if the pattern doesn't match anything known.
                  - **Environment Detection:** if the hosts/URLs contain `uat`, `homol`, `dev`, `staging`, or a `-h.` suffix, classify as **`UAT / Staging`**. If they match a known production hostname pattern for this engagement, classify as **`Production`**.
 
@@ -822,7 +822,7 @@ public final class IcarusMcpServer {
         var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
         var tool = new McpSchema.Tool("get_project_context",
                 "Get auto-detected project metadata",
-                "Extracts project identifiers ([REDACTED], AVIT, AVPF), test type, target scope, environment, and suggested report variables from active Burp state.",
+                "Extracts a project identifier, test type, target scope, environment, and suggested report variables from active Burp state.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {

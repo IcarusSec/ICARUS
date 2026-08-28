@@ -10,11 +10,10 @@ import java.util.regex.Pattern;
 /**
  * Heuristic context detection engine for ICARUS.
  * Analyzes active Burp project properties, scope, findings, and environment to:
- * 1. Extract project identifiers (e.g. PROJ-0000, RETEST-0000, THIRDPARTY-0000 -- example naming
- *    conventions; adapt {@link #PATTERN_EHT_API} etc. to your organization's own scheme).
- * 2. Classify evaluation test types (API test, new development test, retest, third-party pentest).
- * 3. Classify target environment (UAT/staging vs. production).
- * 4. Infer system user and suggested report metadata.
+ * 1. Extract a project identifier from the Burp project name (a generic
+ *    PREFIX-1234-style code, or the raw project name as a fallback).
+ * 2. Classify target environment (UAT/staging vs. production).
+ * 3. Infer system user and suggested report metadata.
  */
 public class ProjectContextDetector {
 
@@ -31,11 +30,10 @@ public class ProjectContextDetector {
             Map<String, String> suggestedVariables
     ) {}
 
-    // Flexible regex patterns for ICARUS project codes
-    private static final Pattern PATTERN_EHT_API = Pattern.compile("(?i)\\bEHT[-_]?(\\d{3,5})\\b");
-    private static final Pattern PATTERN_EHT_WEB = Pattern.compile("(?i)\\bEHT(\\d{6,8})\\b");
-    private static final Pattern PATTERN_AVIT = Pattern.compile("(?i)\\bAVIT[-_]?(\\d+)\\b");
-    private static final Pattern PATTERN_AVPF = Pattern.compile("(?i)\\bAVPF[-_]?(\\d+)\\b");
+    // Generic PREFIX-1234 / PREFIX1234 style project-code extraction. Not tied to any
+    // organization's specific ticketing convention -- override detectContext's classification
+    // here if your organization has its own project-code scheme to recognize.
+    private static final Pattern PATTERN_PROJECT_CODE = Pattern.compile("(?i)\\b([A-Z]{2,8}[-_]?\\d{2,8})\\b");
 
     // Environment classification regexes
     private static final Pattern PATTERN_UAT = Pattern.compile("(?i).*(uat|homol|-h\\.|dev|staging).*");
@@ -49,28 +47,11 @@ public class ProjectContextDetector {
         String testType = "Offensive Security Assessment";
         Confidence confidence = Confidence.LOW;
 
-        // 1. Classify project code & test type
+        // 1. Classify project code
         if (rawProjectIdentifier != null && !rawProjectIdentifier.isBlank()) {
-            Matcher mApi = PATTERN_EHT_API.matcher(rawProjectIdentifier);
-            Matcher mWeb = PATTERN_EHT_WEB.matcher(rawProjectIdentifier);
-            Matcher mAvit = PATTERN_AVIT.matcher(rawProjectIdentifier);
-            Matcher mAvpf = PATTERN_AVPF.matcher(rawProjectIdentifier);
-
-            if (mApi.find()) {
-                projectCode = "[REDACTED]-" + mApi.group(1);
-                testType = "API Test";
-                confidence = Confidence.HIGH;
-            } else if (mWeb.find()) {
-                projectCode = "[REDACTED]" + mWeb.group(1);
-                testType = "New Web Development Test";
-                confidence = Confidence.HIGH;
-            } else if (mAvit.find()) {
-                projectCode = "AVIT-" + mAvit.group(1);
-                testType = "Retest";
-                confidence = Confidence.HIGH;
-            } else if (mAvpf.find()) {
-                projectCode = "AVPF-" + mAvpf.group(1);
-                testType = "Third-Party Pentest Assessment";
+            Matcher mCode = PATTERN_PROJECT_CODE.matcher(rawProjectIdentifier);
+            if (mCode.find()) {
+                projectCode = mCode.group(1).toUpperCase();
                 confidence = Confidence.HIGH;
             } else {
                 // Fallback: extract any trailing alphanumeric token

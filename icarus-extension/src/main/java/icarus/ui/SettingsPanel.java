@@ -94,7 +94,8 @@ public class SettingsPanel {
         gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "autoauth.enabled", I18n.t("settings.checkbox.autoauth_enabled"), true);
         gbc.gridx = 0; gbc.gridy = 5; addCheckboxToGrid(pnlGlobalGrid, gbc, "pem.enabled", I18n.t("settings.checkbox.pem_enabled"), true);
         gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "pem.passive", I18n.t("settings.checkbox.pem_passive"), true);
-        
+        gbc.gridx = 0; gbc.gridy = 6; addCheckboxToGrid(pnlGlobalGrid, gbc, "debug.enabled", I18n.t("settings.checkbox.debug_enabled"), false);
+
         // Add horizontal glue to compact the grid to the left
         gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 1.0;
         pnlGlobalGrid.add(Box.createHorizontalGlue(), gbc);

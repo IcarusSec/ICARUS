@@ -82,12 +82,15 @@ public final class EvidenceCapture {
     }
 
     public void notifyChangeListeners() {
+        icarus.core.DebugLog.log("EvidenceCapture.notifyChangeListeners: " + captured.size()
+                + " captured, " + changeListeners.size() + " listeners");
         for (Runnable listener : changeListeners) {
             try {
                 if (SwingUtilities.isEventDispatchThread()) {
-                    listener.run();
+                    icarus.core.DebugLog.timed("EvidenceCapture change listener (inline, " + captured.size() + " captured)", listener);
                 } else {
-                    SwingUtilities.invokeLater(listener);
+                    SwingUtilities.invokeLater(() -> icarus.core.DebugLog.timed(
+                            "EvidenceCapture change listener (queued, " + captured.size() + " captured)", listener));
                 }
             } catch (Exception e) {
                 if (api != null && api.logging() != null) {

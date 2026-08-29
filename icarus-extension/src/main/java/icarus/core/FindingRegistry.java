@@ -185,11 +185,15 @@ public final class FindingRegistry {
     }
 
     private void notifyListenersOfUpdate() {
-        uiDispatcher.accept(() -> {
-            for (var listener : listeners) {
-                listener.accept(new ArrayList<>(activeFindings.values()));
-            }
-        });
+        DebugLog.log("FindingRegistry.notifyListenersOfUpdate: " + activeFindings.size()
+                + " findings, " + listeners.size() + " listeners queued");
+        uiDispatcher.accept(() -> DebugLog.timed(
+                "FindingRegistry listener fan-out (" + activeFindings.size() + " findings, " + listeners.size() + " listeners)",
+                () -> {
+                    for (var listener : listeners) {
+                        listener.accept(new ArrayList<>(activeFindings.values()));
+                    }
+                }));
     }
 
     public String serializeState() {

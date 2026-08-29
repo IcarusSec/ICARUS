@@ -42,9 +42,10 @@ public class Icarus implements BurpExtension {
             loadPersistedConfig(config, persisted);
         }
         config.migrateReportTemplateConfigIfNeeded();
-        
+
         // Re-initialize I18n with loaded config
         I18n.initialize(config);
+        DebugLog.initialize(api, config);
 
         List<IcarusModule> modules = List.of(
             new ParamValidatorModule(api),

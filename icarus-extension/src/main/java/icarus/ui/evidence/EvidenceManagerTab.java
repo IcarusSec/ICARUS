@@ -107,7 +107,9 @@ public class EvidenceManagerTab {
 
         Runnable[] refreshAllRef = new Runnable[1];
 
-        Runnable reload = () -> {
+        Runnable reload = () -> icarus.core.DebugLog.timed(
+                "EvidenceManagerTab.reload (" + orchestrator.getEvidenceCapture().getCaptured().size() + " captured)",
+                () -> {
             String selectedHash = masterList.getSelectedValue();
             hashOrder.clear();
             groups.clear();
@@ -123,9 +125,9 @@ public class EvidenceManagerTab {
             } else if (!hashOrder.isEmpty()) {
                 masterList.setSelectedIndex(0);
             }
-        };
+        });
 
-        Runnable refreshDetail = () -> {
+        Runnable refreshDetail = () -> icarus.core.DebugLog.timed("EvidenceManagerTab.refreshDetail", () -> {
             detailPanel.removeAll();
             String hash = masterList.getSelectedValue();
             if (hash == null) {
@@ -145,13 +147,15 @@ public class EvidenceManagerTab {
                     detailPanel.add(Box.createRigidArea(new Dimension(0, 12)));
                 }
                 for (int i = 0; i < group.size(); i++) {
-                    detailPanel.add(buildEvidenceCard(mainPanel, group, i, hashOrder, groups, () -> refreshAllRef[0].run()));
+                    final int cardIndex = i;
+                    icarus.core.DebugLog.timed("EvidenceManagerTab.buildEvidenceCard #" + cardIndex, () ->
+                            detailPanel.add(buildEvidenceCard(mainPanel, group, cardIndex, hashOrder, groups, () -> refreshAllRef[0].run())));
                     detailPanel.add(Box.createRigidArea(new Dimension(0, 12)));
                 }
             }
             detailPanel.revalidate();
             detailPanel.repaint();
-        };
+        });
 
         masterList.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) refreshDetail.run();

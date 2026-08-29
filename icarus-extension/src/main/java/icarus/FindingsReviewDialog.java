@@ -155,9 +155,9 @@ public class FindingsReviewDialog {
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
         btnPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
 
-        JButton btnRepeater = new JButton(I18n.t("findings.review.btn.repeater"), icarus.evidence.EvidenceUiHelpers.createIcon("refresh-cw"));
+        JButton btnRepeater = new JButton(I18n.t("findings.review.btn.repeater"), icarus.evidence.EvidenceUiHelpers.createIcon("refresh"));
         btnRepeater.putClientProperty("FlatLaf.style", "arc: 8; iconTextGap: 8;");
-        JButton btnEvidence = new JButton(I18n.t("findings.review.btn.evidence"), icarus.evidence.EvidenceUiHelpers.createIcon("image"));
+        JButton btnEvidence = new JButton(I18n.t("findings.review.btn.evidence"), icarus.evidence.EvidenceUiHelpers.createIcon("photo"));
         btnEvidence.putClientProperty("FlatLaf.style", "arc: 8; iconTextGap: 8;");
         JButton btnReport = new JButton(I18n.t("findings.review.btn.report"), icarus.evidence.EvidenceUiHelpers.createIcon("file-text"));
         btnReport.putClientProperty("FlatLaf.style", "arc: 8; iconTextGap: 8;");

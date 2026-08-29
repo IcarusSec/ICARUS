@@ -107,74 +107,17 @@ public void addCweChip(JPanel pnlChips, List<String> selectedCwe, String cweId) 
         };
     }
 
+    /** Icons are Tabler Icons (MIT), bundled on the classpath under
+     *  {@code icarus/ui/resources/tabler/icons/} at build time -- see build.sh, which copies
+     *  everything under {@code src/main/resources} onto the classpath. */
     public static FlatSVGIcon loadSvgIcon(String type) {
         String name = type.endsWith(".svg") ? type : type + ".svg";
-
-        // 1. Try ClassLoader resources
-        String[] resourcePaths = {
-            "/icarus/ui/resources/feather/" + name,
-            "/icarus/ui/resources/feather/icons/" + name,
-            "/feather/" + name,
-            "/feather/icons/" + name,
-            "/libs/feather/" + name,
-            "/libs/feather/icons/" + name,
-            "/" + name
-        };
-        for (String res : resourcePaths) {
-            java.net.URL url = EvidenceUiHelpers.class.getResource(res);
-            if (url != null) {
-                try {
-                    return new FlatSVGIcon(url);
-                } catch (Exception ignored) {}
-            }
+        java.net.URL url = EvidenceUiHelpers.class.getResource("/icarus/ui/resources/tabler/icons/" + name);
+        if (url == null) return null;
+        try {
+            return new FlatSVGIcon(url);
+        } catch (Exception ignored) {
+            return null;
         }
-
-        // 2. Try relative file system paths
-        String[] filePaths = {
-            "libs/feather/" + name,
-            "libs/feather/icons/" + name,
-            "../libs/feather/" + name,
-            "../libs/feather/icons/" + name,
-            "../../libs/feather/" + name
-        };
-        for (String fp : filePaths) {
-            java.io.File f = new java.io.File(fp);
-            if (f.exists()) {
-                try {
-                    return new FlatSVGIcon(f);
-                } catch (Exception ignored) {}
-            }
-        }
-
-        // 3. Try user.dir relative paths
-        String userDir = System.getProperty("user.dir", "");
-        if (!userDir.isEmpty()) {
-            java.io.File f1 = new java.io.File(userDir, "libs/feather/" + name);
-            if (f1.exists()) try { return new FlatSVGIcon(f1); } catch (Exception ignored) {}
-
-            java.io.File f2 = new java.io.File(userDir, "libs/feather/icons/" + name);
-            if (f2.exists()) try { return new FlatSVGIcon(f2); } catch (Exception ignored) {}
-        }
-
-        // 4. Dynamic user home resolution (works across all OS user accounts without hardcoding)
-        String userHome = System.getProperty("user.home", "");
-        if (!userHome.isEmpty()) {
-            String[] homeSubPaths = {
-                "Downloads/icarus-extension/icarus-extension/libs/feather/" + name,
-                "Downloads/icarus-extension/icarus-extension/libs/feather/icons/" + name,
-                "Downloads/icarus-extension/libs/feather/" + name,
-                "icarus-extension/libs/feather/" + name
-            };
-            for (String sub : homeSubPaths) {
-                java.io.File f = new java.io.File(userHome, sub);
-                if (f.exists()) {
-                    try {
-                        return new FlatSVGIcon(f);
-                    } catch (Exception ignored) {}
-                }
-            }
-        }
-
-        return null;
     }
 }

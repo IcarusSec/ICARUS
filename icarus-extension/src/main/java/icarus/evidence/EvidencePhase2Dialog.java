@@ -187,10 +187,10 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         gbc.weightx = 1.0;
         gbc.insets = new Insets(0, 0, 8, 0);
 
-        JToggleButton panBtn = new JToggleButton(I18n.t("evidence.phase2.btn.pan"), createIcon("move"), true);
+        JToggleButton panBtn = new JToggleButton(I18n.t("evidence.phase2.btn.pan"), createIcon("arrows-move"), true);
         JToggleButton boxBtn = new JToggleButton(I18n.t("evidence.phase2.btn.box"), createIcon("square"));
         JToggleButton arrowBtn = new JToggleButton(I18n.t("evidence.phase2.btn.arrow"), createIcon("arrow-up-right"));
-        JToggleButton hiBtn = new JToggleButton(I18n.t("evidence.phase2.btn.highlight"), createIcon("edit-2"));
+        JToggleButton hiBtn = new JToggleButton(I18n.t("evidence.phase2.btn.highlight"), createIcon("pencil"));
         JToggleButton redactBtn = new JToggleButton(I18n.t("evidence.phase2.btn.redact"), createIcon("eye-off"));
 
         ButtonGroup grp = new ButtonGroup();
@@ -247,7 +247,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         });
 
         JButton saveBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.save"), EvidenceCapture.ACCENT_COLOR);
-        saveBtn.setIcon(createIcon("save"));
+        saveBtn.setIcon(createIcon("device-floppy"));
         saveBtn.setFocusable(false);
         saveBtn.setHorizontalAlignment(SwingConstants.LEFT);
         saveBtn.putClientProperty("FlatLaf.style", "arc: 8; margin: 8,16,8,16; iconTextGap: 16;");

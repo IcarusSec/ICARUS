@@ -144,7 +144,7 @@ public class SettingsPanel {
         mcpPortPanel.add(chkMcp);
         cardMcp.addFormRow(mcpPortPanel);
 
-        JButton btnRestartMcp = new JButton(I18n.t("settings.button.restart_mcp", "Restart Server"), EvidenceUiHelpers.createIcon("refresh-cw"));
+        JButton btnRestartMcp = new JButton(I18n.t("settings.button.restart_mcp", "Restart Server"), EvidenceUiHelpers.createIcon("refresh"));
         btnRestartMcp.addActionListener(e -> {
             btnRestartMcp.setEnabled(false);
             btnRestartMcp.setText(I18n.t("settings.button.restarting_mcp", "Restarting..."));
@@ -212,7 +212,7 @@ public class SettingsPanel {
         pnlActiveTab.setBorder(new EmptyBorder(16, 16, 16, 16));
         pnlActiveTab.setBackground(themeHelper.getBackgroundColor());
 
-        CardPanel cardPv = new CardPanel(I18n.t("settings.section.paramvalidator"), "sliders");
+        CardPanel cardPv = new CardPanel(I18n.t("settings.section.paramvalidator"), "adjustments-horizontal");
         
         JPanel pnlPvGrid = new JPanel(new GridBagLayout());
         pnlPvGrid.setOpaque(false);

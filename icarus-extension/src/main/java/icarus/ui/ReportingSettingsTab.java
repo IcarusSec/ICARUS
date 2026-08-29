@@ -140,7 +140,7 @@ public class ReportingSettingsTab {
         sectionListButtons.setBorder(new EmptyBorder(4, 0, 0, 0));
         sectionListButtons.setOpaque(false);
         JButton btnAddSection = createIconButton("plus", I18n.t("ui.reporting.btn.add", "Add"));
-        JButton btnRemoveSection = createIconButton("trash-2", I18n.t("ui.reporting.btn.remove", "Remove"));
+        JButton btnRemoveSection = createIconButton("trash", I18n.t("ui.reporting.btn.remove", "Remove"));
         JButton btnMoveUpSection = createIconButton("chevron-up", I18n.t("ui.reporting.btn.up", "Move Up"));
         JButton btnMoveDownSection = createIconButton("chevron-down", I18n.t("ui.reporting.btn.down", "Move Down"));
         
@@ -553,7 +553,7 @@ public class ReportingSettingsTab {
             setBorder(new EmptyBorder(6, 6, 6, 6));
             setOpaque(true);
 
-            lblIcon = new JLabel(EvidenceUiHelpers.createIcon("menu"));
+            lblIcon = new JLabel(EvidenceUiHelpers.createIcon("menu-2"));
             lblTitle = new JLabel();
             lblTitle.setFont(lblTitle.getFont().deriveFont(Font.BOLD));
             

@@ -689,7 +689,7 @@ public class EvidenceManagerTab {
             onChange.run();
         });
         
-        JButton btnEdit = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("edit-2"));
+        JButton btnEdit = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("pencil"));
         btnEdit.setToolTipText(I18n.t("ui.evidence.btn.edit"));
         btnEdit.putClientProperty("JButton.buttonType", "toolBarButton");
         btnEdit.addActionListener(e -> orchestrator.getEvidenceCapture().captureInteractive(ceRef[0].finding()));
@@ -715,7 +715,7 @@ public class EvidenceManagerTab {
             onChange.run();
         });
 
-        JButton btnRemove = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("trash-2"));
+        JButton btnRemove = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("trash"));
         btnRemove.setToolTipText(I18n.t("ui.evidence.btn.remove"));
         btnRemove.putClientProperty("JButton.buttonType", "toolBarButton");
         btnRemove.addActionListener(e -> {

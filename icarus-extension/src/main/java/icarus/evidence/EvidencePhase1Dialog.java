@@ -319,7 +319,7 @@ public void showPhase1(Finding finding) {
 
         JPanel pnlBottomLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         JButton btnCleanNoise = capture.uiHelpers.createModernButton(I18n.t("evidence.phase1.btn.cleanNoise"), new Color(70, 70, 70));
-        btnCleanNoise.setIcon(EvidenceUiHelpers.createIcon("trash-2"));
+        btnCleanNoise.setIcon(EvidenceUiHelpers.createIcon("trash"));
         
         String btnStyle = "arc: 8; margin: 10,20,10,20; iconTextGap: 10; minimumHeight: 42; font: bold 14 $Button.font.family;";
         btnCleanNoise.putClientProperty("FlatLaf.style", btnStyle);
@@ -333,7 +333,7 @@ public void showPhase1(Finding finding) {
         JPanel pnlBottomRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
         
         JButton btnAnnotate = capture.uiHelpers.createModernButton(I18n.t("evidence.phase1.btn.annotate"), new Color(70, 70, 70));
-        btnAnnotate.setIcon(EvidenceUiHelpers.createIcon("pen-tool"));
+        btnAnnotate.setIcon(EvidenceUiHelpers.createIcon("pencil"));
         btnAnnotate.putClientProperty("FlatLaf.style", btnStyle);
         
         JButton btnApply = capture.uiHelpers.createModernButton(I18n.t("evidence.phase1.btn.apply"), EvidenceCapture.ACCENT_COLOR);
@@ -450,7 +450,7 @@ public void attachSmartContextMenu(JTextArea ta) {
         JMenuItem itmRedact = new JMenuItem(I18n.t("evidence.phase1.menu.redact"), EvidenceUiHelpers.createIcon("eye-off"));
         itmRedact.addActionListener(e -> capture.phase1Dialog.replaceSelection(ta, I18n.t("evidence.phase1.text.redacted")));
 
-        JMenuItem itmRemoveLine = new JMenuItem(I18n.t("evidence.phase1.menu.removeLine"), EvidenceUiHelpers.createIcon("minus-circle"));
+        JMenuItem itmRemoveLine = new JMenuItem(I18n.t("evidence.phase1.menu.removeLine"), EvidenceUiHelpers.createIcon("circle-minus"));
         itmRemoveLine.addActionListener(e -> capture.phase1Dialog.removeCurrentLine(ta));
 
         menu.add(itmTruncate);

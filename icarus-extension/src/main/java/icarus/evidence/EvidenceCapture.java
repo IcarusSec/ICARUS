@@ -45,7 +45,9 @@ public final class EvidenceCapture {
     public static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
     public static final int BINARY_TRUNCATE_BYTES = 2048;
 
-    public static final int HEADER_LOGO_SIZE = 44;
+    // The bundled icarus_logo.png carries ~7% transparent padding so the circle isn't flush
+    // against its bounding box; 48 here lands the visible disc at roughly the intended 44px.
+    public static final int HEADER_LOGO_SIZE = 48;
     // Fixed at the old logo's center (left=20, size=48 -> center=44) so changing HEADER_LOGO_SIZE
     // resizes the logo in place instead of shifting where it visually sits.
     public static final int HEADER_LOGO_CENTER_X = 44;

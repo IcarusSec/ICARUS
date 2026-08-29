@@ -45,7 +45,7 @@ public final class EvidenceCapture {
     public static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
     public static final int BINARY_TRUNCATE_BYTES = 2048;
 
-    public static final int HEADER_LOGO_SIZE = 38;
+    public static final int HEADER_LOGO_SIZE = 44;
     // Fixed at the old logo's center (left=20, size=48 -> center=44) so changing HEADER_LOGO_SIZE
     // resizes the logo in place instead of shifting where it visually sits.
     public static final int HEADER_LOGO_CENTER_X = 44;

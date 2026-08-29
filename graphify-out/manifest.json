@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java": {
-    "mtime": 1787964273.20535,
-    "seen": 1788006346.453143,
-    "ast_hash": "a946bd08c9e287677a7d4aa6e3f58b9c",
+    "mtime": 1788011437.9779027,
+    "seen": 1788011463.004081,
+    "ast_hash": "1df0918c1392a9dcc07904ee7b7ca3d9",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceColorScheme.java": {
@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java": {
-    "mtime": 1788011336.9589956,
-    "seen": 1788011354.0668142,
-    "ast_hash": "f283a99d63671216e50f14ca411b9cfa",
+    "mtime": 1788011445.9223173,
+    "seen": 1788011463.0040836,
+    "ast_hash": "432f962af04bc55f018a1d137cc8b203",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidencePhase1Dialog.java": {

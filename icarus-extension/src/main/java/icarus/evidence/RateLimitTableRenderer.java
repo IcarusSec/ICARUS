@@ -196,7 +196,13 @@ public BufferedImage drawRateLimitTable(Finding finding, int imgWidth, int imgHe
         
         if (allowGrow && requiredHeight > imgHeight) {
             g.dispose();
-            return drawRateLimitTable(finding, imgWidth, requiredHeight, cs, false, fullReq, fullRes, outAnchors);
+            // Ceiling the grow-to-fit height: a huge req/res body (formatBody explodes a
+            // minified JSON blob to hundreds of thousands of lines) otherwise makes this
+            // BufferedImage a multi-GB allocation that OOM-kills Burp's JVM. The bottom
+            // cards already clip overflow and draw a "···" marker, so a clamped image just
+            // shows the first screenful instead of crashing.
+            int cappedHeight = Math.min(requiredHeight, EvidenceImageRenderer.MAX_IMAGE_HEIGHT);
+            return drawRateLimitTable(finding, imgWidth, cappedHeight, cs, false, fullReq, fullRes, outAnchors);
         }
         
         // After potential growth, exactly bound the cards to the image bounds

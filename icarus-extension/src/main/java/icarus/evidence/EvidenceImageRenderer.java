@@ -28,6 +28,15 @@ public class EvidenceImageRenderer {
         this.config = config;
     }
 
+    /** Hard ceiling on a rendered evidence image's height, in pixels. A BufferedImage is
+     *  {@code width * height * 4} bytes fully in heap — an unbounded req/res body (e.g. a
+     *  minified JSON blob that {@code formatBody} explodes to hundreds of thousands of lines)
+     *  otherwise asks for a multi-GB allocation and takes Burp's whole JVM down with an
+     *  OutOfMemoryError. ~1200px of width * 30000px caps one image near ~140MB; the column /
+     *  card drawing code already clips overflow and draws a "···" marker, so a clamped image
+     *  just shows the first ~1200 lines instead of crashing. */
+    public static final int MAX_IMAGE_HEIGHT = 30000;
+
     private static final Color FIXED_COLOR = new Color(0x2f, 0x9e, 0x44);
     private static final Color NOT_FIXED_COLOR = new Color(0xe0, 0x3e, 0x3e);
 
@@ -57,7 +66,7 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
         if (force1080) {
             imgHeight = 1080;
         } else {
-            imgHeight = Math.max(300, calculatedHeight);
+            imgHeight = Math.min(MAX_IMAGE_HEIGHT, Math.max(300, calculatedHeight));
         }
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Catppuccin"));
@@ -376,8 +385,24 @@ public String formatBody(byte[] body, String contentType) {
             return "\n[Binary Payload Omitted]";
         } else {
             String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
-            return "\n" + JsonParser.formatJsonString(text);
+            return "\n" + capLines(JsonParser.formatJsonString(text));
         }
+    }
+
+    /** formatJsonString pretty-prints one token per line, so a large minified JSON body
+     *  becomes hundreds of thousands of lines. Every consumer (evidence image height, the
+     *  Phase-1 review text areas, report rendering) scales with line count, so cap it here
+     *  at the shared chokepoint with a visible marker rather than downstream. */
+    private static final int MAX_BODY_LINES = 2000;
+    private static String capLines(String s) {
+        int nl = 0, idx = -1;
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == '\n' && ++nl == MAX_BODY_LINES) { idx = i; break; }
+        }
+        if (idx < 0) return s;
+        int remaining = 0;
+        for (int i = idx; i < s.length(); i++) if (s.charAt(i) == '\n') remaining++;
+        return s.substring(0, idx) + "\n... [truncated, " + remaining + " more lines]";
     }
 
 public String toHexDump(byte[] data) {

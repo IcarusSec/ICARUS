@@ -570,9 +570,9 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/DebugLog.java": {
-    "mtime": 1787964224.312157,
-    "seen": 1788006346.4531202,
-    "ast_hash": "056ef8c654ad350f47c0b39f81b4b569",
+    "mtime": 1788007018.4872227,
+    "seen": 1788007035.1913602,
+    "ast_hash": "a6b54f6cb8b95e7c621da9b110d19283",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/I18n.java": {

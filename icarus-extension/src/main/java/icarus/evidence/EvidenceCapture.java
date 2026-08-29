@@ -49,9 +49,8 @@ public final class EvidenceCapture {
     // Fixed at the old logo's center (left=20, size=48 -> center=44) so changing HEADER_LOGO_SIZE
     // resizes the logo in place instead of shifting where it visually sits.
     public static final int HEADER_LOGO_CENTER_X = 44;
-    // Prescaled to exactly the display size via progressive halving (see loadScaledLogo) and
-    // drawn 1:1 — a single big downscale at draw time (bicubic over a 3x reduction) undersamples
-    // and leaves the circle edge visibly jagged; halving all the way down does not.
+    // Prescaled once to exactly the display size (area-averaging box filter, see loadScaledLogo)
+    // and drawn 1:1 by drawHeaderLogo.
     public static final BufferedImage LOGO = EvidenceImageRenderer.loadScaledLogo(HEADER_LOGO_SIZE);
 
     

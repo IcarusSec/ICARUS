@@ -395,45 +395,6 @@
       "source_location": "L34"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity",
-      "label": "Severity",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "severity",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L6"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_icarus_icarus",
-      "label": "Icarus",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "icarus",
-      "source_file": "icarus-extension/src/main/java/icarus/Icarus.java",
-      "source_location": "L26"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_mcp_icarusmcpserver_chainpattern",
-      "label": "ChainPattern",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "chainpattern",
-      "source_file": "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java",
-      "source_location": "L1417"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_reportexportservice_reportexportservice",
       "label": "ReportExportService",
       "_callable": true,
@@ -564,30 +525,30 @@
       "source_location": "L10"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_findingsreviewdialog_findingsreviewdialog",
-      "label": "FindingsReviewDialog",
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers",
+      "label": "EvidenceUiHelpers",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 16,
       "community_name": "burp.api.montoya.MontoyaApi",
       "file_type": "code",
-      "norm_label": "findingsreviewdialog",
-      "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
-      "source_location": "L40"
+      "norm_label": "evidenceuihelpers",
+      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
+      "source_location": "L21"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator",
-      "label": "Orchestrator",
+      "id": "icarus_extension_src_main_java_icarus_icarus_icarus",
+      "label": "Icarus",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 16,
       "community_name": "burp.api.montoya.MontoyaApi",
       "file_type": "code",
-      "norm_label": "orchestrator",
-      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
-      "source_location": "L47"
+      "norm_label": "icarus",
+      "source_file": "icarus-extension/src/main/java/icarus/Icarus.java",
+      "source_location": "L26"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_projectstateservice_projectstateservice",
@@ -798,19 +759,6 @@
       "source_location": "L6"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator",
-      "label": "LeafReplacementMutator",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 21,
-      "community_name": "Category",
-      "file_type": "code",
-      "norm_label": "leafreplacementmutator",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
-      "source_location": "L9"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencephase2dialog_evidencephase2dialog",
       "label": "EvidencePhase2Dialog",
       "_callable": true,
@@ -837,30 +785,43 @@
       "source_location": "L8"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf_astleaf",
-      "label": "AstLeaf",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": "astleaf",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
-      "source_location": "L3"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_evidencetriggerservice_evidencetriggerservice",
       "label": "EvidenceTriggerService",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": "evidencetriggerservice",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
       "source_location": "L40"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_findingsreviewdialog_findingsreviewdialog",
+      "label": "FindingsReviewDialog",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": "findingsreviewdialog",
+      "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
+      "source_location": "L40"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator",
+      "label": "Orchestrator",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": "orchestrator",
+      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
+      "source_location": "L47"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_core_reporttemplateconfig_findingtemplate",
@@ -1159,7 +1120,7 @@
       "file_type": "code",
       "norm_label": "capturedevidence",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L503"
+      "source_location": "L504"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture",
@@ -1212,6 +1173,19 @@
       "norm_label": "hppmutator",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/HppMutator.java",
       "source_location": "L8"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator",
+      "label": "LeafReplacementMutator",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": "leafreplacementmutator",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
+      "source_location": "L9"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator_rawbyteboundarymutator",
@@ -1331,13 +1305,26 @@
       "source_location": "L19"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf_astleaf",
+      "label": "AstLeaf",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 86,
+      "community_name": "AstLeaf",
+      "file_type": "code",
+      "norm_label": "astleaf",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
+      "source_location": "L3"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_offensivejsonparser_offensivejsonparser",
       "label": "OffensiveJsonParser",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": "offensivejsonparser",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -1383,17 +1370,43 @@
       "source_location": "L14"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity",
+      "label": "Severity",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "severity",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L6"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_evidence_projectstatecodec_projectstatecodec",
       "label": "ProjectStateCodec",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "projectstatecodec",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/ProjectStateCodec.java",
       "source_location": "L37"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_mcp_icarusmcpserver_chainpattern",
+      "label": "ChainPattern",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "chainpattern",
+      "source_file": "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java",
+      "source_location": "L1417"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_modules_jwtcheckermodule_jwtcandidate",
@@ -1498,19 +1511,6 @@
       "norm_label": "ratelimittablerenderer",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/RateLimitTableRenderer.java",
       "source_location": "L20"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers",
-      "label": "EvidenceUiHelpers",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": "evidenceuihelpers",
-      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
-      "source_location": "L21"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_typeconfusionmutator_typeconfusionmutator",
@@ -3890,6 +3890,54 @@
       "source_location": "L68"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_addcwechip",
+      "label": ".addCweChip()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": ".addcwechip()",
+      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
+      "source_location": "L57"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_createmodernbutton",
+      "label": ".createModernButton()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": ".createmodernbutton()",
+      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
+      "source_location": "L32"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_createsmoothscrollpane",
+      "label": ".createSmoothScrollPane()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": ".createsmoothscrollpane()",
+      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
+      "source_location": "L50"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_evidenceuihelpers",
+      "label": ".EvidenceUiHelpers()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": ".evidenceuihelpers()",
+      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
+      "source_location": "L26"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_evidence_pdfreportgenerator_pdfreportgenerator_pdfreportgenerator",
       "label": ".PdfReportGenerator()",
       "_callable": true,
@@ -3902,66 +3950,6 @@
       "source_location": "L78"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_findingsreviewdialog_findingsreviewdialog_findingsreviewdialog",
-      "label": ".FindingsReviewDialog()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".findingsreviewdialog()",
-      "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
-      "source_location": "L44"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_findingsreviewdialog_findingsreviewdialog_parseseverity",
-      "label": ".parseSeverity()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".parseseverity()",
-      "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
-      "source_location": "L221"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_mcp_icarusmcpserver_icarusmcpserver_icarusmcpserver",
-      "label": ".IcarusMcpServer()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".icarusmcpserver()",
-      "source_file": "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java",
-      "source_location": "L219"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_api",
-      "label": ".api()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".api()",
-      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
-      "source_location": "L115"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_getconfig",
-      "label": ".getConfig()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".getconfig()",
-      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
-      "source_location": "L325"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_orchestrator",
       "label": ".Orchestrator()",
       "_callable": true,
@@ -3972,30 +3960,6 @@
       "norm_label": ".orchestrator()",
       "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
       "source_location": "L73"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_setshowevidenceaction",
-      "label": ".setShowEvidenceAction()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".setshowevidenceaction()",
-      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
-      "source_location": "L121"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_shutdown",
-      "label": ".shutdown()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "burp.api.montoya.MontoyaApi",
-      "file_type": "code",
-      "norm_label": ".shutdown()",
-      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
-      "source_location": "L303"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_projectstateservice_projectstateservice_projectstateservice",
@@ -4019,7 +3983,7 @@
       "file_type": "code",
       "norm_label": ".repaintheaderforfinding()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L234"
+      "source_location": "L235"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecolorscheme_evidencecolorscheme_get",
@@ -4187,7 +4151,7 @@
       "file_type": "code",
       "norm_label": ".loadscaledlogo()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L446"
+      "source_location": "L445"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidenceimagerenderer_evidenceimagerenderer_projectnamesuffix",
@@ -4223,7 +4187,7 @@
       "file_type": "code",
       "norm_label": ".scaleto()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L467"
+      "source_location": "L466"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidenceimagerenderer_evidenceimagerenderer_severitytokencolor",
@@ -4523,7 +4487,7 @@
       "file_type": "code",
       "norm_label": ".captureinteractive()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L314"
+      "source_location": "L315"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencephase1dialog_evidencephase1dialog_showphase1",
@@ -5342,42 +5306,6 @@
       "source_location": "L24"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_getmutatedroots",
-      "label": ".getMutatedRoots()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 21,
-      "community_name": "Category",
-      "file_type": "code",
-      "norm_label": ".getmutatedroots()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
-      "source_location": "L27"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_leafreplacementmutator",
-      "label": ".LeafReplacementMutator()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 21,
-      "community_name": "Category",
-      "file_type": "code",
-      "norm_label": ".leafreplacementmutator()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
-      "source_location": "L18"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_replacenodeintree",
-      "label": ".replaceNodeInTree()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 21,
-      "community_name": "Category",
-      "file_type": "code",
-      "norm_label": ".replacenodeintree()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
-      "source_location": "L64"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_handlehttprequesttobesent",
       "label": ".handleHttpRequestToBeSent()",
       "_callable": true,
@@ -5399,7 +5327,7 @@
       "file_type": "code",
       "norm_label": ".captureinteractivewithimage()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L323"
+      "source_location": "L324"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencephase2dialog_evidencephase2dialog_createicon",
@@ -5510,120 +5438,12 @@
       "source_location": "L21"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf_astleaf_isstring",
-      "label": ".isString()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".isstring()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
-      "source_location": "L16"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf_astleaf_setvalue",
-      "label": ".setValue()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".setvalue()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
-      "source_location": "L14"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_astnode_astnode_deepcopy",
-      "label": ".deepCopy()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".deepcopy()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstNode.java",
-      "source_location": "L22"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_astnode_astnode_settaintmarker",
-      "label": ".setTaintMarker()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".settaintmarker()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstNode.java",
-      "source_location": "L20"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_visit",
-      "label": ".visit()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".visit()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
-      "source_location": "L31"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator_rawbyteboundarymutator_visit",
-      "label": ".visit()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".visit()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/RawByteBoundaryMutator.java",
-      "source_location": "L24"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_deepcopy",
-      "label": ".deepCopy()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".deepcopy()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
-      "source_location": "L17"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_getrootnode",
-      "label": ".getRootNode()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".getrootnode()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
-      "source_location": "L14"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_offensiveastroot",
-      "label": ".OffensiveAstRoot()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": ".offensiveastroot()",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
-      "source_location": "L9"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_evidencetriggerservice_evidencetriggerservice_blankmanualfinding",
       "label": ".blankManualFinding()",
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".blankmanualfinding()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -5635,7 +5455,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".confirmsmartevidence()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -5647,7 +5467,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".createmanualevidence()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -5659,7 +5479,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".detectsmartevidence()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -5671,7 +5491,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".evidencetriggerservice()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -5683,7 +5503,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".pasteevidencefromclipboard()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -5695,11 +5515,59 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".tobufferedimage()",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
       "source_location": "L155"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_findingsreviewdialog_findingsreviewdialog_findingsreviewdialog",
+      "label": ".FindingsReviewDialog()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".findingsreviewdialog()",
+      "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
+      "source_location": "L44"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_findingsreviewdialog_findingsreviewdialog_parseseverity",
+      "label": ".parseSeverity()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".parseseverity()",
+      "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
+      "source_location": "L221"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_mcp_icarusmcpserver_icarusmcpserver_icarusmcpserver",
+      "label": ".IcarusMcpServer()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".icarusmcpserver()",
+      "source_file": "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java",
+      "source_location": "L219"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_api",
+      "label": ".api()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".api()",
+      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
+      "source_location": "L115"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_createmanualevidence",
@@ -5707,11 +5575,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".createmanualevidence()",
       "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
       "source_location": "L337"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_getconfig",
+      "label": ".getConfig()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".getconfig()",
+      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
+      "source_location": "L325"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_pasteevidencefromclipboard",
@@ -5719,7 +5599,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".pasteevidencefromclipboard()",
       "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
@@ -5731,7 +5611,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".providemenuitems()",
       "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
@@ -5743,11 +5623,35 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".runscan()",
       "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
       "source_location": "L286"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_setshowevidenceaction",
+      "label": ".setShowEvidenceAction()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".setshowevidenceaction()",
+      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
+      "source_location": "L121"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_orchestrator_orchestrator_shutdown",
+      "label": ".shutdown()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": ".shutdown()",
+      "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
+      "source_location": "L303"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_scanrunner_scanrunner_runscan",
@@ -5755,7 +5659,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": ".runscan()",
       "source_file": "icarus-extension/src/main/java/icarus/ScanRunner.java",
@@ -8015,7 +7919,7 @@
       "file_type": "code",
       "norm_label": ".addchangelistener()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L76"
+      "source_location": "L77"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_clearall",
@@ -8027,7 +7931,7 @@
       "file_type": "code",
       "norm_label": ".clearall()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L135"
+      "source_location": "L136"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_getcaptured",
@@ -8039,7 +7943,7 @@
       "file_type": "code",
       "norm_label": ".getcaptured()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L172"
+      "source_location": "L173"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_groupedbysimilarityhash",
@@ -8051,7 +7955,7 @@
       "file_type": "code",
       "norm_label": ".groupedbysimilarityhash()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L305"
+      "source_location": "L306"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_indexbyimagepath",
@@ -8063,7 +7967,7 @@
       "file_type": "code",
       "norm_label": ".indexbyimagepath()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L267"
+      "source_location": "L268"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_isincluded",
@@ -8075,7 +7979,7 @@
       "file_type": "code",
       "norm_label": ".isincluded()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L157"
+      "source_location": "L158"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_movetofinding",
@@ -8087,7 +7991,7 @@
       "file_type": "code",
       "norm_label": ".movetofinding()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L205"
+      "source_location": "L206"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_notifychangelisteners",
@@ -8099,7 +8003,7 @@
       "file_type": "code",
       "norm_label": ".notifychangelisteners()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L86"
+      "source_location": "L87"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_removecaptured",
@@ -8111,7 +8015,7 @@
       "file_type": "code",
       "norm_label": ".removecaptured()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L128"
+      "source_location": "L129"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_removechangelistener",
@@ -8123,7 +8027,7 @@
       "file_type": "code",
       "norm_label": ".removechangelistener()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L82"
+      "source_location": "L83"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_reordercaptured",
@@ -8135,7 +8039,7 @@
       "file_type": "code",
       "norm_label": ".reordercaptured()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L166"
+      "source_location": "L167"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_replace",
@@ -8147,7 +8051,7 @@
       "file_type": "code",
       "norm_label": ".replace()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L282"
+      "source_location": "L283"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_restorecaptured",
@@ -8159,7 +8063,7 @@
       "file_type": "code",
       "norm_label": ".restorecaptured()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L142"
+      "source_location": "L143"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_saveandregisterevidence",
@@ -8171,7 +8075,7 @@
       "file_type": "code",
       "norm_label": ".saveandregisterevidence()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L378"
+      "source_location": "L379"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_setcaption",
@@ -8183,7 +8087,7 @@
       "file_type": "code",
       "norm_label": ".setcaption()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L188"
+      "source_location": "L189"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_setincluded",
@@ -8195,7 +8099,7 @@
       "file_type": "code",
       "norm_label": ".setincluded()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L148"
+      "source_location": "L149"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture_evidencecapture_setonapplied",
@@ -8207,7 +8111,7 @@
       "file_type": "code",
       "norm_label": ".setonapplied()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L124"
+      "source_location": "L125"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_pdfreportgenerator_pdfreportgenerator_autorenderimage",
@@ -8294,6 +8198,18 @@
       "source_location": "L235"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf_astleaf_isstring",
+      "label": ".isString()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".isstring()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
+      "source_location": "L16"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_astmutationgenerator_astmutationgenerator_generatemutations",
       "label": ".generateMutations()",
       "_callable": true,
@@ -8304,6 +8220,30 @@
       "norm_label": ".generatemutations()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstMutationGenerator.java",
       "source_location": "L11"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_astnode_astnode_deepcopy",
+      "label": ".deepCopy()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".deepcopy()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstNode.java",
+      "source_location": "L22"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_astnode_astnode_settaintmarker",
+      "label": ".setTaintMarker()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".settaintmarker()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstNode.java",
+      "source_location": "L20"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_astmutationresult_astmutationresult_astmutationresult",
@@ -8342,6 +8282,54 @@
       "source_location": "L14"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_getmutatedroots",
+      "label": ".getMutatedRoots()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".getmutatedroots()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
+      "source_location": "L27"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_leafreplacementmutator",
+      "label": ".LeafReplacementMutator()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".leafreplacementmutator()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
+      "source_location": "L18"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_replacenodeintree",
+      "label": ".replaceNodeInTree()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".replacenodeintree()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
+      "source_location": "L64"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_leafreplacementmutator_visit",
+      "label": ".visit()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".visit()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
+      "source_location": "L31"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator_rawbyteboundarymutator_findnodebyoffsets",
       "label": ".findNodeByOffsets()",
       "_callable": true,
@@ -8378,6 +8366,18 @@
       "source_location": "L14"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator_rawbyteboundarymutator_visit",
+      "label": ".visit()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".visit()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/RawByteBoundaryMutator.java",
+      "source_location": "L24"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_typeconfusionmutator_typeconfusionmutator_getmutatedroots",
       "label": ".getMutatedRoots()",
       "_callable": true,
@@ -8390,6 +8390,18 @@
       "source_location": "L20"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_deepcopy",
+      "label": ".deepCopy()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".deepcopy()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
+      "source_location": "L17"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_getoriginalbytes",
       "label": ".getOriginalBytes()",
       "_callable": true,
@@ -8400,6 +8412,30 @@
       "norm_label": ".getoriginalbytes()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
       "source_location": "L15"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_getrootnode",
+      "label": ".getRootNode()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".getrootnode()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
+      "source_location": "L14"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot_offensiveastroot_offensiveastroot",
+      "label": ".OffensiveAstRoot()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": ".offensiveastroot()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java",
+      "source_location": "L9"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_core_reporttemplateconfig_reporttemplateconfig_getfindingtemplate",
@@ -8867,7 +8903,7 @@
       "file_type": "code",
       "norm_label": ".evidencecapture()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L112"
+      "source_location": "L113"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_core_jsonparser_jsonparser_deepcopy",
@@ -9026,12 +9062,24 @@
       "source_location": "L31"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf_astleaf_setvalue",
+      "label": ".setValue()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 86,
+      "community_name": "AstLeaf",
+      "file_type": "code",
+      "norm_label": ".setvalue()",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
+      "source_location": "L14"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_offensivejsonparser_offensivejsonparser_parse",
       "label": ".parse()",
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".parse()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9043,7 +9091,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".parsearray()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9055,7 +9103,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".parsenumber()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9067,7 +9115,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".parseobject()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9079,7 +9127,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".parsestring()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9091,7 +9139,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".parsevalue()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9103,7 +9151,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": ".skipwhitespace()",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -9451,7 +9499,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": ".projectstatecodec()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/ProjectStateCodec.java",
@@ -9635,7 +9683,7 @@
       "file_type": "code",
       "norm_label": ".capturemanual()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L338"
+      "source_location": "L339"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_evidence_evidencephase1dialog_evidencephase1dialog_attachsmartcontextmenu",
@@ -10092,54 +10140,6 @@
       "norm_label": ".renderratelimittable()",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/RateLimitTableRenderer.java",
       "source_location": "L31"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_addcwechip",
-      "label": ".addCweChip()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": ".addcwechip()",
-      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
-      "source_location": "L57"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_createmodernbutton",
-      "label": ".createModernButton()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": ".createmodernbutton()",
-      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
-      "source_location": "L32"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_createsmoothscrollpane",
-      "label": ".createSmoothScrollPane()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": ".createsmoothscrollpane()",
-      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
-      "source_location": "L50"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_evidenceuihelpers_evidenceuihelpers",
-      "label": ".EvidenceUiHelpers()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": ".evidenceuihelpers()",
-      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java",
-      "source_location": "L26"
     },
     {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_astarray_astarray_getelements",
@@ -10703,204 +10703,6 @@
       "source_location": "L34"
     },
     {
-      "id": "burp_api_montoya_burpextension",
-      "label": "burp.api.montoya.BurpExtension",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "burp.api.montoya.burpextension",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_category",
-      "label": "Category.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "category.java",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Category.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_evidencepaths",
-      "label": "EvidencePaths.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "evidencepaths.java",
-      "source_file": "icarus-extension/src/main/java/icarus/core/EvidencePaths.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_jsonparser",
-      "label": "JsonParser.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "jsonparser.java",
-      "source_file": "icarus-extension/src/main/java/icarus/core/JsonParser.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_critical",
-      "label": "CRITICAL",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "critical",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L7"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_fixed",
-      "label": "FIXED",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "fixed",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L13"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_high",
-      "label": "HIGH",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "high",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L8"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_info",
-      "label": "INFO",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "info",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L11"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_low",
-      "label": "LOW",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "low",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L10"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_medium",
-      "label": "MEDIUM",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "medium",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L9"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_not_fixed",
-      "label": "NOT_FIXED",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "not_fixed",
-      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
-      "source_location": "L14"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture",
-      "label": "EvidenceCapture.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "evidencecapture.java",
-      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_icarus",
-      "label": "Icarus.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "icarus.java",
-      "source_file": "icarus-extension/src/main/java/icarus/Icarus.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_mcp_icarusmcpserver",
-      "label": "IcarusMcpServer.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "icarusmcpserver.java",
-      "source_file": "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_httpverbmodule",
-      "label": "HttpVerbModule.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "httpverbmodule.java",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/HttpVerbModule.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_postmanexportmodule",
-      "label": "PostmanExportModule.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "postmanexportmodule.java",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/PostmanExportModule.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_ui_settingspanel",
-      "label": "SettingsPanel.java",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "settingspanel.java",
-      "source_file": "icarus-extension/src/main/java/icarus/ui/SettingsPanel.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "io_modelcontextprotocol_server_mcpsyncserver",
-      "label": "io.modelcontextprotocol.server.McpSyncServer",
-      "_origin": "ast",
-      "community": 102,
-      "community_name": "Severity",
-      "file_type": "code",
-      "norm_label": "io.modelcontextprotocol.server.mcpsyncserver",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
       "id": "functionalinterface",
       "label": "FunctionalInterface",
       "_origin": "ast",
@@ -11231,6 +11033,17 @@
       "source_location": ""
     },
     {
+      "id": "burp_api_montoya_burpextension",
+      "label": "burp.api.montoya.BurpExtension",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "burp.api.montoya.burpextension",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "burp_api_montoya_montoyaapi",
       "label": "burp.api.montoya.MontoyaApi",
       "_origin": "ast",
@@ -11242,13 +11055,156 @@
       "source_location": ""
     },
     {
-      "id": "httphandler",
-      "label": "HttpHandler",
+      "id": "icarus_extension_src_main_java_icarus_core_category",
+      "label": "Category.java",
       "_origin": "ast",
       "community": 16,
       "community_name": "burp.api.montoya.MontoyaApi",
       "file_type": "code",
-      "norm_label": "httphandler",
+      "norm_label": "category.java",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Category.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_evidencepaths",
+      "label": "EvidencePaths.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "evidencepaths.java",
+      "source_file": "icarus-extension/src/main/java/icarus/core/EvidencePaths.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_jsonparser",
+      "label": "JsonParser.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "jsonparser.java",
+      "source_file": "icarus-extension/src/main/java/icarus/core/JsonParser.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidencecapture",
+      "label": "EvidenceCapture.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "evidencecapture.java",
+      "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_color",
+      "label": "Color",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "color",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_component",
+      "label": "Component",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "component",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_jbutton",
+      "label": "JButton",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "jbutton",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_jpanel",
+      "label": "JPanel",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "jpanel",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_jscrollpane",
+      "label": "JScrollPane",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "jscrollpane",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_icarus",
+      "label": "Icarus.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "icarus.java",
+      "source_file": "icarus-extension/src/main/java/icarus/Icarus.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_mcp_icarusmcpserver",
+      "label": "IcarusMcpServer.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "icarusmcpserver.java",
+      "source_file": "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_postmanexportmodule",
+      "label": "PostmanExportModule.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "postmanexportmodule.java",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/PostmanExportModule.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_ui_settingspanel",
+      "label": "SettingsPanel.java",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "settingspanel.java",
+      "source_file": "icarus-extension/src/main/java/icarus/ui/SettingsPanel.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "io_modelcontextprotocol_server_mcpsyncserver",
+      "label": "io.modelcontextprotocol.server.McpSyncServer",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "burp.api.montoya.MontoyaApi",
+      "file_type": "code",
+      "norm_label": "io.modelcontextprotocol.server.mcpsyncserver",
       "source_file": "",
       "source_location": ""
     },
@@ -11660,17 +11616,6 @@
       "source_location": "L13"
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator",
-      "label": "LeafReplacementMutator.java",
-      "_origin": "ast",
-      "community": 21,
-      "community_name": "Category",
-      "file_type": "code",
-      "norm_label": "leafreplacementmutator.java",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
-      "source_location": "L1"
-    },
-    {
       "id": "icarus_extension_src_main_java_icarus_orchestrator_java_httprequesttobesent",
       "label": "HttpRequestToBeSent",
       "_origin": "ast",
@@ -11968,46 +11913,24 @@
       "source_location": ""
     },
     {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf",
-      "label": "AstLeaf.java",
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": "astleaf.java",
-      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
-      "source_location": "L1"
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_java_override",
-      "label": "Override",
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": "override",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator_java_override",
-      "label": "Override",
-      "_origin": "ast",
-      "community": 26,
-      "community_name": "AstLeaf",
-      "file_type": "code",
-      "norm_label": "override",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
       "id": "burp_api_montoya_http_message_httprequestresponse",
       "label": "burp.api.montoya.http.message.HttpRequestResponse",
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": "burp.api.montoya.http.message.httprequestresponse",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
+      "id": "httphandler",
+      "label": "HttpHandler",
+      "_origin": "ast",
+      "community": 27,
+      "community_name": "Orchestrator",
+      "file_type": "code",
+      "norm_label": "httphandler",
       "source_file": "",
       "source_location": ""
     },
@@ -12016,7 +11939,7 @@
       "label": "IcarusModule.java",
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": "icarusmodule.java",
       "source_file": "icarus-extension/src/main/java/icarus/core/IcarusModule.java",
@@ -12027,7 +11950,7 @@
       "label": "BufferedImage",
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": "bufferedimage",
       "source_file": "",
@@ -12038,7 +11961,7 @@
       "label": "Image",
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": "image",
       "source_file": "",
@@ -12049,7 +11972,7 @@
       "label": "Override",
       "_origin": "ast",
       "community": 27,
-      "community_name": "burp.api.montoya.http.message.HttpRequestResponse",
+      "community_name": "Orchestrator",
       "file_type": "code",
       "norm_label": "override",
       "source_file": "",
@@ -12967,6 +12890,28 @@
       "source_location": "L1"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator",
+      "label": "LeafReplacementMutator.java",
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": "leafreplacementmutator.java",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_leafreplacementmutator_java_override",
+      "label": "Override",
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": "override",
+      "source_file": "",
+      "source_location": ""
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator",
       "label": "RawByteBoundaryMutator.java",
       "_origin": "ast",
@@ -12976,6 +12921,17 @@
       "norm_label": "rawbyteboundarymutator.java",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/mutators/RawByteBoundaryMutator.java",
       "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_mutators_rawbyteboundarymutator_java_override",
+      "label": "Override",
+      "_origin": "ast",
+      "community": 81,
+      "community_name": "OffensiveAstRoot",
+      "file_type": "code",
+      "norm_label": "override",
+      "source_file": "",
+      "source_location": ""
     },
     {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_offensiveastroot",
@@ -13165,11 +13121,22 @@
       "source_location": ""
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_modules_ast_astleaf",
+      "label": "AstLeaf.java",
+      "_origin": "ast",
+      "community": 86,
+      "community_name": "AstLeaf",
+      "file_type": "code",
+      "norm_label": "astleaf.java",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java",
+      "source_location": "L1"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_modules_ast_offensivejsonparser",
       "label": "OffensiveJsonParser.java",
       "_origin": "ast",
       "community": 86,
-      "community_name": ".parseValue",
+      "community_name": "AstLeaf",
       "file_type": "code",
       "norm_label": "offensivejsonparser.java",
       "source_file": "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java",
@@ -13257,7 +13224,7 @@
       "label": "burp.api.montoya.ui.contextmenu.ContextMenuEvent",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "burp.api.montoya.ui.contextmenu.contextmenuevent",
       "source_file": "",
@@ -13268,7 +13235,7 @@
       "label": "burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "burp.api.montoya.ui.contextmenu.contextmenuitemsprovider",
       "source_file": "",
@@ -13279,7 +13246,7 @@
       "label": "burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "burp.api.montoya.ui.contextmenu.messageeditorhttprequestresponse",
       "source_file": "",
@@ -13290,18 +13257,95 @@
       "label": "Severity.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "severity.java",
       "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
       "source_location": "L1"
     },
     {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_critical",
+      "label": "CRITICAL",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "critical",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L7"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_fixed",
+      "label": "FIXED",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "fixed",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L13"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_high",
+      "label": "HIGH",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "high",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L8"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_info",
+      "label": "INFO",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "info",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L11"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_low",
+      "label": "LOW",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "low",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L10"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_medium",
+      "label": "MEDIUM",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "medium",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L9"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_core_severity_severity_not_fixed",
+      "label": "NOT_FIXED",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "not_fixed",
+      "source_file": "icarus-extension/src/main/java/icarus/core/Severity.java",
+      "source_location": "L14"
+    },
+    {
       "id": "icarus_extension_src_main_java_icarus_evidence_pdfreportgenerator",
       "label": "PdfReportGenerator.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "pdfreportgenerator.java",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/PdfReportGenerator.java",
@@ -13312,7 +13356,7 @@
       "label": "ProjectStateCodec.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "projectstatecodec.java",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/ProjectStateCodec.java",
@@ -13323,7 +13367,7 @@
       "label": "ReportGenerator.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "reportgenerator.java",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/ReportGenerator.java",
@@ -13334,7 +13378,7 @@
       "label": "EvidenceTriggerService.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "evidencetriggerservice.java",
       "source_file": "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java",
@@ -13345,10 +13389,21 @@
       "label": "FindingsReviewDialog.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "findingsreviewdialog.java",
       "source_file": "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java",
+      "source_location": "L1"
+    },
+    {
+      "id": "icarus_extension_src_main_java_icarus_modules_httpverbmodule",
+      "label": "HttpVerbModule.java",
+      "_origin": "ast",
+      "community": 9,
+      "community_name": "Severity",
+      "file_type": "code",
+      "norm_label": "httpverbmodule.java",
+      "source_file": "icarus-extension/src/main/java/icarus/modules/HttpVerbModule.java",
       "source_location": "L1"
     },
     {
@@ -13356,7 +13411,7 @@
       "label": "PassiveErrorModule.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "passiveerrormodule.java",
       "source_file": "icarus-extension/src/main/java/icarus/modules/PassiveErrorModule.java",
@@ -13367,7 +13422,7 @@
       "label": "Orchestrator.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "orchestrator.java",
       "source_file": "icarus-extension/src/main/java/icarus/Orchestrator.java",
@@ -13378,7 +13433,7 @@
       "label": "ProjectStateService.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "projectstateservice.java",
       "source_file": "icarus-extension/src/main/java/icarus/ProjectStateService.java",
@@ -13389,7 +13444,7 @@
       "label": "ReportExportService.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "reportexportservice.java",
       "source_file": "icarus-extension/src/main/java/icarus/ReportExportService.java",
@@ -13400,7 +13455,7 @@
       "label": "ToastNotification.java",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "toastnotification.java",
       "source_file": "icarus-extension/src/main/java/icarus/ui/ToastNotification.java",
@@ -13411,7 +13466,7 @@
       "label": "org.commonmark.parser.Parser",
       "_origin": "ast",
       "community": 9,
-      "community_name": "PdfReportGenerator.java",
+      "community_name": "Severity",
       "file_type": "code",
       "norm_label": "org.commonmark.parser.parser",
       "source_file": "",
@@ -13623,61 +13678,6 @@
       "community_name": ".drawRateLimitTable",
       "file_type": "code",
       "norm_label": "rectangle",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_color",
-      "label": "Color",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": "color",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_component",
-      "label": "Component",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": "component",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_jbutton",
-      "label": "JButton",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": "jbutton",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_jpanel",
-      "label": "JPanel",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": "jpanel",
-      "source_file": "",
-      "source_location": ""
-    },
-    {
-      "id": "icarus_extension_src_main_java_icarus_evidence_evidenceuihelpers_java_jscrollpane",
-      "label": "JScrollPane",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "EvidenceUiHelpers",
-      "file_type": "code",
-      "norm_label": "jscrollpane",
       "source_file": "",
       "source_location": ""
     },
@@ -19507,7 +19507,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -19519,7 +19519,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L351",
+      "source_location": "L352",
       "weight": 1.0
     },
     {
@@ -19531,7 +19531,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L352",
+      "source_location": "L353",
       "weight": 1.0
     },
     {
@@ -19543,7 +19543,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L138",
+      "source_location": "L139",
       "weight": 1.0
     },
     {
@@ -19555,7 +19555,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L113",
+      "source_location": "L114",
       "weight": 1.0
     },
     {
@@ -19567,7 +19567,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L114",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
@@ -19579,7 +19579,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L115",
+      "source_location": "L116",
       "weight": 1.0
     },
     {
@@ -19591,7 +19591,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L116",
+      "source_location": "L117",
       "weight": 1.0
     },
     {
@@ -19603,7 +19603,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L117",
+      "source_location": "L118",
       "weight": 1.0
     },
     {
@@ -19615,7 +19615,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L118",
+      "source_location": "L119",
       "weight": 1.0
     },
     {
@@ -19627,7 +19627,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L308",
+      "source_location": "L309",
       "weight": 1.0
     },
     {
@@ -19639,7 +19639,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L206",
+      "source_location": "L207",
       "weight": 1.0
     },
     {
@@ -19651,7 +19651,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L209",
+      "source_location": "L210",
       "weight": 1.0
     },
     {
@@ -19663,7 +19663,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L217",
+      "source_location": "L218",
       "weight": 1.0
     },
     {
@@ -19675,7 +19675,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L131",
+      "source_location": "L132",
       "weight": 1.0
     },
     {
@@ -19687,7 +19687,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L169",
+      "source_location": "L170",
       "weight": 1.0
     },
     {
@@ -19699,7 +19699,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L235",
+      "source_location": "L236",
       "weight": 1.0
     },
     {
@@ -19711,7 +19711,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L241",
+      "source_location": "L242",
       "weight": 1.0
     },
     {
@@ -19723,7 +19723,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L256",
+      "source_location": "L257",
       "weight": 1.0
     },
     {
@@ -19735,7 +19735,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L283",
+      "source_location": "L284",
       "weight": 1.0
     },
     {
@@ -19747,7 +19747,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L288",
+      "source_location": "L289",
       "weight": 1.0
     },
     {
@@ -19759,7 +19759,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L294",
+      "source_location": "L295",
       "weight": 1.0
     },
     {
@@ -19771,7 +19771,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L145",
+      "source_location": "L146",
       "weight": 1.0
     },
     {
@@ -19783,7 +19783,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L380",
+      "source_location": "L381",
       "weight": 1.0
     },
     {
@@ -19795,7 +19795,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L386",
+      "source_location": "L387",
       "weight": 1.0
     },
     {
@@ -19807,7 +19807,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L388",
+      "source_location": "L389",
       "weight": 1.0
     },
     {
@@ -19819,7 +19819,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L389",
+      "source_location": "L390",
       "weight": 1.0
     },
     {
@@ -19831,7 +19831,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L189",
+      "source_location": "L190",
       "weight": 1.0
     },
     {
@@ -19843,7 +19843,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L154",
+      "source_location": "L155",
       "weight": 1.0
     },
     {
@@ -19879,7 +19879,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L462",
+      "source_location": "L461",
       "weight": 1.0
     },
     {
@@ -19927,7 +19927,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L468",
+      "source_location": "L467",
       "weight": 1.0
     },
     {
@@ -27715,7 +27715,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L503",
+      "source_location": "L504",
       "weight": 1.0
     },
     {
@@ -27727,7 +27727,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L503",
+      "source_location": "L504",
       "weight": 1.0
     },
     {
@@ -27739,7 +27739,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L105",
+      "source_location": "L106",
       "weight": 1.0
     },
     {
@@ -27751,7 +27751,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L106",
+      "source_location": "L107",
       "weight": 1.0
     },
     {
@@ -27763,7 +27763,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L108",
+      "source_location": "L109",
       "weight": 1.0
     },
     {
@@ -27775,7 +27775,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L109",
+      "source_location": "L110",
       "weight": 1.0
     },
     {
@@ -27787,7 +27787,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L110",
+      "source_location": "L111",
       "weight": 1.0
     },
     {
@@ -27823,7 +27823,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L54",
+      "source_location": "L55",
       "weight": 1.0
     },
     {
@@ -27835,7 +27835,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L60",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
@@ -27847,7 +27847,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L61",
+      "source_location": "L62",
       "weight": 1.0
     },
     {
@@ -27859,7 +27859,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L63",
+      "source_location": "L64",
       "weight": 1.0
     },
     {
@@ -29659,7 +29659,7 @@
       "confidence_score": 1.0,
       "context": "generic_arg",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L72",
+      "source_location": "L73",
       "weight": 1.0
     },
     {
@@ -29671,7 +29671,7 @@
       "confidence_score": 1.0,
       "context": "generic_arg",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L172",
+      "source_location": "L173",
       "weight": 1.0
     },
     {
@@ -29683,7 +29683,7 @@
       "confidence_score": 1.0,
       "context": "generic_arg",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L305",
+      "source_location": "L306",
       "weight": 1.0
     },
     {
@@ -29695,7 +29695,7 @@
       "confidence_score": 1.0,
       "context": "generic_arg",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L166",
+      "source_location": "L167",
       "weight": 1.0
     },
     {
@@ -29707,7 +29707,7 @@
       "confidence_score": 1.0,
       "context": "generic_arg",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L124",
+      "source_location": "L125",
       "weight": 1.0
     },
     {
@@ -35443,7 +35443,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L314",
+      "source_location": "L315",
       "weight": 1.0
     },
     {
@@ -35455,7 +35455,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L323",
+      "source_location": "L324",
       "weight": 1.0
     },
     {
@@ -35467,7 +35467,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L323",
+      "source_location": "L324",
       "weight": 1.0
     },
     {
@@ -35479,7 +35479,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L338",
+      "source_location": "L339",
       "weight": 1.0
     },
     {
@@ -35491,7 +35491,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L112",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -35503,7 +35503,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L112",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -35515,7 +35515,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L157",
+      "source_location": "L158",
       "weight": 1.0
     },
     {
@@ -35527,7 +35527,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L205",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -35539,7 +35539,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L128",
+      "source_location": "L129",
       "weight": 1.0
     },
     {
@@ -35551,7 +35551,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L234",
+      "source_location": "L235",
       "weight": 1.0
     },
     {
@@ -35563,7 +35563,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L282",
+      "source_location": "L283",
       "weight": 1.0
     },
     {
@@ -35575,7 +35575,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L282",
+      "source_location": "L283",
       "weight": 1.0
     },
     {
@@ -35587,7 +35587,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L142",
+      "source_location": "L143",
       "weight": 1.0
     },
     {
@@ -35599,7 +35599,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L378",
+      "source_location": "L379",
       "weight": 1.0
     },
     {
@@ -35611,7 +35611,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L378",
+      "source_location": "L379",
       "weight": 1.0
     },
     {
@@ -35623,7 +35623,7 @@
       "confidence_score": 1.0,
       "context": "parameter_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L148",
+      "source_location": "L149",
       "weight": 1.0
     },
     {
@@ -40363,7 +40363,7 @@
       "confidence_score": 1.0,
       "context": "return_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L205",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -40375,7 +40375,7 @@
       "confidence_score": 1.0,
       "context": "return_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L234",
+      "source_location": "L235",
       "weight": 1.0
     },
     {
@@ -40387,7 +40387,7 @@
       "confidence_score": 1.0,
       "context": "return_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L188",
+      "source_location": "L189",
       "weight": 1.0
     },
     {
@@ -40435,7 +40435,7 @@
       "confidence_score": 1.0,
       "context": "return_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L446",
+      "source_location": "L445",
       "weight": 1.0
     },
     {
@@ -40459,7 +40459,7 @@
       "confidence_score": 1.0,
       "context": "return_type",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L467",
+      "source_location": "L466",
       "weight": 1.0
     },
     {
@@ -41990,7 +41990,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L503",
+      "source_location": "L504",
       "weight": 1.0
     },
     {
@@ -46544,7 +46544,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L112",
+      "source_location": "L113",
       "weight": 1.0
     },
     {
@@ -46555,7 +46555,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L124",
+      "source_location": "L125",
       "weight": 1.0
     },
     {
@@ -46566,7 +46566,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L128",
+      "source_location": "L129",
       "weight": 1.0
     },
     {
@@ -46577,7 +46577,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L135",
+      "source_location": "L136",
       "weight": 1.0
     },
     {
@@ -46588,7 +46588,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L142",
+      "source_location": "L143",
       "weight": 1.0
     },
     {
@@ -46599,7 +46599,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L148",
+      "source_location": "L149",
       "weight": 1.0
     },
     {
@@ -46610,7 +46610,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L157",
+      "source_location": "L158",
       "weight": 1.0
     },
     {
@@ -46621,7 +46621,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L166",
+      "source_location": "L167",
       "weight": 1.0
     },
     {
@@ -46632,7 +46632,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L172",
+      "source_location": "L173",
       "weight": 1.0
     },
     {
@@ -46643,7 +46643,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L188",
+      "source_location": "L189",
       "weight": 1.0
     },
     {
@@ -46654,7 +46654,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L205",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -46665,7 +46665,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L234",
+      "source_location": "L235",
       "weight": 1.0
     },
     {
@@ -46676,7 +46676,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L267",
+      "source_location": "L268",
       "weight": 1.0
     },
     {
@@ -46687,7 +46687,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L282",
+      "source_location": "L283",
       "weight": 1.0
     },
     {
@@ -46698,7 +46698,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L305",
+      "source_location": "L306",
       "weight": 1.0
     },
     {
@@ -46709,7 +46709,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L314",
+      "source_location": "L315",
       "weight": 1.0
     },
     {
@@ -46720,7 +46720,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L323",
+      "source_location": "L324",
       "weight": 1.0
     },
     {
@@ -46731,7 +46731,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L338",
+      "source_location": "L339",
       "weight": 1.0
     },
     {
@@ -46742,7 +46742,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L378",
+      "source_location": "L379",
       "weight": 1.0
     },
     {
@@ -46753,7 +46753,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L76",
+      "source_location": "L77",
       "weight": 1.0
     },
     {
@@ -46764,7 +46764,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L82",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -46775,7 +46775,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L86",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -46951,7 +46951,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L446",
+      "source_location": "L445",
       "weight": 1.0
     },
     {
@@ -46973,7 +46973,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java",
-      "source_location": "L467",
+      "source_location": "L466",
       "weight": 1.0
     },
     {
@@ -52750,7 +52750,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L316",
+      "source_location": "L317",
       "weight": 1.0
     },
     {
@@ -52762,7 +52762,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L324",
+      "source_location": "L325",
       "weight": 1.0
     },
     {
@@ -52774,7 +52774,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L339",
+      "source_location": "L340",
       "weight": 1.0
     },
     {
@@ -52786,7 +52786,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L340",
+      "source_location": "L341",
       "weight": 1.0
     },
     {
@@ -52798,7 +52798,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L342",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -52810,7 +52810,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L342",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -52822,7 +52822,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L343",
+      "source_location": "L344",
       "weight": 1.0
     },
     {
@@ -52834,7 +52834,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L241",
+      "source_location": "L242",
       "weight": 1.0
     },
     {
@@ -52846,7 +52846,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L249",
+      "source_location": "L250",
       "weight": 1.0
     },
     {
@@ -52858,7 +52858,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L252",
+      "source_location": "L253",
       "weight": 1.0
     },
     {
@@ -52870,7 +52870,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L255",
+      "source_location": "L256",
       "weight": 1.0
     },
     {
@@ -52882,7 +52882,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L261",
+      "source_location": "L262",
       "weight": 1.0
     },
     {
@@ -58654,7 +58654,7 @@
       "confidence_score": 0.85,
       "context": "call",
       "source_file": "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java",
-      "source_location": "L324",
+      "source_location": "L325",
       "weight": 1.0
     },
     {
@@ -61505,5 +61505,5 @@
       "source_file": ".agents/rules/graphify.md"
     }
   ],
-  "built_at_commit": "81e798108d284cfcf1c4ec5371387535a8a138b9"
+  "built_at_commit": "4077508b785a880648e780059503faa2331ec157"
 }

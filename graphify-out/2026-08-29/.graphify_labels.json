@@ -8,7 +8,7 @@
   "6": "IcarusMcpTransportProvider",
   "7": ".t",
   "8": "RateLimitModule",
-  "9": "Severity",
+  "9": "PdfReportGenerator.java",
   "10": ".run",
   "11": ".EvidenceManagerTab",
   "12": "IcarusModule",
@@ -93,12 +93,13 @@
   "91": "EvidencePhase1Dialog",
   "92": "AutoAuthSelfCheck",
   "93": ".saveTo",
-  "94": "IcarusMcpServer.java",
+  "94": "ParamValidatorModule.java",
   "95": "SensitiveHeaderModule",
   "96": ".drawRateLimitTable",
   "97": "EvidenceUiHelpers",
   "98": ".visit",
   "99": ".loadSession",
   "100": "AstMutationGenerator.java",
-  "101": "TargetKind"
+  "101": "TargetKind",
+  "102": "Severity"
 }

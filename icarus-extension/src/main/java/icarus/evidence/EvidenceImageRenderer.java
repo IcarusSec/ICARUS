@@ -450,27 +450,16 @@ public static BufferedImage loadScaledLogo(int targetSize) {
         } catch (IOException e) {
             return null;
         }
-        // Source is ~1254x1254; scaling straight to ~48px in one bilinear pass looks soft/blocky.
-        // Halving repeatedly until close to the target size (then one final pass) keeps each
-        // step's downscale ratio small, which is what actually produces a crisp result.
-        BufferedImage cur = src;
-        int w = src.getWidth(), h = src.getHeight();
-        while (w / 2 >= targetSize && h / 2 >= targetSize) {
-            w /= 2;
-            h /= 2;
-            cur = scaleTo(cur, w, h);
-        }
-        return scaleTo(cur, targetSize, targetSize);
-    }
-
-public static BufferedImage scaleTo(BufferedImage src, int w, int h) {
-        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g2 = out.createGraphics();
-        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
-        g2.drawImage(src, 0, 0, w, h, null);
-        g2.dispose();
+        // Source is ~1254x1254 → ~38px is a >30x reduction. Repeated bilinear halving softens
+        // more with every pass and still aliases the circle edge ("crunchy and blurry at once").
+        // AWT's SCALE_AREA_AVERAGING is a proper box-filter downscale — one pass, every source
+        // pixel contributes, which is the right tool for a reduction this large. Slow, but this
+        // runs once at class load.
+        Image scaled = src.getScaledInstance(targetSize, targetSize, Image.SCALE_AREA_AVERAGING);
+        BufferedImage out = new BufferedImage(targetSize, targetSize, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.drawImage(scaled, 0, 0, null);
+        g.dispose();
         return out;
     }
 }

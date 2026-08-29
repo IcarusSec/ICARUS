@@ -200,7 +200,12 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             b.setFont(b.getFont().deriveFont(Font.BOLD, 13f));
             b.setFocusable(false);
             b.setHorizontalAlignment(SwingConstants.LEFT);
-            b.putClientProperty("FlatLaf.style", "arc: 8; margin: 8,16,8,16; iconTextGap: 16;");
+            // Unstyled JToggleButton falls back to FlatLaf's default blue accent when selected --
+            // pin it to the ICARUS/Burp orange instead, same as every other accent in this UI.
+            b.putClientProperty("FlatLaf.style",
+                "arc: 8; margin: 8,16,8,16; iconTextGap: 16; background: #464646; "
+                + "selectedBackground: #FF6633; selectedForeground: #FFFFFF; "
+                + "focusedBackground: #FF6633; hoverBackground: #5A5A5A;");
             b.setForeground(Color.WHITE);
         }
 

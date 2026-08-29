@@ -245,6 +245,7 @@ public final class ScanRunner {
                 log.accept(module.name() + " → " + moduleFindings.size() + " findings");
             } catch (Exception e) {
                 error.accept(module.name() + " failed: " + e.getMessage());
+                icarus.core.DebugLog.log(module.name() + " threw in bulk scan: " + stackTrace(e));
             }
         }
 
@@ -261,10 +262,26 @@ public final class ScanRunner {
             api.logging().logToOutput(msg);
         };
         logger.accept("ICARUS → Running " + module.name());
-        var findings = module.run(target, config, verboseLogger(logger, config));
+        icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " starting, isManual=" + isManual);
+        List<Finding> findings;
+        try {
+            findings = module.run(target, config, verboseLogger(logger, config));
+        } catch (Exception e) {
+            icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " threw: " + stackTrace(e));
+            logger.accept("ICARUS → " + module.name() + " failed: " + e);
+            api.logging().logToError(module.name() + " failed: " + e);
+            return;
+        }
         onFindings.accept(findings, isManual);
         String status = Thread.currentThread().isInterrupted() ? "stopped by user" : "complete";
+        icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " " + status + " — " + findings.size() + " findings");
         logger.accept("ICARUS → " + module.name() + " " + status + " — " + findings.size() + " findings.");
+    }
+
+    private static String stackTrace(Throwable t) {
+        java.io.StringWriter sw = new java.io.StringWriter();
+        t.printStackTrace(new java.io.PrintWriter(sw));
+        return sw.toString();
     }
 
     /**

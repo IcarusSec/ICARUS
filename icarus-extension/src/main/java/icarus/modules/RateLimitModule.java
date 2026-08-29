@@ -56,8 +56,9 @@ public class RateLimitModule implements IcarusModule {
 
     @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
-        if (!config.getBool("rl.enabled", true)) return List.of();
-        if (requestResponse == null || requestResponse.request() == null) return List.of();
+        DebugLog.log("RateLimitModule.run: entered");
+        if (!config.getBool("rl.enabled", true)) { DebugLog.log("RateLimitModule.run: skipped — rl.enabled=false"); return List.of(); }
+        if (requestResponse == null || requestResponse.request() == null) { DebugLog.log("RateLimitModule.run: skipped — null request"); return List.of(); }
 
         // Check project-level persistence to see if we should skip the dialog
         burp.api.montoya.persistence.PersistedObject extData = api.persistence().extensionData();
@@ -77,8 +78,15 @@ public class RateLimitModule implements IcarusModule {
         };
 
         if (!dontAsk) {
+            // A stale interrupt on the reused scan-executor thread (e.g. left over from a
+            // previous scan the user hit Stop on) makes SwingUtilities.invokeAndWait below
+            // throw InterruptedException, which used to be swallowed into a silent
+            // "proceed[0] == false" abort. Clear it first, mirroring ScanRunner.runScan.
+            Thread.interrupted();
+            DebugLog.log("RateLimitModule.run: showing config dialog (EDT=" + SwingUtilities.isEventDispatchThread() + ")");
+            boolean dialogShown = false;
             try {
-                SwingUtilities.invokeAndWait(() -> {
+                Runnable dialog = () -> {
                     JTextField txtCount = new JTextField(String.valueOf(params[0]));
                     JTextField txtConcurrency = new JTextField(String.valueOf(params[1]));
                     JTextField txtCooldown = new JTextField(String.valueOf(params[2]));
@@ -121,13 +129,31 @@ public class RateLimitModule implements IcarusModule {
                             api.logging().logToError("Invalid integer in Rate Limit config.");
                         }
                     }
-                });
+                };
+                // Every real caller runs this module on a background scan thread. If we're
+                // somehow on the EDT, don't run the (minutes-long, blocking) blast here —
+                // bail loudly so the caller gets fixed rather than freezing Burp.
+                if (SwingUtilities.isEventDispatchThread()) {
+                    DebugLog.log("RateLimitModule.run: called on the EDT — aborting to avoid freezing Burp");
+                    api.logging().logToError("Rate Limit Tester was invoked on the UI thread; skipping. This is a bug in the caller.");
+                    return List.of();
+                }
+                SwingUtilities.invokeAndWait(dialog);
+                dialogShown = true;
             } catch (Exception e) {
-                api.logging().logToError("Failed to show Rate Limit config dialog: " + e.getMessage());
+                DebugLog.log("RateLimitModule.run: config dialog failed: " + e);
+                api.logging().logToError("Rate Limit Tester: failed to show the config dialog, aborting — " + e);
             }
+            DebugLog.log("RateLimitModule.run: dialog closed (shown=" + dialogShown + ", proceed=" + proceed[0] + ")");
         }
 
-        if (!proceed[0]) return List.of();
+        if (!proceed[0]) {
+            DebugLog.log("RateLimitModule.run: aborted before blast — dontAsk=" + dontAsk + ", proceed[0]=false"
+                    + " (user cancelled the dialog, or it failed to show)");
+            return List.of();
+        }
+        DebugLog.log("RateLimitModule.run: proceeding — count=" + params[0] + " concurrency=" + params[1]
+                + " cooldownMs=" + params[2] + " maxRps=" + params[3] + " detectOnly=" + proceed[1]);
 
         // Both values come straight from a user-editable dialog field (or a persisted
         // "don't ask again" choice from one) with no upper bound. Concurrency in particular

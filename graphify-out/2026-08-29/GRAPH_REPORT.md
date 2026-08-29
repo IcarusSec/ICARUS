@@ -1,48 +1,44 @@
-# Graph Report - BurpCustomActions  (2026-08-29)
+# Graph Report - BurpCustomActions  (2026-08-23)
 
 ## Corpus Check
-- 105 files · ~568,736 words
+- 83 files · ~548,843 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1339 nodes · 3817 edges · 100 communities (67 shown, 33 thin omitted)
-- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 651 edges (avg confidence: 0.81)
+- 1081 nodes · 3032 edges · 75 communities (46 shown, 29 thin omitted)
+- Extraction: 83% EXTRACTED · 17% INFERRED · 0% AMBIGUOUS · INFERRED: 527 edges (avg confidence: 0.81)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ebce7d7e`
+- Built from commit: `5670fe64`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- .buildUI
+- .applyTheme
 - AutoAuthModule
 - FindingRegistry
 - ReportTemplateConfig
-- .visit
+- PdfReportGenerator
 - IcarusMcpServer
 - IcarusMcpTransportProvider
-- .t
+- Parser
 - burp.api.montoya.http.message.requests.HttpRequest
 - Severity
-- .run
-- .EvidenceManagerTab
-- ScanRunner
+- .getBool
+- CapturedEvidence
+- IcarusModule
 - TestMontoya
-- .showOnEdt
-- .buildReportingTab
+- ToastNotification
 - JwtCheckerModule
 - FindingRegistry
-- java.awt.image.BufferedImage
 - Finding
-- AstProperty
 - Category
-- Orchestrator
-- burp.api.montoya.MontoyaApi
+- EvidenceUiHelpers
 - ModuleConfig
 - ICARUS Changelog
 - SensitiveHeaderModule
-- burp.api.montoya.http.message.HttpRequestResponse
+- Orchestrator
 - Evidence Manager & Reporting feature doc
 - build.sh (getting started compile step)
 - Burp Repeater UI
@@ -52,8 +48,8 @@
 - ICARUS Documentation Index
 - HttpVerbModule (concept)
 - ParamValidatorModule (concept)
-- AstNode
-- .defaultOutputDir
+- .analyze
+- PostmanExportModule
 - ICARUS README
 - JwtCheckerModule (concept)
 - IcarusModule (interface contract)
@@ -91,37 +87,18 @@
 - ToastNotification
 - com.icarus:icarus
 - Security Policy (SECURITY.md)
-- EvidenceCapture.java
-- EvidenceCapture
-- OffensiveAstRoot
-- ReportGenerator
-- .builder
-- .render
-- JsonParser
-- AstLeaf
-- .serializeNode
-- JsonPaths
-- .provideMenuItems
-- EvidencePhase1Dialog
-- AutoAuthSelfCheck
-- .saveTo
-- ProjectContextDetector
-- RawNumber
-- .addCweChip
-- .renderFinalImage
-- TargetKind
 
 ## God Nodes (most connected - your core abstractions)
-1. `Finding` - 121 edges
-2. `ModuleConfig` - 107 edges
-3. `Orchestrator` - 74 edges
-4. `EvidenceCapture` - 73 edges
-5. `ReportTemplateConfig` - 70 edges
-6. `IcarusMcpServer` - 57 edges
-7. `AutoAuthModule` - 49 edges
-8. `PdfReportGenerator` - 43 edges
-9. `Category` - 39 edges
-10. `AstNode` - 38 edges
+1. `Finding` - 123 edges
+2. `ModuleConfig` - 105 edges
+3. `Orchestrator` - 63 edges
+4. `IcarusMcpServer` - 52 edges
+5. `EvidenceCapture` - 49 edges
+6. `ReportTemplateConfig` - 47 edges
+7. `AutoAuthModule` - 46 edges
+8. `Category` - 33 edges
+9. `Severity` - 33 edges
+10. `CapturedEvidence` - 32 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `build.sh (getting started compile step)` --semantically_similar_to--> `build.sh (PR checklist requirement)`  [INFERRED] [semantically similar]
@@ -148,67 +125,59 @@
 - **Graphify CLI Commands** — _agents_rules_graphify_graphify_query, _agents_rules_graphify_graphify_path, _agents_rules_graphify_graphify_explain, _agents_rules_graphify_graphify_update [INFERRED 0.95]
 - **Graphify MCP Tools** — _agents_rules_graphify_query_graph, _agents_rules_graphify_shortest_path, _agents_rules_graphify_get_node [INFERRED 0.95]
 
-## Communities (100 total, 33 thin omitted)
+## Communities (75 total, 29 thin omitted)
 
-### Community 0 - ".buildUI"
-Cohesion: 0.05
-Nodes (28): burp.api.montoya.ui.UserInterface, GridBagConstraints, KnowledgeBaseEntry, VulnerabilityKnowledgeBase, DefaultTableModel, JPanel, Component, DefaultTableModel (+20 more)
+### Community 0 - ".applyTheme"
+Cohesion: 0.07
+Nodes (25): burp.api.montoya.ui.UserInterface, DefaultListModel, DefaultTableModel, Component, IcarusTab, Component, JPanel, Component (+17 more)
 
 ### Community 1 - "AutoAuthModule"
-Cohesion: 0.22
-Nodes (5): burp.api.montoya.core.Range, AutoAuthModule, InjectionTarget, Source, java.util.concurrent.locks.ReentrantLock
+Cohesion: 0.05
+Nodes (22): burp.api.montoya.core.Range, burp.api.montoya.http.handler.HttpRequestToBeSent, burp.api.montoya.ui.contextmenu.ContextMenuEvent, burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse, AutoAuthSelfCheck, Range, AutoAuthModule, InjectionTarget (+14 more)
 
 ### Community 2 - "FindingRegistry"
-Cohesion: 0.14
+Cohesion: 0.09
 Nodes (3): AuditIssueSeverity, FindingRecord, FindingRegistry
 
 ### Community 3 - "ReportTemplateConfig"
-Cohesion: 0.16
-Nodes (4): FindingTemplate, SuppressWarnings, ReportTemplateConfig, Section
+Cohesion: 0.10
+Nodes (5): SuppressWarnings, ReportTemplateConfig, Section, ReportGenerator, org.commonmark.renderer.html.HtmlRenderer
 
-### Community 4 - ".visit"
-Cohesion: 0.16
-Nodes (19): com.lowagie.text.Element, com.lowagie.text.Font, com.lowagie.text.Paragraph, Override, Paragraph, MarkdownPdfRenderer, ListItem, org.commonmark.node.AbstractVisitor (+11 more)
+### Community 4 - "PdfReportGenerator"
+Cohesion: 0.09
+Nodes (31): Document, Override, MarkdownPdfRenderer, Font, Image, PdfReportGenerator, java.awt.Color, ListItem (+23 more)
 
 ### Community 5 - "IcarusMcpServer"
-Cohesion: 0.12
-Nodes (6): CallToolResult, HumanApprovalGate, IcarusMcpServer, RecheckResult, io.modelcontextprotocol.server.McpSyncServer, SyncToolSpecification
+Cohesion: 0.05
+Nodes (22): CallToolResult, EvidenceAutoRenderer, BufferedImage, Rectangle, BufferedImage, EvidenceColorScheme, EvidenceImageRenderer, BufferedImage (+14 more)
 
 ### Community 6 - "IcarusMcpTransportProvider"
 Cohesion: 0.10
 Nodes (17): Factory, HttpClient, IcarusJsonSchemaValidator, Override, IcarusMcpTransportProvider, HttpResponse, Override, io.modelcontextprotocol.json.McpJsonMapper (+9 more)
 
-### Community 7 - ".t"
-Cohesion: 0.14
-Nodes (16): com.lowagie.text.pdf.PdfPCell, com.lowagie.text.pdf.PdfPTable, com.lowagie.text.pdf.PdfWriter, Document, FooterPageEvent, Font, Image, Override (+8 more)
+### Community 7 - "Parser"
+Cohesion: 0.21
+Nodes (3): SuppressWarnings, Json, Parser
 
 ### Community 8 - "burp.api.montoya.http.message.requests.HttpRequest"
-Cohesion: 0.08
-Nodes (16): burp.api.montoya.http.message.requests.HttpRequest, burp.api.montoya.ui.editor.extension.EditorCreationContext, burp.api.montoya.ui.editor.extension.ExtensionProvidedHttpRequestEditor, burp.api.montoya.ui.editor.extension.HttpRequestEditorProvider, burp.api.montoya.ui.Selection, AutoAuthPreviewEditorProvider, JScrollPane, JTextArea (+8 more)
+Cohesion: 0.10
+Nodes (15): burp.api.montoya.http.message.requests.HttpRequest, burp.api.montoya.ui.editor.extension.EditorCreationContext, burp.api.montoya.ui.editor.extension.ExtensionProvidedHttpRequestEditor, burp.api.montoya.ui.editor.extension.HttpRequestEditorProvider, burp.api.montoya.ui.Selection, AutoAuthPreviewEditorProvider, JScrollPane, JTextArea (+7 more)
 
 ### Community 9 - "Severity"
+Cohesion: 0.17
+Nodes (12): burp.api.montoya.BurpExtension, Severity, CRITICAL, FIXED, HIGH, INFO, LOW, MEDIUM (+4 more)
+
+### Community 10 - ".getBool"
+Cohesion: 0.10
+Nodes (14): burp.api.montoya.collaborator.CollaboratorClient, burp.api.montoya.collaborator.CollaboratorPayload, HttpVerbModule, Override, VerbResult, Override, Mutation, MutationResult (+6 more)
+
+### Community 11 - "CapturedEvidence"
+Cohesion: 0.10
+Nodes (13): FunctionalInterface, CapturedEvidence, Component, JButton, Component, JButton, Component, JButton (+5 more)
+
+### Community 14 - "ToastNotification"
 Cohesion: 0.16
-Nodes (11): Severity, CRITICAL, FIXED, HIGH, INFO, LOW, MEDIUM, NOT_FIXED (+3 more)
-
-### Community 10 - ".run"
-Cohesion: 0.11
-Nodes (12): burp.api.montoya.collaborator.CollaboratorClient, burp.api.montoya.collaborator.CollaboratorPayload, HttpVerbModule, Override, VerbResult, Override, Mutation, MutationResult (+4 more)
-
-### Community 11 - ".EvidenceManagerTab"
-Cohesion: 0.12
-Nodes (13): FunctionalInterface, Component, JButton, Component, JButton, Component, JButton, ReportExportService (+5 more)
-
-### Community 12 - "ScanRunner"
-Cohesion: 0.14
-Nodes (3): HttpResponseReceived, ScanRunner, ResponseReceivedAction
-
-### Community 14 - ".showOnEdt"
-Cohesion: 0.14
-Nodes (9): Frame, BufferedImage, Color, Graphics2D, Shape, Rectangle, JWindow, Point (+1 more)
-
-### Community 15 - ".buildReportingTab"
-Cohesion: 0.11
-Nodes (11): Icon, Component, JButton, JLabel, JPanel, JTextArea, Override, ReportingSettingsTab (+3 more)
+Nodes (13): Frame, Annotation, EvidenceAnnotator, BufferedImage, Color, Graphics2D, Color, Rectangle (+5 more)
 
 ### Community 16 - "JwtCheckerModule"
 Cohesion: 0.22
@@ -218,33 +187,21 @@ Nodes (4): burp.api.montoya.utilities.json.JsonNode, Override, JwtCandidate, Jwt
 Cohesion: 0.12
 Nodes (19): Core Concepts & Execution doc, Finding class, FindingRegistry, IcarusModule interface, IcarusTab (UI, Results table), ModuleConfig class, Observer Pattern (FindingRegistry notifies UI), ScanRunner (+11 more)
 
-### Community 18 - "java.awt.image.BufferedImage"
-Cohesion: 0.11
-Nodes (9): BufferedImage, EvidenceColorScheme, EvidenceImageRenderer, BufferedImage, Color, Graphics2D, BufferedImage, Rectangle (+1 more)
-
 ### Community 19 - "Finding"
-Cohesion: 0.16
-Nodes (4): Dimension, Finding, Override, JTextField
-
-### Community 20 - "AstProperty"
-Cohesion: 0.11
-Nodes (10): Override, Override, AstObject, Override, AstProperty, Override, AstVisitor, BaseAstVisitor (+2 more)
+Cohesion: 0.13
+Nodes (5): Finding, Override, EvidencePhase2Dialog, java.awt.datatransfer.DataFlavor, java.awt.image.BufferedImage
 
 ### Community 21 - "Category"
-Cohesion: 0.09
-Nodes (18): Category, ACCESS_CONTROL, BOUNDARY, EXPORT, HEADER_LEAK, HEADER_MISSING, HTTP_METHOD, INFORMATION_DISCLOSURE (+10 more)
+Cohesion: 0.08
+Nodes (21): Category, ACCESS_CONTROL, BOUNDARY, EXPORT, HEADER_LEAK, HEADER_MISSING, HTTP_METHOD, INFORMATION_DISCLOSURE (+13 more)
 
-### Community 22 - "Orchestrator"
-Cohesion: 0.10
-Nodes (9): DefaultListModel, HttpHandler, IcarusModule, FindingsReviewDialog, Orchestrator, ProjectStateService, IcarusTab, Component (+1 more)
-
-### Community 23 - "burp.api.montoya.MontoyaApi"
-Cohesion: 0.15
-Nodes (12): Border, burp.api.montoya.MontoyaApi, com.formdev.flatlaf.extras.FlatSVGIcon, FlatSVGIcon, EvidenceAnnotator, EvidencePhase2Dialog, Icon, EvidenceUiHelpers (+4 more)
+### Community 23 - "EvidenceUiHelpers"
+Cohesion: 0.17
+Nodes (7): EvidenceUiHelpers, Color, Component, JButton, JPanel, JScrollPane, JTextArea
 
 ### Community 24 - "ModuleConfig"
 Cohesion: 0.13
-Nodes (7): burp.api.montoya.BurpExtension, I18n, ModuleConfig, Icarus, Override, java.util.ResourceBundle, javax.swing.table.DefaultTableModel
+Nodes (7): burp.api.montoya.MontoyaApi, EvidencePaths, ModuleConfig, EvidenceCapture, EvidencePhase1Dialog, Override, ProjectStateService
 
 ### Community 25 - "ICARUS Changelog"
 Cohesion: 0.22
@@ -254,9 +211,9 @@ Nodes (13): ICARUS Changelog, IcarusModule contract (live logger), ScanRunner (l
 Cohesion: 0.25
 Nodes (4): burp.api.montoya.http.handler.HttpResponseReceived, burp.api.montoya.http.message.responses.HttpResponse, Override, SensitiveHeaderModule
 
-### Community 27 - "burp.api.montoya.http.message.HttpRequestResponse"
-Cohesion: 0.20
-Nodes (6): burp.api.montoya.http.message.HttpRequestResponse, EvidenceTriggerService, BufferedImage, Image, Override, PassiveErrorModule
+### Community 27 - "Orchestrator"
+Cohesion: 0.12
+Nodes (8): burp.api.montoya.http.message.HttpRequestResponse, burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider, HttpHandler, EvidenceTriggerService, BufferedImage, Image, FindingsReviewDialog, Orchestrator
 
 ### Community 28 - "Evidence Manager & Reporting feature doc"
 Cohesion: 0.22
@@ -293,14 +250,6 @@ Nodes (8): Access Control Bypass Detection (verb tampering), Automated Mutation 
 ### Community 36 - "ParamValidatorModule (concept)"
 Cohesion: 0.25
 Nodes (8): Boundary Testing (overflow, empty strings), Deep Injection (SQLi/NoSQLi/XSS/Path Traversal in JSON), ParamValidatorModule (concept), Structural Fuzzing (missing fields, empty structures, null injection), Type Confusion Fuzzing, PassiveErrorModule (concept), ParamValidatorModule, PassiveErrorModule
-
-### Community 37 - "AstNode"
-Cohesion: 0.17
-Nodes (4): AstArray, AstNode, Override, TypeConfusionMutator
-
-### Community 38 - ".defaultOutputDir"
-Cohesion: 0.20
-Nodes (3): EvidencePaths, Override, PostmanExportModule
 
 ### Community 39 - "ICARUS README"
 Cohesion: 0.25
@@ -350,54 +299,6 @@ Nodes (4): POST /api/checkout Request, 201 Created Checkout Response, HTTPVerbTe
 Cohesion: 0.83
 Nodes (4): ICARUS Logo (Mnemosyne circle emblem), ICARUS Project (Burp Suite Extension), Mnemosyne Figure Illustration, ICARUS v1.3 "Mnemosyne Update" Release
 
-### Community 79 - "EvidenceCapture.java"
-Cohesion: 0.25
-Nodes (6): burp.api.montoya.ui.contextmenu.ContextMenuEvent, burp.api.montoya.ui.contextmenu.ContextMenuItemsProvider, burp.api.montoya.ui.contextmenu.MessageEditorHttpRequestResponse, ProjectStateCodec, Color, ToastNotification
-
-### Community 80 - "EvidenceCapture"
-Cohesion: 0.18
-Nodes (5): CapturedEvidence, EvidenceCapture, Color, Font, JFrame
-
-### Community 81 - "OffensiveAstRoot"
-Cohesion: 0.14
-Nodes (6): AstMutationGenerator, AstMutationResult, HppMutator, RawByteBoundaryMutator, OffensiveAstRoot, PayloadRepository
-
-### Community 83 - ".builder"
-Cohesion: 0.22
-Nodes (3): Builder, SuppressWarnings, ImportedItem
-
-### Community 84 - ".render"
-Cohesion: 0.29
-Nodes (5): Annotation, EvidenceAutoRenderer, BufferedImage, Rectangle, java.awt.Rectangle
-
-### Community 88 - ".serializeNode"
-Cohesion: 0.22
-Nodes (3): AstSerializer, SerializedResult, Override
-
-### Community 90 - ".provideMenuItems"
-Cohesion: 0.20
-Nodes (4): burp.api.montoya.http.handler.HttpRequestToBeSent, HttpRequestToBeSent, Override, RequestToBeSentAction
-
-### Community 91 - "EvidencePhase1Dialog"
-Cohesion: 0.24
-Nodes (3): EvidencePhase1Dialog, Graphics2D, JTextArea
-
-### Community 94 - "ProjectContextDetector"
-Cohesion: 0.31
-Nodes (6): Confidence, HIGH, LOW, MEDIUM, ProjectContext, ProjectContextDetector
-
-### Community 97 - ".addCweChip"
-Cohesion: 0.40
-Nodes (3): Color, JButton, JPanel
-
-### Community 98 - ".renderFinalImage"
-Cohesion: 0.50
-Nodes (3): BufferedImage, Color, Shape
-
-### Community 99 - "TargetKind"
-Cohesion: 0.67
-Nodes (3): TargetKind, BODY, HEADER
-
 ## Ambiguous Edges - Review These
 - `Icarus (extension entry point)` → `Orchestrator`  [AMBIGUOUS]
   icarus-extension/docs_generated.md · relation: conceptually_related_to
@@ -407,9 +308,9 @@ Nodes (3): TargetKind, BODY, HEADER
   icarus-extension/docs_generated.md · relation: conceptually_related_to
 
 ## Knowledge Gaps
-- **125 isolated node(s):** `/usr/bin/python3`, `build.sh script`, `com.icarus:icarus`, `HEADER`, `BODY` (+120 more)
+- **122 isolated node(s):** `/usr/bin/python3`, `build.sh script`, `com.icarus:icarus`, `HEADER`, `BODY` (+117 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **33 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **29 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -420,11 +321,11 @@ _Questions this graph is uniquely positioned to answer:_
   _Edge tagged AMBIGUOUS (relation: tampering_yields_insufficient_funds_error) - confidence is low._
 - **What is the exact relationship between `CweRepository` and `VerboseErrorDetector`?**
   _Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low._
-- **Why does `Category` connect `Category` to `.defaultOutputDir`, `Severity`, `.run`, `EvidenceCapture.java`, `OffensiveAstRoot`, `Finding`, `.builder`, `ModuleConfig`, `SensitiveHeaderModule`?**
-  _High betweenness centrality (0.144) - this node is a cross-community bridge._
-- **Why does `Finding` connect `Finding` to `FindingRegistry`, `IcarusMcpServer`, `.t`, `burp.api.montoya.http.message.requests.HttpRequest`, `Severity`, `.run`, `.EvidenceManagerTab`, `ScanRunner`, `JwtCheckerModule`, `java.awt.image.BufferedImage`, `Category`, `Orchestrator`, `ModuleConfig`, `SensitiveHeaderModule`, `burp.api.montoya.http.message.HttpRequestResponse`, `.defaultOutputDir`, `EvidenceCapture.java`, `EvidenceCapture`, `ReportGenerator`, `.builder`, `.render`?**
-  _High betweenness centrality (0.132) - this node is a cross-community bridge._
-- **Why does `AstMutationResult` connect `OffensiveAstRoot` to `AstNode`, `.run`, `AstProperty`, `Category`, `.serializeNode`?**
-  _High betweenness centrality (0.079) - this node is a cross-community bridge._
+- **Why does `Finding` connect `Finding` to `.applyTheme`, `FindingRegistry`, `ReportTemplateConfig`, `PdfReportGenerator`, `IcarusMcpServer`, `.analyze`, `PostmanExportModule`, `burp.api.montoya.http.message.requests.HttpRequest`, `Severity`, `.getBool`, `CapturedEvidence`, `IcarusModule`, `JwtCheckerModule`, `Category`, `ModuleConfig`, `SensitiveHeaderModule`, `Orchestrator`?**
+  _High betweenness centrality (0.136) - this node is a cross-community bridge._
+- **Why does `ModuleConfig` connect `ModuleConfig` to `.applyTheme`, `AutoAuthModule`, `FindingRegistry`, `ReportTemplateConfig`, `PdfReportGenerator`, `IcarusMcpServer`, `.analyze`, `PostmanExportModule`, `burp.api.montoya.http.message.requests.HttpRequest`, `Severity`, `.getBool`, `CapturedEvidence`, `IcarusModule`, `JwtCheckerModule`, `Finding`, `SensitiveHeaderModule`, `Orchestrator`?**
+  _High betweenness centrality (0.130) - this node is a cross-community bridge._
+- **Why does `IcarusMcpServer` connect `IcarusMcpServer` to `.applyTheme`, `ReportTemplateConfig`, `IcarusMcpTransportProvider`, `Severity`, `Finding`, `ModuleConfig`, `Orchestrator`?**
+  _High betweenness centrality (0.071) - this node is a cross-community bridge._
 - **What connects `/usr/bin/python3`, `build.sh script`, `com.icarus:icarus` to the rest of the system?**
-  _125 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _122 weakly-connected nodes found - possible documentation gaps or missing edges._

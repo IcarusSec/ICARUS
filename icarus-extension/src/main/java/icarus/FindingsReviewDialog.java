@@ -59,12 +59,20 @@ public class FindingsReviewDialog {
             I18n.t("findings.review.col.module"), I18n.t("findings.review.col.type"), 
             I18n.t("findings.review.col.path"), I18n.t("findings.review.col.description")
         };
+        icarus.core.DebugLog.log("FindingsReviewDialog.showFindingsDialog: " + records.size() + " record(s), EDT="
+                + javax.swing.SwingUtilities.isEventDispatchThread());
         Object[][] data = new Object[records.size()][6];
+        int maxDescLen = 0, maxPathLen = 0;
         for (int i = 0; i < records.size(); i++) {
             FindingRecord r = records.get(i);
             Finding f = r.getFinding();
-            data[i] = new Object[]{r.getCount(), f.severity().name(), f.module(), f.type(), f.path(), f.description()};
+            String desc = f.description() == null ? "" : f.description();
+            String path = f.path() == null ? "" : f.path();
+            maxDescLen = Math.max(maxDescLen, desc.length());
+            maxPathLen = Math.max(maxPathLen, path.length());
+            data[i] = new Object[]{r.getCount(), f.severity().name(), f.module(), f.type(), path, desc};
         }
+        icarus.core.DebugLog.log("FindingsReviewDialog: table data built, maxDescLen=" + maxDescLen + " maxPathLen=" + maxPathLen);
 
         JTable table = new JTable(data, cols) {
             @Override
@@ -112,6 +120,7 @@ public class FindingsReviewDialog {
         tableScroll.putClientProperty("FlatLaf.style", "arc: 8;");
         topPanel.add(tableScroll, BorderLayout.CENTER);
 
+        icarus.core.DebugLog.log("FindingsReviewDialog: table/filter UI built, creating Burp editors");
         // Editors for Request/Response
         burp.api.montoya.ui.editor.HttpRequestEditor reqEditor = api.userInterface().createHttpRequestEditor(burp.api.montoya.ui.editor.EditorOptions.READ_ONLY);
         burp.api.montoya.ui.editor.HttpResponseEditor resEditor = api.userInterface().createHttpResponseEditor(burp.api.montoya.ui.editor.EditorOptions.READ_ONLY);
@@ -128,6 +137,8 @@ public class FindingsReviewDialog {
                     int modelRow = table.convertRowIndexToModel(viewRow);
                     Finding f = records.get(modelRow).getFinding();
                     if (f.evidence() != null) {
+                        long respLen = f.evidence().response() != null ? f.evidence().response().body().length() : -1;
+                        icarus.core.DebugLog.log("FindingsReviewDialog: row " + modelRow + " selected, loading evidence into editors (respBodyLen=" + respLen + ")");
                         reqEditor.setRequest(f.evidence().request());
                         if (f.evidence().response() != null) {
                             resEditor.setResponse(f.evidence().response());
@@ -202,7 +213,9 @@ public class FindingsReviewDialog {
         btnPanel.add(btnClose);
         dialog.add(btnPanel, BorderLayout.SOUTH);
 
+        icarus.core.DebugLog.log("FindingsReviewDialog: calling setVisible(true)");
         dialog.setVisible(true);
+        icarus.core.DebugLog.log("FindingsReviewDialog: setVisible(true) returned");
     }
 
     public static Severity parseSeverity(String value) {

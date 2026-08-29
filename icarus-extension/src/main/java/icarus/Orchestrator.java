@@ -456,7 +456,12 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     private void routeFindings(List<Finding> newFindings, boolean isManual) {
+        icarus.core.DebugLog.log("Orchestrator.routeFindings: " + newFindings.size() + " finding(s), isManual=" + isManual
+                + ", EDT=" + SwingUtilities.isEventDispatchThread());
+        long t0 = System.currentTimeMillis();
         List<Finding> newOrUpdated = findings.processDeduplication(newFindings, false);
+        icarus.core.DebugLog.log("Orchestrator.routeFindings: processDeduplication took " + (System.currentTimeMillis() - t0)
+                + "ms, " + newOrUpdated.size() + " new/updated");
 
         if (isManual && !newFindings.isEmpty()) {
             // Manual scans show results even on a re-run that only produced duplicates —

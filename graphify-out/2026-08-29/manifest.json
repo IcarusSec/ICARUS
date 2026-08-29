@@ -6,22 +6,22 @@
     "semantic_hash": "c2ef092b07143a084ddfe2c5a76faa65"
   },
   "icarus-extension/build.gradle": {
-    "mtime": 1787066080.2715404,
-    "seen": 1787436945.8465974,
-    "ast_hash": "bbe67dfba7d087add9bc69fea903feec",
-    "semantic_hash": "bbe67dfba7d087add9bc69fea903feec"
+    "mtime": 1787961144.1953115,
+    "seen": 1788006346.4530995,
+    "ast_hash": "d6ac16d6c87713adf02f8a65b4b12876",
+    "semantic_hash": ""
   },
   "icarus-extension/build.sh": {
-    "mtime": 1786709288.1000443,
-    "seen": 1787436945.8465981,
-    "ast_hash": "3092dd4a8e078c01bd6785ca448c50dd",
-    "semantic_hash": "3092dd4a8e078c01bd6785ca448c50dd"
+    "mtime": 1787962516.893602,
+    "seen": 1788006346.4531012,
+    "ast_hash": "6a8662679a12d9216516c8740f884451",
+    "semantic_hash": ""
   },
   "icarus-extension/pom.xml": {
-    "mtime": 1785104474.0,
-    "seen": 1787436945.8465989,
-    "ast_hash": "75df70b04a080d198bef6869c90ed3d1",
-    "semantic_hash": "75df70b04a080d198bef6869c90ed3d1"
+    "mtime": 1787961141.875173,
+    "seen": 1788006346.4531024,
+    "ast_hash": "94272b39143ba5645fe13a209f4d6035",
+    "semantic_hash": ""
   },
   "icarus-extension/selfcheck/AutoAuthSelfCheck.java": {
     "mtime": 1785459273.0,
@@ -36,338 +36,332 @@
     "semantic_hash": "d58e59e068100b46de9d2ca215c08635"
   },
   "icarus-extension/src/main/java/icarus/EvidenceTriggerService.java": {
-    "mtime": 1787230237.2559633,
-    "seen": 1787436945.846601,
-    "ast_hash": "45bf56d3e57be5649d23a4b5d758fc22",
-    "semantic_hash": "45bf56d3e57be5649d23a4b5d758fc22"
+    "mtime": 1787959864.2082314,
+    "seen": 1788006346.4531083,
+    "ast_hash": "6f60fda35effe830644bf852b4c46021",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/FindingsReviewDialog.java": {
-    "mtime": 1787186445.2079186,
-    "seen": 1787436945.8466015,
-    "ast_hash": "9decac7e7e4883ca5d9807684ae53d74",
-    "semantic_hash": "9decac7e7e4883ca5d9807684ae53d74"
+    "mtime": 1787962416.8225732,
+    "seen": 1788006346.4531093,
+    "ast_hash": "d0ce7a27c22e14f9226a7dfdcdc21184",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/Icarus.java": {
-    "mtime": 1787505515.081156,
-    "seen": 1787505526.6577327,
-    "ast_hash": "f01f2e42ff645d957553481c8df918e6",
+    "mtime": 1787964228.41998,
+    "seen": 1788006346.4531105,
+    "ast_hash": "2741671143e4b12cd83a6e1af38ed1b7",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/Orchestrator.java": {
-    "mtime": 1787500761.0459769,
-    "seen": 1787505526.657734,
-    "ast_hash": "6420a901a7c15dce2890fbdaac8f8e19",
+    "mtime": 1787960395.226381,
+    "seen": 1788006346.453112,
+    "ast_hash": "c3e303246c99494608483e5fa14756b5",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ProjectStateService.java": {
-    "mtime": 1787186605.9778562,
-    "seen": 1787436945.8466036,
-    "ast_hash": "15a2977d6ab912e596a55fbc2f9ceae6",
-    "semantic_hash": "15a2977d6ab912e596a55fbc2f9ceae6"
+    "mtime": 1787959864.2082314,
+    "seen": 1788006346.453113,
+    "ast_hash": "ef80797ec13f92e8b343c26a40d091cd",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ReportExportService.java": {
-    "mtime": 1787252675.9168482,
-    "seen": 1787436945.846604,
-    "ast_hash": "2a5779ee9599b66d4423410f71d2d3d6",
-    "semantic_hash": "2a5779ee9599b66d4423410f71d2d3d6"
+    "mtime": 1787959864.2082314,
+    "seen": 1788006346.453114,
+    "ast_hash": "ad2419ee01b1f69c1b7137331a4ee20b",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ScanRunner.java": {
-    "mtime": 1787500842.2939615,
-    "seen": 1787505526.657737,
-    "ast_hash": "a0ad3d2d0b4df89db44e9889823488c8",
+    "mtime": 1787959864.2082314,
+    "seen": 1788006346.4531152,
+    "ast_hash": "5f268ca5728ccf6261677628e92e6738",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/autoauth/AutoAuthModule.java": {
-    "mtime": 1786034163.0,
-    "seen": 1787436945.8466053,
+    "mtime": 1787957143.6917424,
+    "seen": 1788006346.4531162,
     "ast_hash": "618f56abe6c7e411fa92450109b1dd0a",
     "semantic_hash": "618f56abe6c7e411fa92450109b1dd0a"
   },
   "icarus-extension/src/main/java/icarus/autoauth/AutoAuthPreviewEditorProvider.java": {
-    "mtime": 1785516477.0,
-    "seen": 1787436945.846606,
+    "mtime": 1787957143.6918447,
+    "seen": 1788006346.4531176,
     "ast_hash": "dff564ef78948598ef73864ebbf48d0a",
     "semantic_hash": "dff564ef78948598ef73864ebbf48d0a"
   },
   "icarus-extension/src/main/java/icarus/core/Category.java": {
-    "mtime": 1787230237.2559633,
-    "seen": 1787436945.8466065,
+    "mtime": 1787957142.3056483,
+    "seen": 1788006346.4531188,
     "ast_hash": "55c73d70ab5f9cfd5612cd48e37575d8",
     "semantic_hash": "55c73d70ab5f9cfd5612cd48e37575d8"
   },
   "icarus-extension/src/main/java/icarus/core/EvidencePaths.java": {
-    "mtime": 1787230237.2559633,
-    "seen": 1787436945.8466072,
-    "ast_hash": "65cf8e0e00cd77c97500eca92c5e4871",
-    "semantic_hash": "65cf8e0e00cd77c97500eca92c5e4871"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.453122,
+    "ast_hash": "2f85180ca5435e13efd2ad9868cd9c8a",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/Finding.java": {
-    "mtime": 1787500716.633985,
-    "seen": 1787505526.6577425,
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.453123,
     "ast_hash": "d85bd3679185bfbb345ad4e5b7826b9b",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/FindingRecord.java": {
-    "mtime": 1785339477.0,
-    "seen": 1787436945.8466086,
+    "mtime": 1787957142.3097842,
+    "seen": 1788006346.453124,
     "ast_hash": "c3ca464c5cf30f2a16945a018d3f51eb",
     "semantic_hash": "c3ca464c5cf30f2a16945a018d3f51eb"
   },
   "icarus-extension/src/main/java/icarus/core/FindingRegistry.java": {
-    "mtime": 1787231698.882551,
-    "seen": 1787436945.846609,
-    "ast_hash": "d349a2e3c17c2bf441d1ab1ff978b787",
-    "semantic_hash": "d349a2e3c17c2bf441d1ab1ff978b787"
+    "mtime": 1787964261.8128507,
+    "seen": 1788006346.4531252,
+    "ast_hash": "b7392cf269d58fc7c3ff1bfb90052835",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/IcarusModule.java": {
-    "mtime": 1785324828.0,
-    "seen": 1787436945.8466096,
+    "mtime": 1787957187.553241,
+    "seen": 1788006346.4531274,
     "ast_hash": "fb3356a162d42c64fe508c75891d24d9",
     "semantic_hash": "fb3356a162d42c64fe508c75891d24d9"
   },
-  "icarus-extension/src/main/java/icarus/core/Json.java": {
-    "mtime": 1786584253.941057,
-    "seen": 1787436945.8466105,
-    "ast_hash": "2daa5cdba0ca08f39dc1cd90bf69d3a2",
-    "semantic_hash": "2daa5cdba0ca08f39dc1cd90bf69d3a2"
-  },
   "icarus-extension/src/main/java/icarus/core/JsonParser.java": {
-    "mtime": 1786642599.7729127,
-    "seen": 1787436945.846611,
+    "mtime": 1787957142.2996612,
+    "seen": 1788006346.4531283,
     "ast_hash": "9659bc158cb022620877126c66033fe9",
     "semantic_hash": "9659bc158cb022620877126c66033fe9"
   },
   "icarus-extension/src/main/java/icarus/core/JsonPaths.java": {
-    "mtime": 1785459018.0,
-    "seen": 1787436945.8466117,
+    "mtime": 1787957142.304253,
+    "seen": 1788006346.4531295,
     "ast_hash": "1c17857a66622a283b0f45d774d89236",
     "semantic_hash": "1c17857a66622a283b0f45d774d89236"
   },
   "icarus-extension/src/main/java/icarus/core/ModuleConfig.java": {
-    "mtime": 1787185636.6974943,
-    "seen": 1787436945.8466122,
-    "ast_hash": "d77b52b19953f68b2cc0c1da1a63507d",
-    "semantic_hash": "d77b52b19953f68b2cc0c1da1a63507d"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531317,
+    "ast_hash": "dd588963fc31b7fd4ebe772e3d59ec82",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/RawNumber.java": {
-    "mtime": 1785516477.0,
-    "seen": 1787436945.8466132,
+    "mtime": 1787957142.3030906,
+    "seen": 1788006346.4531338,
     "ast_hash": "836e28464d54fc82bd01dc4cecdeaa73",
     "semantic_hash": "836e28464d54fc82bd01dc4cecdeaa73"
   },
   "icarus-extension/src/main/java/icarus/core/ReportTemplateConfig.java": {
-    "mtime": 1787231698.882551,
-    "seen": 1787436945.8466141,
-    "ast_hash": "3aec50f1e86a04d15c58914708c2673f",
-    "semantic_hash": "3aec50f1e86a04d15c58914708c2673f"
+    "mtime": 1787963024.5501163,
+    "seen": 1788006346.4531348,
+    "ast_hash": "7c4826efd11a461712c1acd4e8f57bd1",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/Severity.java": {
-    "mtime": 1787231698.882551,
-    "seen": 1787436945.8466146,
+    "mtime": 1787957142.3028438,
+    "seen": 1788006346.4531362,
     "ast_hash": "16fcf1cf9d8ad84154f5e218c11eb2d3",
     "semantic_hash": "16fcf1cf9d8ad84154f5e218c11eb2d3"
   },
   "icarus-extension/src/main/java/icarus/core/VerboseErrorDetector.java": {
-    "mtime": 1787185628.0654957,
-    "seen": 1787436945.846615,
+    "mtime": 1787957142.3093727,
+    "seen": 1788006346.4531374,
     "ast_hash": "ecbaaf117d3a8a1bfa1d5d523c8bce01",
     "semantic_hash": "ecbaaf117d3a8a1bfa1d5d523c8bce01"
   },
   "icarus-extension/src/main/java/icarus/evidence/CweRepository.java": {
-    "mtime": 1785972086.0,
-    "seen": 1787436945.8466158,
+    "mtime": 1787957137.58002,
+    "seen": 1788006346.4531395,
     "ast_hash": "a086a19b82969ffac342e6c91c68f462",
     "semantic_hash": "a086a19b82969ffac342e6c91c68f462"
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceAnnotator.java": {
-    "mtime": 1787259772.1155221,
-    "seen": 1787436945.8466163,
-    "ast_hash": "4c225050755aeb33ad7971f433fd92c2",
-    "semantic_hash": "4c225050755aeb33ad7971f433fd92c2"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531405,
+    "ast_hash": "4debb1b4442d67684d4f6d36dfe31aa4",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceAutoRenderer.java": {
-    "mtime": 1787259827.8413436,
-    "seen": 1787436945.846617,
-    "ast_hash": "840eb7cd0040e680295fc8c3ddefa4a7",
-    "semantic_hash": "840eb7cd0040e680295fc8c3ddefa4a7"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531417,
+    "ast_hash": "bb307d38e3ec407367cb821ec8c56857",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java": {
-    "mtime": 1787231698.882551,
-    "seen": 1787436945.8466177,
-    "ast_hash": "7e747347287e9ab196e074707514b4c3",
-    "semantic_hash": "7e747347287e9ab196e074707514b4c3"
+    "mtime": 1787964273.20535,
+    "seen": 1788006346.453143,
+    "ast_hash": "a946bd08c9e287677a7d4aa6e3f58b9c",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceColorScheme.java": {
-    "mtime": 1785112211.0,
-    "seen": 1787436945.8466184,
-    "ast_hash": "92f87356de63f77722dda2e6b8dcc33a",
-    "semantic_hash": "92f87356de63f77722dda2e6b8dcc33a"
+    "mtime": 1787962029.9706652,
+    "seen": 1788006346.4531438,
+    "ast_hash": "fcc3986a75736639dff74a23b291fefd",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java": {
-    "mtime": 1787259106.243481,
-    "seen": 1787436945.846619,
-    "ast_hash": "d16d09c483c6988d4633dc54eb154075",
-    "semantic_hash": "d16d09c483c6988d4633dc54eb154075"
+    "mtime": 1788006320.081783,
+    "seen": 1788006346.453145,
+    "ast_hash": "c7ea7e7f2cd065f214372991598aa068",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidencePhase1Dialog.java": {
-    "mtime": 1787234547.0999506,
-    "seen": 1787436945.8466196,
-    "ast_hash": "876685f43d60641baa931c8f1e8fb74d",
-    "semantic_hash": "876685f43d60641baa931c8f1e8fb74d"
+    "mtime": 1787962416.828306,
+    "seen": 1788006346.4531462,
+    "ast_hash": "c505e4f9a552a994f6b1a07127a297d8",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidencePhase2Dialog.java": {
-    "mtime": 1787186695.4108186,
-    "seen": 1787436945.84662,
-    "ast_hash": "21dd6ef4c25834616014cd26aaa0ef3c",
-    "semantic_hash": "21dd6ef4c25834616014cd26aaa0ef3c"
+    "mtime": 1787962896.3502057,
+    "seen": 1788006346.4531472,
+    "ast_hash": "b1522e5668f38aafed8bb772ce18ee1d",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java": {
-    "mtime": 1787186653.4539676,
-    "seen": 1787436945.8466206,
-    "ast_hash": "80511d80a92d035779b7531f2c728af0",
-    "semantic_hash": "80511d80a92d035779b7531f2c728af0"
+    "mtime": 1787962409.2458117,
+    "seen": 1788006346.4531484,
+    "ast_hash": "9736e745a2d45bd818be489e74904738",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/MarkdownPdfRenderer.java": {
-    "mtime": 1786585115.2127945,
-    "seen": 1787436945.8466215,
-    "ast_hash": "58cb29dd77d53bf5165b32b0f562b83a",
-    "semantic_hash": "58cb29dd77d53bf5165b32b0f562b83a"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531496,
+    "ast_hash": "e22d9b2c13f54a6e357c059aa0dcf52e",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/PdfReportGenerator.java": {
-    "mtime": 1787254195.2849126,
-    "seen": 1787436945.8466222,
-    "ast_hash": "a85f9d60ac6abe7a071e644d6acf93b8",
-    "semantic_hash": "a85f9d60ac6abe7a071e644d6acf93b8"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531505,
+    "ast_hash": "7d4a83ae22c078c93852cc0bbcb29edb",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/ProjectStateCodec.java": {
-    "mtime": 1786585812.4845831,
-    "seen": 1787436945.8466227,
-    "ast_hash": "75b3098a69669335fa87b0a52b93bee3",
-    "semantic_hash": "75b3098a69669335fa87b0a52b93bee3"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531517,
+    "ast_hash": "8cd54891fac6f6db81c9cce1c638d3d4",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/RateLimitTableRenderer.java": {
-    "mtime": 1787230237.2559633,
-    "seen": 1787436945.8466306,
-    "ast_hash": "c4a898a425509d35ac8c6751d3622512",
-    "semantic_hash": "c4a898a425509d35ac8c6751d3622512"
+    "mtime": 1788006306.4617858,
+    "seen": 1788006346.4531527,
+    "ast_hash": "08aec0858378b4b0e8c2a3efcc9c9871",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/ReportGenerator.java": {
-    "mtime": 1787254183.4962695,
-    "seen": 1787436945.8466315,
-    "ast_hash": "869979a8a6cecd4010bec3de0efb68aa",
-    "semantic_hash": "869979a8a6cecd4010bec3de0efb68aa"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.453154,
+    "ast_hash": "09d61af8ed2f3257575adb1da870c278",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/mcp/HumanApprovalGate.java": {
-    "mtime": 1787230237.2559633,
-    "seen": 1787436945.846632,
+    "mtime": 1787957143.6919487,
+    "seen": 1788006346.453155,
     "ast_hash": "9dc64d1a8b1bde3c90991f7381067100",
     "semantic_hash": "9dc64d1a8b1bde3c90991f7381067100"
   },
   "icarus-extension/src/main/java/icarus/mcp/IcarusJsonSchemaValidator.java": {
-    "mtime": 1786709297.4160416,
-    "seen": 1787436945.8466327,
+    "mtime": 1787957143.693535,
+    "seen": 1788006346.4531562,
     "ast_hash": "e9a14fb162fde86e1d783aa6249bda21",
     "semantic_hash": "e9a14fb162fde86e1d783aa6249bda21"
   },
   "icarus-extension/src/main/java/icarus/mcp/IcarusMcpServer.java": {
-    "mtime": 1787259891.8519278,
-    "seen": 1787436945.8466332,
-    "ast_hash": "d1c54c22f99267d81a4dbaa435edee12",
-    "semantic_hash": "d1c54c22f99267d81a4dbaa435edee12"
+    "mtime": 1787960367.261648,
+    "seen": 1788006346.4531577,
+    "ast_hash": "87ab7922da0bd7881d7b768781639a50",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/mcp/IcarusMcpTransportProvider.java": {
-    "mtime": 1787153751.0126297,
-    "seen": 1787436945.846634,
+    "mtime": 1787957143.6936839,
+    "seen": 1788006346.4531589,
     "ast_hash": "371d9ff8e81bb70f79b3cb7e2cac4755",
     "semantic_hash": "371d9ff8e81bb70f79b3cb7e2cac4755"
   },
   "icarus-extension/src/main/java/icarus/mcp/package-info.java": {
-    "mtime": 1786709553.7639573,
-    "seen": 1787436945.8466344,
+    "mtime": 1787957143.692022,
+    "seen": 1788006346.45316,
     "ast_hash": "4feff54de0f2a829e637009e37f3b768",
     "semantic_hash": "4feff54de0f2a829e637009e37f3b768"
   },
   "icarus-extension/src/main/java/icarus/modules/HttpVerbModule.java": {
-    "mtime": 1786034163.0,
-    "seen": 1787436945.8466353,
-    "ast_hash": "49a0cee2a844ec3388a2ccaf50d4e0bc",
-    "semantic_hash": "49a0cee2a844ec3388a2ccaf50d4e0bc"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.453161,
+    "ast_hash": "4ca45087b42b2cc5ff7dd3630aa8a6b1",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/modules/JwtCheckerModule.java": {
-    "mtime": 1786034163.0,
-    "seen": 1787436945.8466358,
-    "ast_hash": "6cbb87bc9b265f3e7366e5adfbd3f048",
-    "semantic_hash": "6cbb87bc9b265f3e7366e5adfbd3f048"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531622,
+    "ast_hash": "f78a68b37ed19a0c5c2daa3a5c3bf6c8",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/modules/ParamValidatorModule.java": {
-    "mtime": 1787500972.4259412,
-    "seen": 1787505526.6577737,
-    "ast_hash": "20b2065545e7f7325dd3cf40bfa001e8",
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531631,
+    "ast_hash": "0d7c250604f31d93964fac2acb2d29d4",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/modules/PassiveErrorModule.java": {
-    "mtime": 1785459819.0,
-    "seen": 1787436945.846637,
+    "mtime": 1787957143.6878824,
+    "seen": 1788006346.4531646,
     "ast_hash": "ad4281d46ac298fb36e8db7dd8faedb1",
     "semantic_hash": "ad4281d46ac298fb36e8db7dd8faedb1"
   },
   "icarus-extension/src/main/java/icarus/modules/PostmanExportModule.java": {
-    "mtime": 1786586756.197677,
-    "seen": 1787436945.8466375,
+    "mtime": 1787957143.6875322,
+    "seen": 1788006346.4531665,
     "ast_hash": "83b70de314ecb20e372b227ba51f0fc3",
     "semantic_hash": "83b70de314ecb20e372b227ba51f0fc3"
   },
   "icarus-extension/src/main/java/icarus/modules/RateLimitModule.java": {
-    "mtime": 1787500942.473946,
-    "seen": 1787505526.6577766,
-    "ast_hash": "3861a1f287a8ca3877b7012ca7a9231e",
+    "mtime": 1787964810.345439,
+    "seen": 1788006346.4531677,
+    "ast_hash": "562931cec4d61a04ff2a6408421abfe2",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/modules/SensitiveHeaderModule.java": {
-    "mtime": 1787250801.9095294,
-    "seen": 1787436945.846639,
-    "ast_hash": "450dbf52704333577a57d5aff0953201",
-    "semantic_hash": "450dbf52704333577a57d5aff0953201"
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531686,
+    "ast_hash": "49355b38b8542fa68ee7a45f38064ff4",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ui/IcarusTab.java": {
-    "mtime": 1787062964.436042,
-    "seen": 1787436945.8466394,
-    "ast_hash": "094abcf6dce6028e2d1b7b5ad73524d6",
-    "semantic_hash": "094abcf6dce6028e2d1b7b5ad73524d6"
+    "mtime": 1787962716.2175634,
+    "seen": 1788006346.4531846,
+    "ast_hash": "9f5d64874b4a2907bd5d541f8a95404d",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ui/ReportingSettingsTab.java": {
-    "mtime": 1787231698.882551,
-    "seen": 1787436945.84664,
-    "ast_hash": "2e24745085dc28f7e4e10cd8b8169061",
-    "semantic_hash": "2e24745085dc28f7e4e10cd8b8169061"
+    "mtime": 1787962416.8135664,
+    "seen": 1788006346.4531865,
+    "ast_hash": "02c370e83f0e4e75b556f5ecb4360acb",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ui/SettingsPanel.java": {
-    "mtime": 1787185619.2454972,
-    "seen": 1787436945.8466406,
-    "ast_hash": "69187ceb23cea463dbd1e9c53f96f9e5",
-    "semantic_hash": "69187ceb23cea463dbd1e9c53f96f9e5"
+    "mtime": 1787964237.3363345,
+    "seen": 1788006346.453188,
+    "ast_hash": "1184e34b894fd0938ced430aba7662d9",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ui/ThemeHelper.java": {
-    "mtime": 1785110409.0,
-    "seen": 1787436945.8466413,
-    "ast_hash": "b541684b9f6df019c417b4dab05aec7b",
-    "semantic_hash": "b541684b9f6df019c417b4dab05aec7b"
+    "mtime": 1787962703.807127,
+    "seen": 1788006346.453189,
+    "ast_hash": "310e8d7161f2e17df3e4d568f2490c5c",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ui/ToastNotification.java": {
-    "mtime": 1785459908.0,
-    "seen": 1787436945.846642,
+    "mtime": 1787957152.374964,
+    "seen": 1788006346.45319,
     "ast_hash": "73fd311bee60cf48381ffa69e23823c3",
     "semantic_hash": "73fd311bee60cf48381ffa69e23823c3"
   },
   "icarus-extension/src/main/java/icarus/ui/evidence/EvidenceManagerTab.java": {
-    "mtime": 1787062920.7000473,
-    "seen": 1787436945.8466427,
-    "ast_hash": "7743f40e964b94f7d342530c2a391a19",
-    "semantic_hash": "7743f40e964b94f7d342530c2a391a19"
+    "mtime": 1787964299.9419153,
+    "seen": 1788006346.4531908,
+    "ast_hash": "91eb7035d8437a27ff5f85c223ded55d",
+    "semantic_hash": ""
   },
   "icarus-extension/src/main/resources/cwe_dataset.json": {
-    "mtime": 1785972073.0,
-    "seen": 1787436945.8466432,
+    "mtime": 1787956812.0051708,
+    "seen": 1788006346.4531922,
     "ast_hash": "cf508e732a018a58f351404391d763b2",
     "semantic_hash": "cf508e732a018a58f351404391d763b2"
   },
@@ -510,8 +504,8 @@
     "semantic_hash": "e696147d33ab250efdc22cf1421c9c6d"
   },
   "icarus-extension/docs_generated.md": {
-    "mtime": 1786135887.0,
-    "seen": 1787436945.8466642,
+    "mtime": 1787959864.2082314,
+    "seen": 1788006346.4532232,
     "ast_hash": "ac96740279d97755303d26e2b15a3d9c",
     "semantic_hash": "ac96740279d97755303d26e2b15a3d9c"
   },
@@ -558,8 +552,8 @@
     "semantic_hash": "21459d42f2bc94f7f4315c8a88e42798"
   },
   "icarus-extension/TestMontoya.java": {
-    "mtime": 1787500544.378015,
-    "seen": 1787505526.6577194,
+    "mtime": 1787959864.2082314,
+    "seen": 1788006346.453096,
     "ast_hash": "fc173efb35f615222a70241b315070f3",
     "semantic_hash": ""
   },
@@ -573,6 +567,354 @@
     "mtime": 1787437636.017298,
     "seen": 1787505526.6577864,
     "ast_hash": "6d73634a678cf1e1c71930adf80bd1f0",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/core/DebugLog.java": {
+    "mtime": 1787964224.312157,
+    "seen": 1788006346.4531202,
+    "ast_hash": "056ef8c654ad350f47c0b39f81b4b569",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/core/I18n.java": {
+    "mtime": 1787959938.2500682,
+    "seen": 1788006346.4531262,
+    "ast_hash": "cc2cc1b51e0f10022a3ec2722d070fe1",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/core/KnowledgeBaseEntry.java": {
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531305,
+    "ast_hash": "1ab190feed20a0c8912631f7a480d956",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/core/ProjectContextDetector.java": {
+    "mtime": 1787960352.8418894,
+    "seen": 1788006346.4531326,
+    "ast_hash": "d078aca4c5ee63a402d38dee7fa8b4ae",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/core/VulnerabilityKnowledgeBase.java": {
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531384,
+    "ast_hash": "9306ef1464a73d26f6723d468c6c2691",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/PayloadRepository.java": {
+    "mtime": 1787963501.8492987,
+    "seen": 1788006346.4531655,
+    "ast_hash": "7cef4977e781e9ff2d3d0117eb9261f8",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstArray.java": {
+    "mtime": 1787959864.212399,
+    "seen": 1788006346.4531696,
+    "ast_hash": "ed342d838da14469c6db25ad006979a1",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstLeaf.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.4531713,
+    "ast_hash": "08ad2419fef5fbca63b4532278fad134",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstMutationGenerator.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.453172,
+    "ast_hash": "2c3c807173d204ae03267fdd2c2524a2",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstNode.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.453173,
+    "ast_hash": "a82a02aa851252466318b5091da2d65e",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstObject.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.4531739,
+    "ast_hash": "7fab0456919a6ec68b171d3104c854a9",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstProperty.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.4531746,
+    "ast_hash": "ade85509ef33bd146902e995ea8a499d",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/AstSerializer.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.4531755,
+    "ast_hash": "33734f7067f34ab47248ec908d86f1de",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/OffensiveAstRoot.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.4531763,
+    "ast_hash": "054fa90428942ff70b98bbf730f0e442",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/OffensiveJsonParser.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.453177,
+    "ast_hash": "10c67966ba0b0f99496d058cf97be020",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/AstMutationResult.java": {
+    "mtime": 1787959864.2167733,
+    "seen": 1788006346.4531782,
+    "ast_hash": "ede37a8a3fc8304c23be4aab276b0733",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/AstVisitor.java": {
+    "mtime": 1787959864.217821,
+    "seen": 1788006346.453179,
+    "ast_hash": "38bb9974ba694d54111c71dac5261dd4",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/BaseAstVisitor.java": {
+    "mtime": 1787959864.217821,
+    "seen": 1788006346.4531798,
+    "ast_hash": "d6e3ac40c4fd684daed1b08a3100d5ac",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/HppMutator.java": {
+    "mtime": 1787959864.217821,
+    "seen": 1788006346.4531808,
+    "ast_hash": "1845f77a2fd835d49a8bb1e18938fc3b",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/LeafReplacementMutator.java": {
+    "mtime": 1787959864.217821,
+    "seen": 1788006346.4531815,
+    "ast_hash": "f6a9ee75be5babceda6ae716147ff33c",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/RawByteBoundaryMutator.java": {
+    "mtime": 1787959864.217821,
+    "seen": 1788006346.4531825,
+    "ast_hash": "e2260e349ba16ae89581829b4d94e89c",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/modules/ast/mutators/TypeConfusionMutator.java": {
+    "mtime": 1787959864.217821,
+    "seen": 1788006346.4531834,
+    "ast_hash": "66b56e8c0459e7e1ef519887d76e3e21",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/java/icarus/ui/KnowledgeBaseTab.java": {
+    "mtime": 1787959938.2601898,
+    "seen": 1788006346.4531856,
+    "ast_hash": "2c0af2091dacebb1af8b7064b0217a5a",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/activity.svg": {
+    "mtime": 1787962393.509588,
+    "seen": 1788006346.4532318,
+    "ast_hash": "42d31afe7b36d0e1c717f391706f421d",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/adjustments-horizontal.svg": {
+    "mtime": 1787962393.4760556,
+    "seen": 1788006346.453233,
+    "ast_hash": "9423e5b50b55d6175f8e760e55c1cb33",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/aperture.svg": {
+    "mtime": 1787962392.8905313,
+    "seen": 1788006346.453234,
+    "ast_hash": "c7f50eaf8269d5e710f5a56ce1421cba",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/arrow-down.svg": {
+    "mtime": 1787962392.4557424,
+    "seen": 1788006346.4532347,
+    "ast_hash": "d26481c0ae7875338389455ce1826768",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/arrow-left.svg": {
+    "mtime": 1787962393.0791168,
+    "seen": 1788006346.4532356,
+    "ast_hash": "805967fad871f9afbe561c50c3c45a9f",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/arrow-up-right.svg": {
+    "mtime": 1787962392.8178747,
+    "seen": 1788006346.4532366,
+    "ast_hash": "a82efd8877af6b350f57e32f50b610c5",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/arrow-up.svg": {
+    "mtime": 1787962392.4188213,
+    "seen": 1788006346.4532375,
+    "ast_hash": "05d45480feab40a4ae0efedce141a6ad",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/arrows-move.svg": {
+    "mtime": 1787962392.7444577,
+    "seen": 1788006346.4532382,
+    "ast_hash": "5b1745a337afb09e2e5fc6ffe319c389",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/camera.svg": {
+    "mtime": 1787962393.441839,
+    "seen": 1788006346.453239,
+    "ast_hash": "0a332724f6a97a4f9ff68c4d6ee75344",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/check.svg": {
+    "mtime": 1787962393.1859972,
+    "seen": 1788006346.4532402,
+    "ast_hash": "c3c8ab3fa984ca0e47386128fc66924d",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/chevron-down.svg": {
+    "mtime": 1787962392.3111415,
+    "seen": 1788006346.4532409,
+    "ast_hash": "919ed916d0445aaf1a7ffc54285fdaac",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/chevron-up.svg": {
+    "mtime": 1787962392.2494197,
+    "seen": 1788006346.4532416,
+    "ast_hash": "5aba58c32418eb6da6a75fda24189582",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/circle-minus.svg": {
+    "mtime": 1787962393.2559466,
+    "seen": 1788006346.4532425,
+    "ast_hash": "04b6576fd6f162936966ab2ae2436ec5",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/copy.svg": {
+    "mtime": 1787962392.9971426,
+    "seen": 1788006346.4532435,
+    "ast_hash": "6f250fee872693b2255cc4e9a967d1f8",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/corner-up-left.svg": {
+    "mtime": 1787962392.9252574,
+    "seen": 1788006346.4532442,
+    "ast_hash": "a250bbd35031a81645aaddf6934ab938",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/corner-up-right.svg": {
+    "mtime": 1787962392.5237515,
+    "seen": 1788006346.4532452,
+    "ast_hash": "1a6eb8b4a3698589ac4a33153380289c",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/cpu.svg": {
+    "mtime": 1787962393.4001248,
+    "seen": 1788006346.4532459,
+    "ast_hash": "89d2d4bef3e2781286a66be62d6c8ddb",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/device-floppy.svg": {
+    "mtime": 1787962392.9594924,
+    "seen": 1788006346.4532468,
+    "ast_hash": "d48f4ddd481a9d79edbfe3cf257bc4c2",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/download.svg": {
+    "mtime": 1787962392.382041,
+    "seen": 1788006346.4532478,
+    "ast_hash": "cc68b535aca1413e1cab5a07b88ffc02",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/external-link.svg": {
+    "mtime": 1787962392.346759,
+    "seen": 1788006346.4532485,
+    "ast_hash": "fcf005ad190de251dc5e1989bdd229d1",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/eye-off.svg": {
+    "mtime": 1787962392.8532386,
+    "seen": 1788006346.4532492,
+    "ast_hash": "836c365921eec95d2aad85703dc6376b",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/file-text.svg": {
+    "mtime": 1787962393.0436635,
+    "seen": 1788006346.45325,
+    "ast_hash": "41fdb29f3b72780e6854072f555641c6",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/folder.svg": {
+    "mtime": 1787962392.1748867,
+    "seen": 1788006346.4532511,
+    "ast_hash": "3f3e52be9c38b21aff2102806cbed5ec",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/key.svg": {
+    "mtime": 1787962393.3644238,
+    "seen": 1788006346.4532518,
+    "ast_hash": "b568bb4aa9406cc637116de82f2a7e41",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/lock.svg": {
+    "mtime": 1787962393.5459292,
+    "seen": 1788006346.4532526,
+    "ast_hash": "ab98d93a3790cbd0341b3363eb8112b5",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/menu-2.svg": {
+    "mtime": 1787962392.2101197,
+    "seen": 1788006346.4532533,
+    "ast_hash": "9adf835742c2db5125f386c5a147cac0",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/pencil.svg": {
+    "mtime": 1787962392.4879436,
+    "seen": 1788006346.4532542,
+    "ast_hash": "97404a7e9f154ec3d78a920326967b05",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/photo.svg": {
+    "mtime": 1787962393.150742,
+    "seen": 1788006346.4532552,
+    "ast_hash": "645560fd24dba52d48dfb248ee6fe2c6",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/plus.svg": {
+    "mtime": 1787962393.2910066,
+    "seen": 1788006346.453256,
+    "ast_hash": "5d6873e700141e5b47799c6c4834bdd8",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/refresh.svg": {
+    "mtime": 1787962393.114023,
+    "seen": 1788006346.4532568,
+    "ast_hash": "a5f8ee4d41f037481d5066de6d1d155c",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/scissors.svg": {
+    "mtime": 1787962393.2232683,
+    "seen": 1788006346.4532578,
+    "ast_hash": "7724764c593db0923ac603df523016fc",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/shield.svg": {
+    "mtime": 1787962393.331339,
+    "seen": 1788006346.4532588,
+    "ast_hash": "c9b729afd9d5ee3b17a9c81467716748",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/square.svg": {
+    "mtime": 1787962392.781139,
+    "seen": 1788006346.4532595,
+    "ast_hash": "ab4190e1d527d406e0e87943d1897bb6",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/trash.svg": {
+    "mtime": 1787962392.557343,
+    "seen": 1788006346.4532602,
+    "ast_hash": "14a84c79c0c2a3d9b3735efbf14e240b",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus/ui/resources/tabler/icons/x.svg": {
+    "mtime": 1787962392.5948036,
+    "seen": 1788006346.4532614,
+    "ast_hash": "bd952615e01565d14b42b892606c4005",
     "semantic_hash": ""
   }
 }

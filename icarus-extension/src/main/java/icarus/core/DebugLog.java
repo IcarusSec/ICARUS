@@ -85,8 +85,12 @@ public final class DebugLog {
             if (logFile == null) {
                 logFile = Path.of(EvidencePaths.defaultOutputDir(api, config)).resolve("icarus-debug.log");
             }
+            // SYNC: each line is force-flushed to physical disk before this call returns, so a
+            // freeze or hard JVM crash mid-diagnosis still leaves every line up to the hang on
+            // disk (the whole point of this logger). open/append/close per line, not a buffered
+            // writer held open, for the same reason.
             Files.writeString(logFile, line + System.lineSeparator(),
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+                    StandardOpenOption.CREATE, StandardOpenOption.APPEND, StandardOpenOption.SYNC);
         } catch (IOException ignored) {
             // Best-effort -- a logging failure must never be the thing that breaks the feature
             // being diagnosed.

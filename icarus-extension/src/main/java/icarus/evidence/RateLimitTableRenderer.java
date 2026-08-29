@@ -44,7 +44,7 @@ public BufferedImage renderRateLimitTable(Finding finding, boolean force1080) {
         int imgWidth = force1080 ? 1920 : 1200;
         int imgHeight = force1080 ? 1080 : 1200; // Gave it a bit more default vertical space to comfortably fit headers/body
 
-        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
+        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Catppuccin"));
 
         // Built once here (not inside drawRateLimitTable) because capture.imageRenderer.formatBody() can pop a
         // confirmation dialog for binary bodies — drawRateLimitTable retries itself with a

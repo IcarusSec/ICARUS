@@ -60,7 +60,7 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
             imgHeight = Math.max(300, calculatedHeight);
         }
 
-        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Minimal Dark"));
+        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Catppuccin"));
 
         BufferedImage img = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();

@@ -27,33 +27,97 @@ public record EvidenceColorScheme(
     private static final Map<String, EvidenceColorScheme> SCHEMES = new LinkedHashMap<>();
 
     static {
-        register(new EvidenceColorScheme("Slate Dark",
-            new Color(15, 23, 42),       // Canvas Background: #0f172a
-            new Color(8, 12, 23),        // Header Background: #080C17
-            new Color(255, 255, 255),    // Text/Values: #ffffff (High Contrast White)
-            new Color(203, 213, 225),    // Dim/Muted: #cbd5e1
-            new Color(29, 78, 216),      // Border/Divider: #1d4ed8 (Deep Royal Blue)
-            new Color(34, 211, 238),     // Title/Labels: #22d3ee (Cyan Accent)
-            new Color(34, 211, 238),     // Header Keys: #22d3ee (Cyan Accent)
-            new Color(250, 204, 21),     // JSON Keys: Yellowish
-            new Color(134, 239, 172),    // JSON Strings: Greenish
-            new Color(250, 204, 21),     // JSON Numbers: Yellow
-            new Color(74, 222, 128),     // 2xx Success: #4ade80 (Neon green)
-            new Color(56, 189, 248),     // 3xx Info: #38bdf8 (Bright blue)
-            new Color(250, 204, 21),     // 4xx Warning: #facc15 (Bright yellow)
-            new Color(248, 113, 113)     // 5xx Error: #f87171 (Bright red)
+        register(new EvidenceColorScheme("Catppuccin",
+            new Color(0x1E, 0x1E, 0x2E),   // Background: #1E1E2E (Base)
+            new Color(0x18, 0x18, 0x25),   // Header Background: #181825 (Mantle)
+            new Color(0xCD, 0xD6, 0xF4),   // Foreground: #CDD6F4 (Text)
+            new Color(0x6C, 0x70, 0x86),   // Dim/Comments: #6C7086
+            new Color(0x31, 0x32, 0x44),   // Divider: #313244 (Surface0)
+            new Color(0xCB, 0xA6, 0xF7),   // Title/Keywords (Mauve): #CBA6F7
+            new Color(0x89, 0xB4, 0xFA),   // Header Keys (Blue): #89B4FA
+            new Color(0xF9, 0xE2, 0xAF),   // JSON Keys (Yellow): #F9E2AF
+            new Color(0xA6, 0xE3, 0xA1),   // JSON Strings (Green): #A6E3A1
+            new Color(0xFA, 0xB3, 0x87),   // JSON Numbers (Peach): #FAB387
+            new Color(0xA6, 0xE3, 0xA1),   // 2xx Success (Green)
+            new Color(0x89, 0xDC, 0xEB),   // 3xx Info (Sky)
+            new Color(0xF9, 0xE2, 0xAF),   // 4xx Warning (Yellow)
+            new Color(0xF3, 0x8B, 0xA8)    // 5xx Error (Red)
         ));
 
-        register(new EvidenceColorScheme("Slate Light",
-            new Color(250, 251, 252), new Color(240, 243, 250),
-            new Color(15, 23, 42), new Color(100, 116, 139), new Color(230, 232, 242),
-            new Color(15, 23, 42), new Color(100, 116, 139),
-            new Color(34, 58, 210), new Color(21, 128, 61), new Color(29, 78, 216),
-            new Color(21, 128, 61), new Color(34, 58, 210), new Color(180, 130, 0), new Color(200, 40, 40)
+        register(new EvidenceColorScheme("Dracula",
+            new Color(0x28, 0x2A, 0x36),   // Background: #282A36
+            new Color(0x21, 0x22, 0x2C),   // Header Background: #21222C
+            new Color(0xF8, 0xF8, 0xF2),   // Foreground: #F8F8F2
+            new Color(0x62, 0x72, 0xA4),   // Dim/Comments: #6272A4
+            new Color(0x44, 0x47, 0x5A),   // Divider: #44475A (Current Line)
+            new Color(0xFF, 0x79, 0xC6),   // Title/Keywords (Pink): #FF79C6
+            new Color(0x8B, 0xE9, 0xFD),   // Header Keys (Cyan): #8BE9FD
+            new Color(0xBD, 0x93, 0xF9),   // JSON Keys (Purple): #BD93F9
+            new Color(0xF1, 0xFA, 0x8C),   // JSON Strings (Yellow): #F1FA8C
+            new Color(0xBD, 0x93, 0xF9),   // JSON Numbers (Purple): #BD93F9
+            new Color(0x50, 0xFA, 0x7B),   // 2xx Success (Green)
+            new Color(0x8B, 0xE9, 0xFD),   // 3xx Info (Cyan)
+            new Color(0xF1, 0xFA, 0x8C),   // 4xx Warning (Yellow)
+            new Color(0xFF, 0x55, 0x55)    // 5xx Error (Red)
+        ));
+
+        register(new EvidenceColorScheme("Nord",
+            new Color(0x2E, 0x34, 0x40),   // Background: #2E3440 (nord0)
+            new Color(0x24, 0x29, 0x33),   // Header Background: darker than nord0
+            new Color(0xD8, 0xDE, 0xE9),   // Foreground: #D8DEE9 (nord4)
+            new Color(0x4C, 0x56, 0x6A),   // Dim/Comments: #4C566A (nord3)
+            new Color(0x43, 0x4C, 0x5E),   // Divider: #434C5E (nord2)
+            new Color(0x81, 0xA1, 0xC1),   // Title/Keywords (Frost): #81A1C1 (nord9)
+            new Color(0x88, 0xC0, 0xD0),   // Header Keys (Frost Cyan): #88C0D0 (nord8)
+            new Color(0xEB, 0xCB, 0x8B),   // JSON Keys (Yellow): #EBCB8B (nord13)
+            new Color(0xA3, 0xBE, 0x8C),   // JSON Strings (Aurora Green): #A3BE8C (nord14)
+            new Color(0xB4, 0x8E, 0xAD),   // JSON Numbers (Purple): #B48EAD (nord15)
+            new Color(0xA3, 0xBE, 0x8C),   // 2xx Success (Green)
+            new Color(0x88, 0xC0, 0xD0),   // 3xx Info (Cyan)
+            new Color(0xEB, 0xCB, 0x8B),   // 4xx Warning (Yellow)
+            new Color(0xBF, 0x61, 0x6A)    // 5xx Error (nord11 Red)
+        ));
+
+        register(new EvidenceColorScheme("Gruvbox",
+            new Color(0x28, 0x28, 0x28),   // Background: #282828
+            new Color(0x1D, 0x20, 0x21),   // Header Background: #1D2021 (dark0_hard)
+            new Color(0xEB, 0xDB, 0xB2),   // Foreground: #EBDBB2
+            new Color(0x92, 0x83, 0x74),   // Dim/Comments: #928374
+            new Color(0x3C, 0x38, 0x36),   // Divider: #3C3836
+            new Color(0xFB, 0x49, 0x34),   // Title/Keywords (Red): #FB4934
+            new Color(0xFE, 0x80, 0x19),   // Header Keys (Orange): #FE8019
+            new Color(0xFA, 0xBD, 0x2F),   // JSON Keys (Yellow): #FABD2F
+            new Color(0xB8, 0xBB, 0x26),   // JSON Strings (Green): #B8BB26
+            new Color(0xD3, 0x86, 0x9B),   // JSON Numbers (Purple): #D3869B
+            new Color(0xB8, 0xBB, 0x26),   // 2xx Success (Green)
+            new Color(0x83, 0xA5, 0x98),   // 3xx Info (Blue)
+            new Color(0xFA, 0xBD, 0x2F),   // 4xx Warning (Yellow)
+            new Color(0xFB, 0x49, 0x34)    // 5xx Error (Red)
+        ));
+
+        // Custom theme built for security researchers, from PortSwigger's own brand palette --
+        // deep navy canvas, Burp orange for logic/titles, electric cyan for functions/headers.
+        register(new EvidenceColorScheme("Burp Proxy Night",
+            new Color(0x06, 0x07, 0x38),   // Background (Deep Cove): #060738
+            new Color(0x04, 0x05, 0x2A),   // Header Background: darker navy
+            new Color(0xF2, 0xFA, 0xFC),   // Foreground (Polar White): #F2FAFC
+            new Color(0x4E, 0x53, 0x8A),   // Dim/Comments (Muted Indigo): #4E538A
+            new Color(0x23, 0x26, 0x5C),   // Divider: mid navy
+            new Color(0xFF, 0x66, 0x33),   // Title/Keywords (Outrageous Orange): #FF6633
+            new Color(0x00, 0xD1, 0xFF),   // Header Keys/Functions (Electric Cyan): #00D1FF
+            new Color(0xFF, 0xD1, 0x66),   // JSON Keys (Gold): #FFD166
+            new Color(0x00, 0xE6, 0x76),   // JSON Strings (Status 200 Green): #00E676
+            new Color(0x00, 0xD1, 0xFF),   // JSON Numbers (Electric Cyan): #00D1FF
+            new Color(0x00, 0xE6, 0x76),   // 2xx Success (Status 200 Green)
+            new Color(0x00, 0xD1, 0xFF),   // 3xx Info (Electric Cyan)
+            new Color(0xFF, 0x66, 0x33),   // 4xx Warning (Outrageous Orange)
+            new Color(0xFF, 0x00, 0x33)    // 5xx Error (Critical Red): #FF0033
         ));
     }
 
-    private static void register(EvidenceColorScheme scheme) {
+    /** Registers a color scheme by name, overwriting any existing scheme with the same name.
+     *  Public so other modules (e.g. a future custom-palette settings UI) can add their own. */
+    public static void register(EvidenceColorScheme scheme) {
         SCHEMES.put(scheme.name(), scheme);
     }
 

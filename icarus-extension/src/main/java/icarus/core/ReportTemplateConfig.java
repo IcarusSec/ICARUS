@@ -200,10 +200,10 @@ public final class ReportTemplateConfig {
     private String mapRiscoToSeverity(String risco) {
         if (risco == null) return "INFO";
         return switch (risco.toLowerCase()) {
-            case "extremo", "crítico", "critico" -> "CRITICAL";
-            case "alto" -> "HIGH";
-            case "médio", "medio" -> "MEDIUM";
-            case "baixo" -> "LOW";
+            case "critical", "extremo", "crítico", "critico" -> "CRITICAL";
+            case "high", "alto" -> "HIGH";
+            case "medium", "médio", "medio" -> "MEDIUM";
+            case "low", "baixo" -> "LOW";
             default -> "INFO";
         };
     }

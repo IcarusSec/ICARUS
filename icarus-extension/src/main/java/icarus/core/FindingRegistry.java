@@ -125,6 +125,10 @@ public final class FindingRegistry {
      */
     public List<Finding> processDeduplication(List<Finding> findings, boolean passive) {
         List<Finding> actionable = new ArrayList<>();
+        // One UI notification for the whole batch, fired once at the end (see the bottom of
+        // this method), not one per finding. A Rate Limit blast hands this method dozens of
+        // findings at once and its ~1500 responses each re-enter it via the passive scan; a
+        // notify per finding used to queue thousands of full-UI rebuilds and freeze Burp.
         boolean changed = false;
 
         for (var finding : findings) {
@@ -156,6 +160,9 @@ public final class FindingRegistry {
                 changed = true;
             }
         }
+        // Single fan-out for the batch. notifyListenersOfUpdate() itself also coalesces
+        // concurrent bursts (fanOutPending), so overlapping passive-scan re-entries collapse
+        // to one repaint too.
         if (changed) notifyListenersOfUpdate();
         return actionable;
     }

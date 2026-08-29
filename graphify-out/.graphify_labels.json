@@ -100,7 +100,7 @@
   "98": ".buildUI",
   "99": ".KnowledgeBaseTab",
   "100": "DebugLog",
-  "101": "TargetKind",
+  "101": ".loadSession",
   "102": "ProjectContextDetector",
   "103": "FooterPageEvent",
   "104": ".handleHttpResponseReceived"

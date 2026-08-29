@@ -1,7 +1,7 @@
 # Graph Report - BurpCustomActions  (2026-08-29)
 
 ## Corpus Check
-- 105 files · ~638,803 words
+- 105 files · ~641,401 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1c7a463d`
+- Built from commit: `14b88cd1`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -112,7 +112,6 @@
 - .buildUI
 - .KnowledgeBaseTab
 - DebugLog
-- TargetKind
 - ProjectContextDetector
 - FooterPageEvent
 - .handleHttpResponseReceived
@@ -161,8 +160,8 @@ Cohesion: 0.12
 Nodes (13): GridBagConstraints, EvidenceManagerTab, Component, JPanel, CardPanel, Component, JPanel, JScrollPane (+5 more)
 
 ### Community 1 - "AutoAuthModule"
-Cohesion: 0.20
-Nodes (4): AutoAuthModule, InjectionTarget, Source, java.util.concurrent.locks.ReentrantLock
+Cohesion: 0.22
+Nodes (5): AutoAuthModule, InjectionTarget, TargetKind, BODY, HEADER
 
 ### Community 2 - "FindingRegistry"
 Cohesion: 0.12
@@ -237,8 +236,8 @@ Cohesion: 0.09
 Nodes (18): Category, ACCESS_CONTROL, BOUNDARY, EXPORT, HEADER_LEAK, HEADER_MISSING, HTTP_METHOD, INFORMATION_DISCLOSURE (+10 more)
 
 ### Community 22 - ".injectIfApplicable"
-Cohesion: 0.25
-Nodes (3): burp.api.montoya.http.handler.HttpRequestToBeSent, HttpRequestToBeSent, RequestToBeSentAction
+Cohesion: 0.17
+Nodes (5): burp.api.montoya.http.handler.HttpRequestToBeSent, Source, HttpRequestToBeSent, java.util.concurrent.locks.ReentrantLock, RequestToBeSentAction
 
 ### Community 23 - "java.awt.image.BufferedImage"
 Cohesion: 0.22
@@ -415,10 +414,6 @@ Nodes (6): DefaultListModel, IcarusTab, Component, DefaultTableModel, JPanel, Co
 ### Community 99 - ".KnowledgeBaseTab"
 Cohesion: 0.28
 Nodes (6): Component, DefaultTableModel, JPanel, JTable, KnowledgeBaseTab, JButton
-
-### Community 101 - "TargetKind"
-Cohesion: 0.67
-Nodes (3): TargetKind, BODY, HEADER
 
 ### Community 102 - "ProjectContextDetector"
 Cohesion: 0.31

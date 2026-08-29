@@ -36,14 +36,17 @@ if [ ! -f "libs/commons-csv-1.10.0.jar" ]; then
 fi
 
 EXTRA_LIBS=(
+  "com/formdev/flatlaf/3.4.1/flatlaf-3.4.1.jar"
   "com/formdev/flatlaf-extras/3.4.1/flatlaf-extras-3.4.1.jar"
   "com/github/weisj/jsvg/1.4.0/jsvg-1.4.0.jar"
   "com/fifesoft/rsyntaxtextarea/3.3.3/rsyntaxtextarea-3.3.3.jar"
   "org/jsoup/jsoup/1.17.2/jsoup-1.17.2.jar"
 )
-COMPILE_ONLY_LIBS=(
-  "com/formdev/flatlaf/3.4.1/flatlaf-3.4.1.jar"
-)
+# Previously compile-only, on the (wrong) assumption Burp's own runtime already exposes
+# FlatLaf to extensions -- it doesn't (ClassNotFoundException on FlatLaf$DisabledIconProvider
+# the moment FlatSVGIcon's constructor actually runs), so it has to ship in our jar like
+# flatlaf-extras already does.
+COMPILE_ONLY_LIBS=()
 for path in "${EXTRA_LIBS[@]}" "${COMPILE_ONLY_LIBS[@]}"; do
     jarfile="libs/$(basename "$path")"
     if [ ! -f "$jarfile" ]; then

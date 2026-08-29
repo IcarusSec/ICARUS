@@ -18,7 +18,7 @@ import java.awt.*;
 public class ThemeHelper {
 
     // ICARUS Theme Colors
-    private static final Color COLOR_PRIMARY_NAVY = Color.decode("#002F6C");
+    private static final Color COLOR_PRIMARY_ACCENT = Color.decode("#FF6633"); // Burp/ICARUS orange
     private static final Color COLOR_NEUTRAL_SLATE_LIGHT = Color.decode("#4A5568");
     private static final Color COLOR_NEUTRAL_SLATE_DARK = Color.decode("#A0AEC0");
     private static final Color COLOR_BACKGROUND_LIGHT = Color.decode("#FFFFFF");
@@ -34,7 +34,7 @@ public class ThemeHelper {
     private static final Color LIGHT_BORDER = new Color(200, 200, 200);
     private static final Color DARK_BORDER = new Color(85, 85, 85);
     private static final Color LIGHT_SELECTION_BG = new Color(210, 210, 210);
-    private static final Color DARK_SELECTION_BG = new Color(75, 110, 175);
+    private static final Color DARK_SELECTION_BG = new Color(184, 82, 32); // Muted orange accent
 
     private final UserInterface ui;
 
@@ -97,7 +97,7 @@ public class ThemeHelper {
      */
     public JButton createPrimaryButton(String text) {
         JButton button = new JButton(text);
-        button.setBackground(COLOR_PRIMARY_NAVY);
+        button.setBackground(COLOR_PRIMARY_ACCENT);
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
         button.setFont(button.getFont().deriveFont(Font.BOLD));
@@ -119,7 +119,7 @@ public class ThemeHelper {
      */
     public JLabel createHeaderLabel(String text) {
         JLabel label = new JLabel(text);
-        label.setForeground(isDarkTheme() ? COLOR_NEUTRAL_SLATE_DARK : COLOR_PRIMARY_NAVY);
+        label.setForeground(isDarkTheme() ? COLOR_NEUTRAL_SLATE_DARK : COLOR_PRIMARY_ACCENT);
         label.setFont(label.getFont().deriveFont(Font.BOLD, 14f));
         return label;
     }
@@ -142,7 +142,7 @@ public class ThemeHelper {
                 javax.swing.border.TitledBorder.LEFT, 
                 javax.swing.border.TitledBorder.TOP,
                 ui.currentTheme() == Theme.DARK ? UIManager.getFont("TitledBorder.font") : null,
-                isDarkTheme() ? COLOR_NEUTRAL_SLATE_DARK : COLOR_PRIMARY_NAVY);
+                isDarkTheme() ? COLOR_NEUTRAL_SLATE_DARK : COLOR_PRIMARY_ACCENT);
         return new CompoundBorder(titled, margin);
     }
 

@@ -354,14 +354,14 @@ public class IcarusTab {
         btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
 
         JButton btnGenerateReport = new JButton(I18n.t("ui.tab.results.btn.generate_html"));
-        btnGenerateReport.setBackground(new Color(62, 123, 184)); // Primary accent
+        btnGenerateReport.setBackground(new Color(255, 102, 51)); // Primary accent (ICARUS orange)
         btnGenerateReport.setForeground(Color.WHITE);
         btnGenerateReport.setFocusPainted(false);
         // We keep themeHelper from overriding background by styling it partially.
         // Wait, themeHelper.styleButton overrides background and foreground.
         // We do it after themeHelper.styleButton.
         themeHelper.styleButton(btnGenerateReport);
-        btnGenerateReport.setBackground(new Color(62, 123, 184));
+        btnGenerateReport.setBackground(new Color(255, 102, 51));
         btnGenerateReport.setForeground(Color.WHITE);
         
         btnGenerateReport.addActionListener(e -> {

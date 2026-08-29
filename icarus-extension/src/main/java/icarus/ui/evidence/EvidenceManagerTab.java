@@ -990,7 +990,7 @@ public class EvidenceManagerTab {
 
         JPanel rootPanel = new JPanel(new BorderLayout());
         rootPanel.setBackground(new Color(18, 24, 36)); // ICARUS dark palette COLOR_BACKGROUND (#121824)
-        rootPanel.setBorder(BorderFactory.createLineBorder(new Color(0, 47, 108), 2)); // COLOR_PRIMARY_NAVY (#002F6C)
+        rootPanel.setBorder(BorderFactory.createLineBorder(new Color(255, 102, 51), 2)); // ICARUS orange accent (#FF6633)
 
         // Close on clicking root panel background
         rootPanel.addMouseListener(new MouseAdapter() {

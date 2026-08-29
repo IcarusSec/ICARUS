@@ -29,6 +29,20 @@ import java.time.format.DateTimeFormatter;
  */
 public class RateLimitModule implements IcarusModule {
 
+    // Hard safety ceilings on the two dialog fields that directly control thread/socket
+    // fan-out -- see the clamp in run() for why. Generous enough for real rate-limit testing
+    // (a threshold is almost always found well under 5000 requests / 100 concurrent threads);
+    // not configurable, since the whole point is a floor under a typo or an overly aggressive
+    // value someone pastes in without thinking about it.
+    private static final int MAX_REQUEST_COUNT = 5000;
+    private static final int MAX_CONCURRENCY = 100;
+
+    // Per-request blast-log/audit-table entries stored verbatim in the resulting Finding's
+    // metadata (and from there, in every subsequent persisted-state save and report render).
+    // Capped independently of MAX_REQUEST_COUNT so a future change to that ceiling doesn't
+    // silently re-open unbounded metadata growth.
+    private static final int MAX_LOG_ENTRIES = 1000;
+
     private final MontoyaApi api;
 
     public RateLimitModule(MontoyaApi api) {
@@ -114,6 +128,21 @@ public class RateLimitModule implements IcarusModule {
         }
 
         if (!proceed[0]) return List.of();
+
+        // Both values come straight from a user-editable dialog field (or a persisted
+        // "don't ask again" choice from one) with no upper bound. Concurrency in particular
+        // maps directly to Executors.newFixedThreadPool(concurrency) below -- an unclamped
+        // value in the thousands spins up that many native OS threads immediately (each with
+        // its own ~1MB default stack), which is enough to crash the JVM Burp itself runs in,
+        // not just this extension.
+        if (params[0] > MAX_REQUEST_COUNT || params[1] > MAX_CONCURRENCY) {
+            logger.accept(String.format(
+                    "Rate Limit Tester: requested %d requests / %d threads exceeds the safety cap "
+                    + "(%d requests, %d threads) -- clamping to avoid crashing Burp.",
+                    params[0], params[1], MAX_REQUEST_COUNT, MAX_CONCURRENCY));
+        }
+        params[0] = Math.max(1, Math.min(params[0], MAX_REQUEST_COUNT));
+        params[1] = Math.max(1, Math.min(params[1], MAX_CONCURRENCY));
 
         int totalRequests = params[0];
         int concurrency = params[1];
@@ -309,6 +338,8 @@ public class RateLimitModule implements IcarusModule {
     private static final int SKIPPED_STATUS = -1;
 
     private BlastResult blastWithMutator(int count, int concurrency, int maxRps, java.util.function.IntFunction<HttpRequest> mutator, Consumer<String> logger) {
+        DebugLog.log("RateLimitModule.blastWithMutator starting: count=" + count + " concurrency=" + concurrency + " maxRps=" + maxRps);
+        long blastStart = System.currentTimeMillis();
         ExecutorService pool = Executors.newFixedThreadPool(concurrency);
         List<Future<SingleResult>> futures = new ArrayList<>();
         AtomicInteger blockCount = new AtomicInteger(0);
@@ -394,20 +425,31 @@ public class RateLimitModule implements IcarusModule {
         // Sort by index to preserve order
         results.sort((a, b) -> Integer.compare(a.index, b.index));
 
+        DebugLog.log("RateLimitModule.blastWithMutator finished: " + results.size() + " results in "
+                + (System.currentTimeMillis() - blastStart) + "ms");
         return analyzeResults(results, sentCount.get());
     }
 
     private BlastResult analyzeResults(List<SingleResult> results, int requestsSent) {
         if (results.isEmpty()) return new BlastResult(-1, 0, 0, null, "", requestsSent, false, "");
 
+        // Both the compact log and the audit table are stored verbatim in the resulting
+        // Finding's metadata -- capped independently of the request-count ceiling above (see
+        // MAX_LOG_ENTRIES) so this stays bounded even if that ceiling ever changes.
+        List<SingleResult> logResults = results.size() > MAX_LOG_ENTRIES ? results.subList(0, MAX_LOG_ENTRIES) : results;
         StringBuilder sb = new StringBuilder();
-        for (SingleResult r : results) {
+        for (SingleResult r : logResults) {
             sb.append(r.index).append(":")
               .append(r.status).append(":")
               .append(r.elapsedMs).append(";");
         }
+        if (results.size() > MAX_LOG_ENTRIES) {
+            sb.append("...[").append(results.size() - MAX_LOG_ENTRIES).append(" more entries truncated]");
+        }
         String log = sb.toString();
-        String auditTable = buildAuditTable(results);
+        String auditTable = buildAuditTable(logResults)
+                + (results.size() > MAX_LOG_ENTRIES
+                        ? "... [" + (results.size() - MAX_LOG_ENTRIES) + " more entries truncated]\n" : "");
 
         // A single 0/500/502/504 can be a transient blip — mirror the block-detection
         // debounce and only trust a server crash once 3+ requests confirm it.

@@ -11,8 +11,8 @@ import java.util.List;
 public class PayloadRepository {
 
     public static final List<String> CANARY_PROBES = Arrays.asList(
-        "corp_probe_123'\"",
-        "corp_probe_<>"
+        "icarus_probe_123'\"",
+        "icarus_probe_<>"
     );
 
     public static final List<String> SQLI_TIME = Arrays.asList(

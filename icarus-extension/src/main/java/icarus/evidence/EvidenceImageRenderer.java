@@ -435,7 +435,8 @@ public String toHexDump(byte[] data) {
 public static int drawHeaderLogo(Graphics2D g, int bannerHeight) {
         int textX = EvidenceCapture.HEADER_LOGO_CENTER_X + EvidenceCapture.HEADER_LOGO_SIZE / 2 + 8;
         if (EvidenceCapture.LOGO == null) return 20;
-        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         int x = EvidenceCapture.HEADER_LOGO_CENTER_X - EvidenceCapture.HEADER_LOGO_SIZE / 2;
         int y = (bannerHeight - EvidenceCapture.HEADER_LOGO_SIZE) / 2;
         g.drawImage(EvidenceCapture.LOGO, x, y, EvidenceCapture.HEADER_LOGO_SIZE, EvidenceCapture.HEADER_LOGO_SIZE, null);

@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceImageRenderer.java": {
-    "mtime": 1788006320.081783,
-    "seen": 1788006346.453145,
-    "ast_hash": "c7ea7e7f2cd065f214372991598aa068",
+    "mtime": 1788011336.9589956,
+    "seen": 1788011354.0668142,
+    "ast_hash": "f283a99d63671216e50f14ca411b9cfa",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidencePhase1Dialog.java": {
@@ -915,6 +915,18 @@
     "mtime": 1787962392.5948036,
     "seen": 1788006346.4532614,
     "ast_hash": "bd952615e01565d14b42b892606c4005",
+    "semantic_hash": ""
+  },
+  ".images/logo_nobg.png": {
+    "mtime": 1788011250.5531278,
+    "seen": 1788011354.066893,
+    "ast_hash": "3e45ca59a50fc88b32ca3cf80d867b67",
+    "semantic_hash": ""
+  },
+  "icarus-extension/src/main/resources/icarus_logo.png": {
+    "mtime": 1788011325.137541,
+    "seen": 1788011354.0669305,
+    "ast_hash": "3e45ca59a50fc88b32ca3cf80d867b67",
     "semantic_hash": ""
   }
 }

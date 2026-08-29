@@ -45,11 +45,13 @@ public final class EvidenceCapture {
     public static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
     public static final int BINARY_TRUNCATE_BYTES = 2048;
 
-    public static final int HEADER_LOGO_SIZE = 64;
-    // Fixed at the old logo's center (left=20, size=48 -> center=44) so growing HEADER_LOGO_SIZE
-    // expands the logo in place instead of shifting where it visually sits.
+    public static final int HEADER_LOGO_SIZE = 38;
+    // Fixed at the old logo's center (left=20, size=48 -> center=44) so changing HEADER_LOGO_SIZE
+    // resizes the logo in place instead of shifting where it visually sits.
     public static final int HEADER_LOGO_CENTER_X = 44;
-    public static final BufferedImage LOGO = EvidenceImageRenderer.loadScaledLogo(HEADER_LOGO_SIZE);
+    // Prescaled to 3x the display size: drawHeaderLogo then draws it down to HEADER_LOGO_SIZE
+    // with bilinear interpolation, which supersamples away the jaggies a direct small render has.
+    public static final BufferedImage LOGO = EvidenceImageRenderer.loadScaledLogo(HEADER_LOGO_SIZE * 3);
 
     
 

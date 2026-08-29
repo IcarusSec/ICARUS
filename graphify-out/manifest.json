@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/ScanRunner.java": {
-    "mtime": 1787959864.2082314,
-    "seen": 1788006346.4531152,
-    "ast_hash": "5f268ca5728ccf6261677628e92e6738",
+    "mtime": 1788008031.5606828,
+    "seen": 1788008520.3730586,
+    "ast_hash": "b1a02736072449988476fceae63c35b8",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/autoauth/AutoAuthModule.java": {
@@ -312,9 +312,9 @@
     "semantic_hash": "83b70de314ecb20e372b227ba51f0fc3"
   },
   "icarus-extension/src/main/java/icarus/modules/RateLimitModule.java": {
-    "mtime": 1787964810.345439,
-    "seen": 1788006346.4531677,
-    "ast_hash": "562931cec4d61a04ff2a6408421abfe2",
+    "mtime": 1788008495.3952172,
+    "seen": 1788008520.373117,
+    "ast_hash": "9bf11a1d88f258ba8539dbcbbbe0265d",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/modules/SensitiveHeaderModule.java": {

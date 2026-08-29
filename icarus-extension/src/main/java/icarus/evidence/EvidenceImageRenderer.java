@@ -450,7 +450,7 @@ public static BufferedImage loadScaledLogo(int targetSize) {
         } catch (IOException e) {
             return null;
         }
-        // Source is 500x500; scaling straight to ~48px in one bilinear pass looks soft/blocky.
+        // Source is ~1254x1254; scaling straight to ~48px in one bilinear pass looks soft/blocky.
         // Halving repeatedly until close to the target size (then one final pass) keeps each
         // step's downscale ratio small, which is what actually produces a crisp result.
         BufferedImage cur = src;

@@ -95,23 +95,40 @@ public record EvidenceColorScheme(
             new Color(0xFB, 0x49, 0x34)    // 5xx Error (Red)
         ));
 
-        // Custom theme built for security researchers, from PortSwigger's own brand palette --
-        // deep navy canvas, Burp orange for logic/titles, electric cyan for functions/headers.
-        register(new EvidenceColorScheme("Burp Proxy Night",
-            new Color(0x06, 0x07, 0x38),   // Background (Deep Cove): #060738
-            new Color(0x04, 0x05, 0x2A),   // Header Background: darker navy
-            new Color(0xF2, 0xFA, 0xFC),   // Foreground (Polar White): #F2FAFC
-            new Color(0x4E, 0x53, 0x8A),   // Dim/Comments (Muted Indigo): #4E538A
-            new Color(0x23, 0x26, 0x5C),   // Divider: mid navy
-            new Color(0xFF, 0x66, 0x33),   // Title/Keywords (Outrageous Orange): #FF6633
-            new Color(0x00, 0xD1, 0xFF),   // Header Keys/Functions (Electric Cyan): #00D1FF
-            new Color(0xFF, 0xD1, 0x66),   // JSON Keys (Gold): #FFD166
-            new Color(0x00, 0xE6, 0x76),   // JSON Strings (Status 200 Green): #00E676
-            new Color(0x00, 0xD1, 0xFF),   // JSON Numbers (Electric Cyan): #00D1FF
-            new Color(0x00, 0xE6, 0x76),   // 2xx Success (Status 200 Green)
-            new Color(0x00, 0xD1, 0xFF),   // 3xx Info (Electric Cyan)
-            new Color(0xFF, 0x66, 0x33),   // 4xx Warning (Outrageous Orange)
-            new Color(0xFF, 0x00, 0x33)    // 5xx Error (Critical Red): #FF0033
+        // Authentic Burp Suite FlatLaf / Darcula dark theme
+        register(new EvidenceColorScheme("Burp Carbon",
+            new Color(0x2B, 0x2B, 0x2B),   // Background: #2B2B2B (Authentic Burp charcoal)
+            new Color(0x21, 0x21, 0x21),   // Header Background: Darker neutral slate
+            new Color(0xA9, 0xB7, 0xC6),   // Text/Foreground: Soft off-white (Darcula base)
+            new Color(0x70, 0x70, 0x70),   // Dim/Comments: Neutral gray
+            new Color(0x3C, 0x3F, 0x41),   // Divider: Subtle FlatLaf border
+            new Color(0xFF, 0x66, 0x33),   // Title/Keywords: Iconic PortSwigger Orange (#FF6633)
+            new Color(0xCC, 0x78, 0x32),   // Header Keys: Darcula warm brown-orange
+            new Color(0x98, 0x76, 0xAA),   // JSON Keys: Muted Lilac/Purple
+            new Color(0x6A, 0x87, 0x59),   // JSON Strings: Olive/Sage Green
+            new Color(0x68, 0x97, 0xBB),   // JSON Numbers: Soft Steel Blue
+            new Color(0x6A, 0x87, 0x59),   // 2xx Success: Olive Green
+            new Color(0x68, 0x97, 0xBB),   // 3xx Info: Soft Steel Blue
+            new Color(0xFF, 0xC6, 0x6D),   // 4xx Warning: Soft Gold
+            new Color(0xFF, 0x6B, 0x68)    // 5xx Error: Muted Coral Red
+        ));
+
+        // Modern Midnight Navy theme with PortSwigger Orange accents
+        register(new EvidenceColorScheme("Burp Midnight",
+            new Color(0x0F, 0x14, 0x23),   // Background: Desaturated Midnight Slate (no vibration)
+            new Color(0x0A, 0x0D, 0x17),   // Header Background: Inset dark slate
+            new Color(0xDE, 0xE4, 0xED),   // Text/Foreground: Softened icy white
+            new Color(0x60, 0x6A, 0x86),   // Dim/Comments: Cool Slate Gray
+            new Color(0x22, 0x29, 0x3D),   // Divider: Mid-slate boundary
+            new Color(0xFF, 0x70, 0x43),   // Title/Keywords: Bright Coral/Burp Orange
+            new Color(0x66, 0xC3, 0xCC),   // Header Keys: Muted Teal
+            new Color(0xE5, 0xC0, 0x7B),   // JSON Keys: Warm Honey Gold
+            new Color(0x98, 0xC3, 0x79),   // JSON Strings: Soft Sage Green
+            new Color(0x66, 0xC3, 0xCC),   // JSON Numbers: Muted Teal
+            new Color(0x98, 0xC3, 0x79),   // 2xx Success: Soft Sage Green
+            new Color(0x56, 0xB6, 0xC2),   // 3xx Info: Soft Cyan
+            new Color(0xE5, 0xC0, 0x7B),   // 4xx Warning: Warm Honey Gold
+            new Color(0xE0, 0x6C, 0x75)    // 5xx Error: Rose/Crimson Alert
         ));
     }
 

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -24,6 +25,15 @@ public final class FindingRegistry {
     private final Map<String, FindingRecord> activeFindings = new ConcurrentHashMap<>();
     private final List<String> auditLog = new ArrayList<>();
     private final List<Consumer<List<FindingRecord>>> listeners = new ArrayList<>();
+
+    // Set while a listener fan-out is already queued on the UI thread but hasn't run yet.
+    // A rate-limit blast (or any bulk scan) can call notifyListenersOfUpdate() hundreds of
+    // times in a burst — one per deduped finding, plus one per passive-scan hit on each of
+    // the ~1500 blast responses. Each fan-out fully rebuilds every listener's UI (the whole
+    // findings JTable, etc.), so without coalescing the EDT drowns in thousands of redundant
+    // rebuilds and Burp freezes. The queued fan-out already reads activeFindings fresh, so
+    // collapsing a storm of calls into one repaint loses nothing.
+    private final AtomicBoolean fanOutPending = new AtomicBoolean(false);
 
     public FindingRegistry(MontoyaApi api, ModuleConfig config, Consumer<Runnable> uiDispatcher) {
         this.api = api;
@@ -115,6 +125,7 @@ public final class FindingRegistry {
      */
     public List<Finding> processDeduplication(List<Finding> findings, boolean passive) {
         List<Finding> actionable = new ArrayList<>();
+        boolean changed = false;
 
         for (var finding : findings) {
             String hash = finding.similarityHash();
@@ -127,7 +138,7 @@ public final class FindingRegistry {
                 record.incrementCount();
                 record.updateFinding(finding); // Keep the latest evidence and metadata
                 logAudit("Duplicate finding incremented to " + record.getCount() + "x: " + hash);
-                notifyListenersOfUpdate();
+                changed = true;
             } else {
                 var newRecord = new FindingRecord(finding);
                 activeFindings.put(hash, newRecord);
@@ -142,9 +153,10 @@ public final class FindingRegistry {
                         api.logging().logToError("Failed to create audit issue: " + e);
                     }
                 }
-                notifyListenersOfUpdate();
+                changed = true;
             }
         }
+        if (changed) notifyListenersOfUpdate();
         return actionable;
     }
 
@@ -185,15 +197,22 @@ public final class FindingRegistry {
     }
 
     private void notifyListenersOfUpdate() {
-        DebugLog.log("FindingRegistry.notifyListenersOfUpdate: " + activeFindings.size()
-                + " findings, " + listeners.size() + " listeners queued");
-        uiDispatcher.accept(() -> DebugLog.timed(
+        if (!fanOutPending.compareAndSet(false, true)) {
+            return; // a fan-out is already queued — it will pick up the current state when it runs
+        }
+        uiDispatcher.accept(() -> {
+            // Cleared before running (not after) so an update arriving mid-fan-out still
+            // schedules a follow-up that reflects it.
+            fanOutPending.set(false);
+            DebugLog.timed(
                 "FindingRegistry listener fan-out (" + activeFindings.size() + " findings, " + listeners.size() + " listeners)",
                 () -> {
+                    List<FindingRecord> snapshot = new ArrayList<>(activeFindings.values());
                     for (var listener : listeners) {
-                        listener.accept(new ArrayList<>(activeFindings.values()));
+                        listener.accept(snapshot);
                     }
-                }));
+                });
+        });
     }
 
     public String serializeState() {

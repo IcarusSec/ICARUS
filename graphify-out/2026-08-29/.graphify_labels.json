@@ -22,8 +22,8 @@
   "20": "AstProperty",
   "21": "Category",
   "22": "Orchestrator",
-  "23": "burp.api.montoya.MontoyaApi",
-  "24": "ModuleConfig",
+  "23": "ModuleConfig",
+  "24": "Icarus.java",
   "25": "ICARUS Changelog",
   "26": "SensitiveHeaderModule",
   "27": "burp.api.montoya.http.message.HttpRequestResponse",
@@ -98,5 +98,6 @@
   "96": ".loadSession",
   "97": ".addCweChip",
   "98": ".renderFinalImage",
-  "99": "TargetKind"
+  "99": "PassiveErrorModule",
+  "100": ".createSmoothScrollPane"
 }

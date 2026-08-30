@@ -54,17 +54,20 @@ public class PayloadRepository {
     // LIGHT depth uses index 0, so each list is ordered "safety then signal":
     // cheapest syntax/error probe first, louder boolean/union/evasion payloads later.
 
+    // Index 0 is "' OR '1'='1" on purpose: it's the one payload ParamValidator's
+    // out-of-box detector (boolean baseline-diff, STRING_SQLI) actually flags, so
+    // LIGHT depth still has a working probe. The rest need Behavioral Analysis on.
     public static final String SQLI_DEFAULT =
-        "'\n" +
         "' OR '1'='1\n" +
+        "'\n" +
         "1' ORDER BY 1--\n" +
         "' UNION SELECT NULL--\n" +
         "admin' --";
 
-    // XSS_POLYGLOT[0] is a noisy polyglot, so prepend a cheap reflection probe
-    // here rather than reordering the shared XSS_POLYGLOT list.
-    public static final String XSS_DEFAULT =
-        "<x>ICARUSXSS</x>\n" + String.join("\n", XSS_POLYGLOT);
+    // XSS_POLYGLOT[0] carries an event handler, so JSoup can confirm a real DOM
+    // breakout (not just "uncertain") — a better LIGHT-depth probe than a bare
+    // custom tag would be. Used verbatim.
+    public static final String XSS_DEFAULT = String.join("\n", XSS_POLYGLOT);
 
     public static final String PATH_TRAVERSAL_DEFAULT = String.join("\n", PATH_TRAVERSAL);
 

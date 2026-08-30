@@ -66,6 +66,13 @@ public final class ParamValidatorModule implements IcarusModule {
             String v = config.getString(d[0], "");
             if (v == null || v.isBlank()) config.set(d[0], d[1]);
         }
+        // Pre-depth builds persisted pv.max_mutations=60 as the hard cap. With scan depth
+        // that value now overrides the depth budget, so DEEP would stay silently capped at
+        // 60. Migrate that exact legacy default to 0 (= auto from depth) once.
+        if (!config.getBool("pv.depth_migrated", false)) {
+            if (config.getInt("pv.max_mutations", 0) == 60) config.set("pv.max_mutations", 0);
+            config.set("pv.depth_migrated", true);
+        }
     }
 
     /** Split a textarea list on any line break, trim, drop blanks. */

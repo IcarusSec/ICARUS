@@ -38,7 +38,7 @@ public final class EvidenceCapture {
     // Burp Dark Theme Colors
     public static final Color BG_COLOR = new Color(34, 34, 34);
     public static final Color TEXT_COLOR = new Color(190, 190, 190);
-    public static final Color ACCENT_COLOR = new Color(37, 99, 235);
+    public static final Color ACCENT_COLOR = new Color(0xFF, 0x66, 0x33); // #FF6633 (ICARUS / PortSwigger Orange)
     public static final Color SEPARATOR_COLOR = new Color(80, 80, 80);
 
     public static final Font MONO_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 16);

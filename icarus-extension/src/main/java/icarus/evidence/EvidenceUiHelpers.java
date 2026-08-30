@@ -34,9 +34,9 @@ public class EvidenceUiHelpers {
         btn.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
         btn.setBackground(bg);
         
-        // Calculate contrast
+        // Calculate contrast (threshold at 0.65 ensures vibrant orange #FF6633 retains clean white text)
         double luminance = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
-        btn.setForeground(luminance > 0.5 ? new Color(15, 24, 41) : Color.WHITE);
+        btn.setForeground(luminance > 0.65 ? new Color(30, 30, 30) : Color.WHITE);
         
         btn.setFocusPainted(false);
         btn.setHorizontalTextPosition(SwingConstants.RIGHT);

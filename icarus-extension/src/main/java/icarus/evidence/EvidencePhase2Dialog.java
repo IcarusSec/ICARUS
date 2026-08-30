@@ -251,11 +251,18 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             }
         });
 
-        JButton saveBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.save"), EvidenceCapture.ACCENT_COLOR);
+        Color orangePrimary = EvidenceCapture.ACCENT_COLOR;          // #FF6633 (Vibrant PortSwigger Orange)
+        Color orangeWarm    = new Color(0xEA, 0x58, 0x0C);          // #EA580C (Warm Rich Amber-Orange)
+        Color orangeBurnt   = new Color(0xC2, 0x41, 0x0C);          // #C2410C (Deep Burnt Terracotta-Orange)
+
+        JButton saveBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.save"), orangeWarm);
         saveBtn.setIcon(createIcon("device-floppy"));
         saveBtn.setFocusable(false);
         saveBtn.setHorizontalAlignment(SwingConstants.LEFT);
-        saveBtn.putClientProperty("FlatLaf.style", "arc: 8; margin: 8,16,8,16; iconTextGap: 16;");
+        saveBtn.putClientProperty("FlatLaf.style",
+            "arc: 8; margin: 8,16,8,16; iconTextGap: 16; background: #EA580C; "
+            + "selectedBackground: #EA580C; selectedForeground: #FFFFFF; "
+            + "focusedBackground: #F97316; hoverBackground: #F97316;");
         saveBtn.setForeground(Color.WHITE);
         saveBtn.addActionListener(a -> {
             try {
@@ -281,11 +288,14 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             }
         });
 
-        JButton copyBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.copy"), EvidenceCapture.ACCENT_COLOR.darker());
+        JButton copyBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.copy"), orangeBurnt);
         copyBtn.setIcon(createIcon("copy"));
         copyBtn.setFocusable(false);
         copyBtn.setHorizontalAlignment(SwingConstants.LEFT);
-        copyBtn.putClientProperty("FlatLaf.style", "arc: 8; margin: 8,16,8,16; iconTextGap: 16;");
+        copyBtn.putClientProperty("FlatLaf.style",
+            "arc: 8; margin: 8,16,8,16; iconTextGap: 16; background: #C2410C; "
+            + "selectedBackground: #C2410C; selectedForeground: #FFFFFF; "
+            + "focusedBackground: #D9531E; hoverBackground: #D9531E;");
         copyBtn.setForeground(Color.WHITE);
         copyBtn.addActionListener(a -> {
             try {
@@ -303,11 +313,14 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             }
         });
 
-        JButton sendToReportBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.sendToReport"), EvidenceCapture.ACCENT_COLOR);
+        JButton sendToReportBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.sendToReport"), orangePrimary);
         sendToReportBtn.setIcon(createIcon("file-text"));
         sendToReportBtn.setFocusable(false);
         sendToReportBtn.setHorizontalAlignment(SwingConstants.LEFT);
-        sendToReportBtn.putClientProperty("FlatLaf.style", "arc: 8; margin: 8,16,8,16; iconTextGap: 16;");
+        sendToReportBtn.putClientProperty("FlatLaf.style",
+            "arc: 8; margin: 8,16,8,16; iconTextGap: 16; background: #FF6633; "
+            + "selectedBackground: #FF6633; selectedForeground: #FFFFFF; "
+            + "focusedBackground: #FF7744; hoverBackground: #FF7744;");
         sendToReportBtn.setForeground(Color.WHITE);
         sendToReportBtn.addActionListener(a -> {
             BufferedImage out = capture.phase2Dialog.renderFinalImage(snap, shapes, kinds, cols);

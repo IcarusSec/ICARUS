@@ -338,8 +338,10 @@ public void showPhase1(Finding finding) {
         
         JButton btnApply = capture.uiHelpers.createModernButton(I18n.t("evidence.phase1.btn.apply"), EvidenceCapture.ACCENT_COLOR);
         btnApply.setIcon(EvidenceUiHelpers.createIcon("check"));
-        btnApply.putClientProperty("FlatLaf.style", btnStyle);
-        btnApply.putClientProperty("FlatLaf.styleClass", "default");
+        btnApply.putClientProperty("FlatLaf.style",
+            btnStyle + " background: #FF6633; foreground: #FFFFFF; "
+            + "focusedBackground: #FF7744; hoverBackground: #FF7744;");
+        btnApply.setForeground(Color.WHITE);
 
         // Force exact matching preferred height across all three action buttons
         int targetH = Math.max(42, Math.max(btnApply.getPreferredSize().height, Math.max(btnCleanNoise.getPreferredSize().height, btnAnnotate.getPreferredSize().height)));

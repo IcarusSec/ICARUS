@@ -114,9 +114,9 @@
     "semantic_hash": "c3ca464c5cf30f2a16945a018d3f51eb"
   },
   "icarus-extension/src/main/java/icarus/core/FindingRegistry.java": {
-    "mtime": 1788007670.217035,
-    "seen": 1788007696.7177022,
-    "ast_hash": "91211f456036aac990654539ba0361f6",
+    "mtime": 1788013100.3690143,
+    "seen": 1788013116.8415723,
+    "ast_hash": "bf42c7f1de0f825b6fb584d0dbf7418a",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/core/IcarusModule.java": {
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceCapture.java": {
-    "mtime": 1788012248.3211756,
-    "seen": 1788012277.944888,
-    "ast_hash": "3e9c075a7c3cecd384e6f4a6e9136720",
+    "mtime": 1788092316.8956196,
+    "seen": 1788092377.9539928,
+    "ast_hash": "a32cdf9150c8ee431921986b0e093e4b",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceColorScheme.java": {
@@ -204,21 +204,21 @@
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidencePhase1Dialog.java": {
-    "mtime": 1787962416.828306,
-    "seen": 1788006346.4531462,
-    "ast_hash": "c505e4f9a552a994f6b1a07127a297d8",
+    "mtime": 1788092347.301631,
+    "seen": 1788092377.9539971,
+    "ast_hash": "866be0393f3e8559f925df2e67772c8d",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidencePhase2Dialog.java": {
-    "mtime": 1787962896.3502057,
-    "seen": 1788006346.4531472,
-    "ast_hash": "b1522e5668f38aafed8bb772ce18ee1d",
+    "mtime": 1788092359.270087,
+    "seen": 1788092377.953998,
+    "ast_hash": "b41cebd97f03e20a046788bd08261c8c",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/EvidenceUiHelpers.java": {
-    "mtime": 1787962409.2458117,
-    "seen": 1788006346.4531484,
-    "ast_hash": "9736e745a2d45bd818be489e74904738",
+    "mtime": 1788092337.121246,
+    "seen": 1788092377.953999,
+    "ast_hash": "91d72f62fb7c578a93b04a5c4013b834",
     "semantic_hash": ""
   },
   "icarus-extension/src/main/java/icarus/evidence/MarkdownPdfRenderer.java": {

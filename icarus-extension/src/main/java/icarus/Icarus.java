@@ -151,8 +151,9 @@ public class Icarus implements BurpExtension {
         config.set("pv.number_as_numeric_string", true);
         config.set("pv.boolean_as_string", true);
         config.set("pv.boolean_as_number", true);
-        config.set("pv.max_mutations", 60);
-        config.set("pv.max_repeater", 10);
+        config.set("pv.depth", "MEDIUM");
+        config.set("pv.max_mutations", 0);   // 0 = auto from depth
+        config.set("pv.behavioral_analysis", false);
         config.set("pv.finding_status_min", 200);
         config.set("pv.finding_status_max", 299);
         config.set("pv.require_baseline", true);
@@ -160,14 +161,18 @@ public class Icarus implements BurpExtension {
         config.set("pv.check_xss_reflection", true);
         config.set("pv.create_audit_issues", true);
         config.set("pv.long_string_length", 10000);
-        config.set("pv.payload_sqli", "' OR '1'='1\n1' ORDER BY 1--\n' UNION SELECT NULL--\nadmin' --");
-        config.set("pv.payload_sqli_time", "'; WAITFOR DELAY '0:0:10'--\npg_sleep(10)\nSLEEP(10)");
+        config.set("pv.payload_sqli",            PayloadRepository.SQLI_DEFAULT);
+        config.set("pv.payload_sqli_time",        PayloadRepository.SQLI_TIME_DEFAULT);
+        config.set("pv.payload_sqli_time_number", PayloadRepository.SQLI_TIME_NUMBER_DEFAULT);
         config.set("pv.payload_sqli_time_delay_ms", 10000);
-        config.set("pv.payload_xss", "<script>alert(1)</script>\n\"><img src=x onerror=prompt()>\njavascript:alert(1)");
-        config.set("pv.payload_path_traversal", "../../../../etc/passwd\n..%2f..%2f..%2fwindows%2fwin.ini\n/etc/shadow");
-        config.set("pv.payload_nosqli", "{\"$ne\": null}\n{\"$gt\": \"\"}");
-        config.set("pv.payload_format_string", "%s%x%n\n%p%p%p");
-        config.set("pv.payload_unicode", "‮test😀");
+        config.set("pv.payload_xss",             PayloadRepository.XSS_DEFAULT);
+        config.set("pv.payload_path_traversal",  PayloadRepository.PATH_TRAVERSAL_DEFAULT);
+        config.set("pv.payload_nosqli",          PayloadRepository.NOSQLI_DEFAULT);
+        config.set("pv.payload_format_string",   PayloadRepository.FORMAT_STRING_DEFAULT);
+        config.set("pv.payload_unicode",         PayloadRepository.UNICODE_DEFAULT);
+        config.set("pv.payload_cmdi",            PayloadRepository.CMDI_DEFAULT);
+        config.set("pv.payload_ssti",            PayloadRepository.SSTI_DEFAULT);
+        config.set("pv.payload_ssrf_heuristic",  PayloadRepository.SSRF_HEURISTIC_DEFAULT);
 
         // WAF defaults
         config.set("waf.detect_akamai", true);

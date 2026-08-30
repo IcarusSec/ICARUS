@@ -10,6 +10,7 @@ import icarus.core.Severity;
 import icarus.evidence.EvidenceColorScheme;
 import icarus.evidence.EvidenceUiHelpers;
 import icarus.mcp.IcarusMcpServer;
+import icarus.modules.ParamValidatorModule;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -215,40 +216,87 @@ public class SettingsPanel {
 
         CardPanel cardPv = new CardPanel(I18n.t("settings.section.paramvalidator"), "adjustments-horizontal");
         
-        JPanel pnlPvGrid = new JPanel(new GridBagLayout());
-        pnlPvGrid.setOpaque(false);
+        // Scan depth
+        addComboBoxToForm(cardPv, "pv.depth", I18n.t("settings.combo.pv.depth"), new String[]{"LIGHT", "MEDIUM", "DEEP"});
+        cardPv.addFormRow(mutedLabel(I18n.t("settings.help.pv.depth")));
+
+        addSpinnerToForm(cardPv, "pv.max_mutations", I18n.t("settings.field.pv.max_mutations"), 0, 0, 100000, 10);
+        cardPv.addFormRow(mutedLabel(I18n.t("settings.help.pv.max_mutations")));
+
+        // Mutation categories
+        cardPv.addFormRow(subHeader(I18n.t("settings.header.pv.categories")));
+        JPanel pnlPvCats = new JPanel(new GridBagLayout());
+        pnlPvCats.setOpaque(false);
         gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
-        
-        gbc.gridx = 0; gbc.gridy = 0; addCheckboxToGrid(pnlPvGrid, gbc, "pv.structural", I18n.t("settings.checkbox.pv.structural"), true);
-        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.type_confusion", I18n.t("settings.checkbox.pv.type_confusion"), true);
-        gbc.gridx = 0; gbc.gridy = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.boundary", I18n.t("settings.checkbox.pv.boundary"), true);
-        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.injection", I18n.t("settings.checkbox.pv.injection"), true);
-        gbc.gridx = 0; gbc.gridy = 2; addCheckboxToGrid(pnlPvGrid, gbc, "pv.ssrf", I18n.t("settings.checkbox.pv.ssrf"), true);
-        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.idor", I18n.t("settings.checkbox.pv.idor"), true);
-        gbc.gridx = 0; gbc.gridy = 3; addCheckboxToGrid(pnlPvGrid, gbc, "pv.cmdi", I18n.t("settings.checkbox.pv.cmdi"), true);
-        gbc.gridx = 1; addCheckboxToGrid(pnlPvGrid, gbc, "pv.ssti", I18n.t("settings.checkbox.pv.ssti"), true);
-        gbc.gridx = 0; gbc.gridy = 4; addCheckboxToGrid(pnlPvGrid, gbc, "pv.behavioral_analysis", I18n.t("settings.checkbox.pv.behavioral_analysis"), true);
-        
+        gbc.gridx = 0; gbc.gridy = 0; addCheckboxToGrid(pnlPvCats, gbc, "pv.structural", I18n.t("settings.checkbox.pv.structural"), true);
+        gbc.gridx = 1; addCheckboxToGrid(pnlPvCats, gbc, "pv.boundary", I18n.t("settings.checkbox.pv.boundary"), true);
+        gbc.gridx = 0; gbc.gridy = 1; addCheckboxToGrid(pnlPvCats, gbc, "pv.type_confusion", I18n.t("settings.checkbox.pv.type_confusion"), true);
         gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 1.0;
-        pnlPvGrid.add(Box.createHorizontalGlue(), gbc);
-        cardPv.addFormRow(pnlPvGrid);
-        
-        addSpinnerToForm(cardPv, "pv.max_mutations", I18n.t("settings.field.pv.max_mutations"), 500, 1, 100000, 10);
-        addSpinnerToForm(cardPv, "pv.max_repeater", I18n.t("settings.field.pv.max_repeater"), 5, 1, 100, 1);
+        pnlPvCats.add(Box.createHorizontalGlue(), gbc);
+        cardPv.addFormRow(pnlPvCats);
 
+        // Injection techniques
+        cardPv.addFormRow(subHeader(I18n.t("settings.header.pv.techniques")));
+        JCheckBox chkPvInjection = new JCheckBox(I18n.t("settings.checkbox.pv.injection"), config.getBool("pv.injection", true));
+        chkPvInjection.setOpaque(false);
+        saveHooks.add(() -> config.set("pv.injection", chkPvInjection.isSelected()));
+        cardPv.addFormRow(chkPvInjection);
+
+        JPanel pnlPvTech = new JPanel(new GridBagLayout());
+        pnlPvTech.setOpaque(false);
+        String[][] techs = {
+            {"pv.sqli", "settings.checkbox.pv.sqli"},
+            {"pv.sqli_time", "settings.checkbox.pv.sqli_time"},
+            {"pv.xss", "settings.checkbox.pv.xss"},
+            {"pv.path_traversal", "settings.checkbox.pv.path_traversal"},
+            {"pv.nosqli", "settings.checkbox.pv.nosqli"},
+            {"pv.format_string", "settings.checkbox.pv.format_string"},
+            {"pv.unicode", "settings.checkbox.pv.unicode"},
+            {"pv.cmdi", "settings.checkbox.pv.cmdi"},
+            {"pv.ssti", "settings.checkbox.pv.ssti"},
+            {"pv.ssrf", "settings.checkbox.pv.ssrf"},
+            {"pv.idor", "settings.checkbox.pv.idor"},
+        };
+        List<JCheckBox> techBoxes = new ArrayList<>();
+        gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
+        for (int i = 0; i < techs.length; i++) {
+            gbc.gridx = i % 2; gbc.gridy = i / 2;
+            techBoxes.add(addCheckboxToGrid(pnlPvTech, gbc, techs[i][0], I18n.t(techs[i][1]), true));
+        }
+        gbc.gridx = 2; gbc.gridy = 0; gbc.weightx = 1.0;
+        pnlPvTech.add(Box.createHorizontalGlue(), gbc);
+        cardPv.addFormRow(pnlPvTech);
+
+        Runnable syncTech = () -> {
+            boolean on = chkPvInjection.isSelected();
+            for (JCheckBox b : techBoxes) b.setEnabled(on);
+        };
+        chkPvInjection.addItemListener(e -> { saveAll(); syncTech.run(); });
+        syncTech.run();
+
+        addCheckboxToForm(cardPv, "pv.behavioral_analysis", I18n.t("settings.checkbox.pv.behavioral_analysis"), false);
+
+        // Payload editors
+        ParamValidatorModule.ensurePayloadDefaults(config);
         JTabbedPane pvTabs = new JTabbedPane();
         pvTabs.putClientProperty("JTabbedPane.tabType", "underlined");
         pvTabs.addTab("SQLi", createTabbedTextArea("pv.payload_sqli"));
+        pvTabs.addTab("SQLi time (string)", createTabbedTextArea("pv.payload_sqli_time"));
+        pvTabs.addTab("SQLi time (number)", createTabbedTextArea("pv.payload_sqli_time_number"));
         pvTabs.addTab("XSS", createTabbedTextArea("pv.payload_xss"));
         pvTabs.addTab("Path Traversal", createTabbedTextArea("pv.payload_path_traversal"));
         pvTabs.addTab("NoSQLi", createTabbedTextArea("pv.payload_nosqli"));
         pvTabs.addTab("Format String", createTabbedTextArea("pv.payload_format_string"));
-        pvTabs.addTab("SSRF", createTabbedTextArea("pv.payload_ssrf_heuristic"));
+        pvTabs.addTab("Unicode / RTL", createTabbedTextField("pv.payload_unicode"));
         pvTabs.addTab("CMDi", createTabbedTextArea("pv.payload_cmdi"));
         pvTabs.addTab("SSTI", createTabbedTextArea("pv.payload_ssti"));
+        pvTabs.addTab("SSRF targets", createTabbedTextArea("pv.payload_ssrf_heuristic"));
         cardPv.addFormRow(pvTabs);
+        cardPv.addFormRow(mutedLabel(I18n.t("settings.help.pv.depth_extras")));
 
         CardPanel cardHv = new CardPanel(I18n.t("settings.section.http_verb"), "activity");
         addCheckboxToForm(cardHv, "hv.test_get", I18n.t("settings.checkbox.hv.test_get"), true);
@@ -301,12 +349,40 @@ public class SettingsPanel {
 
     }
 
-    private void addCheckboxToGrid(JPanel grid, GridBagConstraints gbc, String key, String label, boolean defaultValue) {
+    private JCheckBox addCheckboxToGrid(JPanel grid, GridBagConstraints gbc, String key, String label, boolean defaultValue) {
         JCheckBox cb = new JCheckBox(label, config.getBool(key, defaultValue));
         cb.setOpaque(false);
         grid.add(cb, gbc);
         saveHooks.add(() -> config.set(key, cb.isSelected()));
         cb.addItemListener(e -> saveAll());
+        return cb;
+    }
+
+    private JLabel mutedLabel(String text) {
+        JLabel l = new JLabel("<html><body style='width:520px'>" + text + "</body></html>");
+        l.setForeground(UIManager.getColor("Label.disabledForeground"));
+        l.setFont(l.getFont().deriveFont(l.getFont().getSize2D() - 1f));
+        return l;
+    }
+
+    private JLabel subHeader(String text) {
+        JLabel l = new JLabel(text);
+        l.setFont(l.getFont().deriveFont(Font.BOLD));
+        return l;
+    }
+
+    private JComponent createTabbedTextField(String key) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setOpaque(false);
+        p.setBorder(new EmptyBorder(8, 8, 8, 8));
+        JTextField tf = new JTextField(config.getString(key, ""));
+        themeHelper.applyTheme(tf);
+        saveHooks.add(() -> config.set(key, tf.getText()));
+        tf.addFocusListener(new java.awt.event.FocusAdapter() {
+            public void focusLost(java.awt.event.FocusEvent evt) { saveAll(); }
+        });
+        p.add(tf, BorderLayout.NORTH);
+        return p;
     }
 
     private void addCheckboxToForm(CardPanel card, String key, String label, boolean defaultValue) {

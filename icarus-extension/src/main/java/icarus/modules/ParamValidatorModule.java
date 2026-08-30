@@ -47,8 +47,99 @@ public final class ParamValidatorModule implements IcarusModule {
     }
     record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value) {}
 
+    /** Backfill any missing/blank payload key with its seed so existing installs stop showing blank tabs. */
+    public static void ensurePayloadDefaults(ModuleConfig config) {
+        String[][] defs = {
+                {"pv.payload_sqli", PayloadRepository.SQLI_DEFAULT},
+                {"pv.payload_sqli_time", PayloadRepository.SQLI_TIME_DEFAULT},
+                {"pv.payload_sqli_time_number", PayloadRepository.SQLI_TIME_NUMBER_DEFAULT},
+                {"pv.payload_xss", PayloadRepository.XSS_DEFAULT},
+                {"pv.payload_path_traversal", PayloadRepository.PATH_TRAVERSAL_DEFAULT},
+                {"pv.payload_nosqli", PayloadRepository.NOSQLI_DEFAULT},
+                {"pv.payload_format_string", PayloadRepository.FORMAT_STRING_DEFAULT},
+                {"pv.payload_unicode", PayloadRepository.UNICODE_DEFAULT},
+                {"pv.payload_cmdi", PayloadRepository.CMDI_DEFAULT},
+                {"pv.payload_ssti", PayloadRepository.SSTI_DEFAULT},
+                {"pv.payload_ssrf_heuristic", PayloadRepository.SSRF_HEURISTIC_DEFAULT},
+        };
+        for (String[] d : defs) {
+            String v = config.getString(d[0], "");
+            if (v == null || v.isBlank()) config.set(d[0], d[1]);
+        }
+    }
+
+    /** Split a textarea list on any line break, trim, drop blanks. */
+    static List<String> splitPayloads(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        return Arrays.stream(raw.split("\\R"))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
+
+    static String normalizeList(String raw) {
+        return String.join("\n", splitPayloads(raw));
+    }
+
+    static boolean isStockList(String stored, String seed) {
+        return normalizeList(stored).equals(normalizeList(seed));
+    }
+
+    /** DEEP-only built-in evasion extras for a stock list. Empty for every key but SSRF heuristic. */
+    static List<String> deepExtras(String key) {
+        if ("pv.payload_ssrf_heuristic".equals(key)) return PayloadRepository.SSRF_EVASION;
+        return List.of();
+    }
+
+    /**
+     * Resolve a payload list: a hand-authored (non-stock) list is used verbatim; a stock list is
+     * depth-shaped — LIGHT = first payload only, MEDIUM = full seed, DEEP = full seed + deepExtras.
+     */
+    static List<String> payloadsFor(String key, String seed, String depth, ModuleConfig config) {
+        String stored = config.getString(key, seed);
+        if (stored == null || stored.isBlank()) stored = seed;
+        if (!isStockList(stored, seed)) return splitPayloads(stored);
+
+        List<String> seedList = splitPayloads(seed);
+        switch (depth == null ? "MEDIUM" : depth) {
+            case "LIGHT":
+                return seedList.isEmpty() ? seedList : List.of(seedList.get(0));
+            case "DEEP": {
+                List<String> extras = deepExtras(key);
+                if (extras.isEmpty()) return seedList;
+                List<String> combined = new ArrayList<>(seedList);
+                for (String e : extras) if (!combined.contains(e)) combined.add(e);
+                return combined;
+            }
+            default:
+                return seedList;
+        }
+    }
+
+    /**
+     * Cut {@code specs} to {@code budget}, round-robin across MutationSpec.type() buckets so a long
+     * injection list can't starve later IDOR/SSRF specs. Intra-type order preserved.
+     */
+    private static List<MutationSpec> truncateFairlyByType(List<MutationSpec> specs, int budget) {
+        LinkedHashMap<String, ArrayDeque<MutationSpec>> byType = new LinkedHashMap<>();
+        for (MutationSpec s : specs) byType.computeIfAbsent(s.type(), k -> new ArrayDeque<>()).add(s);
+        List<MutationSpec> out = new ArrayList<>(budget);
+        while (out.size() < budget) {
+            boolean progressed = false;
+            for (ArrayDeque<MutationSpec> q : byType.values()) {
+                if (q.isEmpty()) continue;
+                out.add(q.poll());
+                progressed = true;
+                if (out.size() >= budget) break;
+            }
+            if (!progressed) break;
+        }
+        return out;
+    }
+
     @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
+        ensurePayloadDefaults(config);
         HttpRequest request = requestResponse.request();
         String contentType = request.headerValue("Content-Type");
         String originalBody = request.bodyToString();
@@ -99,7 +190,14 @@ public final class ParamValidatorModule implements IcarusModule {
 
         logger.accept(I18n.t("module.pv.log.detected_inputs", (eligiblePaths.size() + urlParams.size()), eligiblePaths.size(), urlParams.size()));
 
-        int maxMutations = config.getInt("pv.max_mutations", 60);
+        String depth = config.getString("pv.depth", "MEDIUM"); // LIGHT | MEDIUM | DEEP
+        int configuredMax = Math.max(0, config.getInt("pv.max_mutations", 0));
+        int maxMutations = configuredMax > 0 ? configuredMax
+                : switch (depth) {
+                      case "LIGHT" -> 20;
+                      case "DEEP"  -> 200;
+                      default      -> 60;   // MEDIUM + any unknown value
+                  };
         List<Mutation> mutations = new ArrayList<>();
 
         // Round-robin across fields (one spec per field per pass) instead of exhausting one
@@ -133,11 +231,11 @@ public final class ParamValidatorModule implements IcarusModule {
             Object leafValue = JsonPaths.getAt(originalRoot, path);
 
             List<MutationSpec> specs = new ArrayList<>();
-            for (MutationSpec spec : SpecsFactory.specsFor(leafValue, config)) {
+            for (MutationSpec spec : SpecsFactory.specsFor(leafValue, config, depth)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
             }
-            for (MutationSpec spec : contextualSpecs(pathString, leafValue, config, collaboratorClient, ssrfPayloadsByField)) {
+            for (MutationSpec spec : contextualSpecs(pathString, leafValue, config, collaboratorClient, ssrfPayloadsByField, depth)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
             }
@@ -162,11 +260,11 @@ public final class ParamValidatorModule implements IcarusModule {
             if (pathRules.isExcluded(pathString)) continue;
 
             List<MutationSpec> specs = new ArrayList<>();
-            for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config)) {
+            for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config, depth)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
             }
-            for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField)) {
+            for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField, depth)) {
                 if (pathRules.isException(pathString, spec)) continue;
                 specs.add(spec);
             }
@@ -175,6 +273,16 @@ public final class ParamValidatorModule implements IcarusModule {
                 fieldPaths.add(null);
                 fieldUrlParam.add(param);
                 fieldSpecs.add(specs);
+            }
+        }
+
+        // A single field whose spec list alone exceeds the resolved budget gets cut type-fairly
+        // here (preserving intra-type order) so a long injection list can't crowd out that same
+        // field's IDOR/SSRF specs. The field-level round-robin below still protects numeric params.
+        for (int f = 0; f < fieldSpecs.size(); f++) {
+            List<MutationSpec> specs = fieldSpecs.get(f);
+            if (specs.size() > maxMutations) {
+                fieldSpecs.set(f, truncateFairlyByType(specs, maxMutations));
             }
         }
 
@@ -819,7 +927,8 @@ public final class ParamValidatorModule implements IcarusModule {
      * doesn't have — generated here instead of through its pure value-only dispatch.
      */
     private List<MutationSpec> contextualSpecs(String pathString, Object leafValue, ModuleConfig config,
-                                                CollaboratorClient collaboratorClient, Map<String, CollaboratorPayload> ssrfPayloadsByField) {
+                                                CollaboratorClient collaboratorClient, Map<String, CollaboratorPayload> ssrfPayloadsByField,
+                                                String depth) {
         List<MutationSpec> specs = new ArrayList<>();
 
         if (config.getBool("pv.ssrf", true) && leafValue instanceof String) {
@@ -828,8 +937,7 @@ public final class ParamValidatorModule implements IcarusModule {
                 specs.add(new MutationSpec("STRING_SSRF_OOB", I18n.t("module.pv.spec.desc.ssrf_oob"), "http://" + payload + "/", false, Category.INJECTION));
                 ssrfPayloadsByField.put(pathString, payload);
             } else {
-                for (String target : config.getString("pv.payload_ssrf_heuristic",
-                        "http://169.254.169.254/latest/meta-data/\nhttp://169.254.169.254/computeMetadata/v1/\nhttp://127.0.0.1/\nhttp://localhost/").split("\n")) {
+                for (String target : payloadsFor("pv.payload_ssrf_heuristic", PayloadRepository.SSRF_HEURISTIC_DEFAULT, depth, config)) {
                     specs.add(new MutationSpec("STRING_SSRF_HEURISTIC", I18n.t("module.pv.spec.desc.ssrf_heuristic"), target, false, Category.INJECTION));
                 }
             }
@@ -918,7 +1026,7 @@ public final class ParamValidatorModule implements IcarusModule {
     }
 
     private static final class SpecsFactory {
-        static List<MutationSpec> specsFor(Object value, ModuleConfig config) {
+        static List<MutationSpec> specsFor(Object value, ModuleConfig config, String depth) {
             List<MutationSpec> specs = new ArrayList<>();
 
             boolean testStructural = config.getBool("pv.structural", true);
@@ -957,41 +1065,50 @@ public final class ParamValidatorModule implements IcarusModule {
                         specs.add(new MutationSpec("CANARY_PROBE", icarus.core.I18n.t("module.pv.spec.desc.canary_probe"), payload, false, Category.INJECTION));
                     }
 
+                    if (config.getBool("pv.sqli", true)) {
+                        for (String p : payloadsFor("pv.payload_sqli", PayloadRepository.SQLI_DEFAULT, depth, config)) {
+                            specs.add(new MutationSpec("STRING_SQLI", I18n.t("module.pv.spec.desc.sqli"), p, false, Category.INJECTION));
+                        }
+                    }
                     if (config.getBool("pv.sqli_time", true)) {
-                        for (String payload : icarus.modules.PayloadRepository.SQLI_TIME) {
+                        for (String payload : payloadsFor("pv.payload_sqli_time", PayloadRepository.SQLI_TIME_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_SQLI_TIME", I18n.t("module.pv.spec.desc.sqli_time"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.xss", true)) {
-                        for (String payload : icarus.modules.PayloadRepository.XSS_POLYGLOT) {
+                        for (String payload : payloadsFor("pv.payload_xss", PayloadRepository.XSS_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_XSS", I18n.t("module.pv.spec.desc.xss"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.path_traversal", true)) {
-                        for (String payload : icarus.modules.PayloadRepository.PATH_TRAVERSAL) {
+                        for (String payload : payloadsFor("pv.payload_path_traversal", PayloadRepository.PATH_TRAVERSAL_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_PATH_TRAVERSAL", I18n.t("module.pv.spec.desc.path_traversal"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.nosqli", true)) {
-                        for (String payload : config.getString("pv.payload_nosqli", "{\"$ne\": null}").split("\n")) {
+                        for (String payload : payloadsFor("pv.payload_nosqli", PayloadRepository.NOSQLI_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_NOSQLI", I18n.t("module.pv.spec.desc.nosqli"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.format_string", true)) {
-                        for (String payload : config.getString("pv.payload_format_string", "%s%x%n").split("\n")) {
+                        for (String payload : payloadsFor("pv.payload_format_string", PayloadRepository.FORMAT_STRING_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_FORMAT", I18n.t("module.pv.spec.desc.format_string"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.unicode", true)) {
-                        specs.add(new MutationSpec("STRING_UNICODE", I18n.t("module.pv.spec.desc.unicode"), config.getString("pv.payload_unicode", "‮test😀"), false, Category.INJECTION));
+                        // Unicode is a single value, not a list: take the first non-empty trimmed line only.
+                        List<String> uni = splitPayloads(config.getString("pv.payload_unicode", PayloadRepository.UNICODE_DEFAULT));
+                        if (!uni.isEmpty()) {
+                            specs.add(new MutationSpec("STRING_UNICODE", I18n.t("module.pv.spec.desc.unicode"), uni.get(0), false, Category.INJECTION));
+                        }
                     }
                     if (config.getBool("pv.cmdi", true)) {
-                        for (String payload : config.getString("pv.payload_cmdi", "; id\n| whoami\n`id`\n$(id)").split("\n")) {
+                        for (String payload : payloadsFor("pv.payload_cmdi", PayloadRepository.CMDI_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_CMDI", I18n.t("module.pv.spec.desc.cmdi"), payload, false, Category.INJECTION));
                         }
                     }
                     if (config.getBool("pv.ssti", true)) {
-                        for (String payload : config.getString("pv.payload_ssti", "${7*7}\n{{7*7}}\n#{7*7}\n<%= 7*7 %>").split("\n")) {
+                        for (String payload : payloadsFor("pv.payload_ssti", PayloadRepository.SSTI_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_SSTI", I18n.t("module.pv.spec.desc.ssti"), payload, false, Category.INJECTION));
                         }
                     }
@@ -1042,7 +1159,7 @@ public final class ParamValidatorModule implements IcarusModule {
                         specs.add(new MutationSpec("NUMBER_SQLI_MATH", I18n.t("module.pv.spec.desc.sqli_math"), "1/0", false, Category.INJECTION));
                     }
                     if (config.getBool("pv.sqli_time", true)) {
-                        for (String payload : config.getString("pv.payload_sqli_time", "1-(WAITFOR DELAY '0:0:10')").split("\n")) {
+                        for (String payload : payloadsFor("pv.payload_sqli_time_number", PayloadRepository.SQLI_TIME_NUMBER_DEFAULT, depth, config)) {
                             specs.add(new MutationSpec("STRING_SQLI_TIME", I18n.t("module.pv.spec.desc.sqli_time_num"), payload, false, Category.INJECTION));
                         }
                     }

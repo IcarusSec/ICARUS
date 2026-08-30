@@ -120,10 +120,14 @@ public class ReportingSettingsTab {
         btnDelete = btn("Delete", "trash",     e -> onDeleteProfile());
         btnPreviewPdf  = btn("Preview PDF",  "file-text",     e -> runPreview(PreviewService.Format.PDF));
         btnPreviewHtml = btn("Preview HTML", "external-link", e -> runPreview(PreviewService.Format.HTML));
-        // Built via btn() so height / margins / icon sizing match Preview PDF/HTML;
-        // FlatLaf style just recolors it as the primary action.
+        // Built via btn() so margins / icon sizing match Preview PDF/HTML; the
+        // FlatLaf recolor otherwise drops the button ~2px shorter, so pin its
+        // preferred height to the sibling button explicitly.
         btnSave = btn("Save Profile", "device-floppy", e -> saveCurrentProfileChanges());
         btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold $defaultFont;");
+        Dimension saveRef = btnPreviewHtml.getPreferredSize();
+        btnSave.setPreferredSize(new Dimension(
+                Math.max(saveRef.width, btnSave.getPreferredSize().width), saveRef.height));
 
         toolbarPanel = new ToolbarPanel(comboProfiles, btnClone, btnExport, btnImport, btnDelete, btnPreviewPdf, btnPreviewHtml, btnSave);
         responsiveContainer.registerSection(wrapInCard("Report Profile & Actions", "file-text", toolbarPanel));
@@ -152,7 +156,7 @@ public class ReportingSettingsTab {
         listWrapper.add(sectionListPanel.component(), BorderLayout.CENTER);
         
         flowPanel = new SectionFlowPanel(listWrapper, (JComponent) detailPane.component());
-        responsiveContainer.registerSection(wrapInCard("Sections Flow", "list", flowPanel));
+        responsiveContainer.registerSection(wrapInCard("Sections Flow", "arrows-move", flowPanel));
 
         // Theme
         colorPrimaryPanel = createColorSwatch();

@@ -38,10 +38,12 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
         for (Severity s : sevs) {
             JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
             String name = com.icarus.ui.reportprofile.model.SectionLabelFormatter.format(s.name());
-            p.add(new JLabel(name + ":"));
+            JLabel lbl = new JLabel(name + ":");
+            // Fixed label width so the swatch starts at the same x in every cell
+            // -> swatches line up in a column when the row wraps.
+            lbl.setPreferredSize(new Dimension(64, lbl.getPreferredSize().height));
+            p.add(lbl);
             p.add(severityColorPanels.get(s));
-            // Fixed cell width so WrapLayout tiles them into an aligned grid
-            // instead of a ragged second row.
             p.setPreferredSize(new Dimension(180, 26));
             badgesRow.add(p);
         }

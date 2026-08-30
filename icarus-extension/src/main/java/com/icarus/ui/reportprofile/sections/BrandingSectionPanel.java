@@ -30,7 +30,7 @@ public class BrandingSectionPanel implements ResponsiveSection {
         JPanel panel = new JPanel(new BorderLayout(0, 4));
         panel.add(new JLabel(label), BorderLayout.NORTH);
         
-        JPanel centerPanel = new JPanel(new BorderLayout());
+        JPanel centerPanel = new JPanel(new BorderLayout(8, 0));
         centerPanel.add(field, BorderLayout.CENTER);
         JButton browseBtn = new JButton("Browse…");
         browseBtn.addActionListener(e -> {

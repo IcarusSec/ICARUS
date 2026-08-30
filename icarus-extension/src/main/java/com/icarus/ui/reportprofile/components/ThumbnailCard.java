@@ -52,7 +52,9 @@ public final class ThumbnailCard extends JPanel {
         if (selected) {
             g.setColor(palette.accent());
             g.setStroke(new BasicStroke(2f));
-            g.draw(new RoundRectangle2D.Float(1, 1, W - 3, H - 3, 8, 8));
+            // Inset well clear of the panel edge: a 2px stroke straddling the
+            // outer rect bleeds past the top/right on fractional-DPI displays.
+            g.draw(new RoundRectangle2D.Float(2, 2, W - 5, H - 5, 7, 7));
         } else if (hovered) {
             g.setColor(palette.borderStrong());
             g.setStroke(new BasicStroke(1f));

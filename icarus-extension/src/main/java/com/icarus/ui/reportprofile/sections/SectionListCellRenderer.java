@@ -51,7 +51,7 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
             g2.fillRect(0, 0, w, h);
             g2.setColor(palette.accent());
             g2.setStroke(new BasicStroke(2f));
-            g2.drawRoundRect(1, 1, w - 3, h - 3, 8, 8);
+            g2.drawRoundRect(2, 2, w - 5, h - 5, 7, 7);
         }
 
         // Grip glyph

@@ -37,12 +37,14 @@ public class DetailPane implements ResponsiveSection {
         topPanel.add(new JLabel("Section title"), BorderLayout.NORTH);
         topPanel.add(titleField, BorderLayout.CENTER);
         
-        JPanel chipWrapper = new JPanel();
-        chipWrapper.setLayout(new BoxLayout(chipWrapper, BoxLayout.Y_AXIS));
+        // BorderLayout (not BoxLayout): it sizes chipRow to the real available
+        // width and re-lays it out on resize, so the token WrapLayout actually
+        // wraps instead of staying one clipped row.
+        JPanel chipWrapper = new JPanel(new BorderLayout(0, 2));
         JLabel helperLabel = new JLabel("Body supports Markdown. Click a token to insert it at the cursor.");
         helperLabel.setFont(helperLabel.getFont().deriveFont(java.awt.Font.ITALIC, 11f));
-        chipWrapper.add(helperLabel);
-        chipWrapper.add(chipRow);
+        chipWrapper.add(helperLabel, BorderLayout.NORTH);
+        chipWrapper.add(chipRow, BorderLayout.CENTER);
         topPanel.add(chipWrapper, BorderLayout.SOUTH);
 
         JScrollPane scrollPane = new JScrollPane(bodyWell,

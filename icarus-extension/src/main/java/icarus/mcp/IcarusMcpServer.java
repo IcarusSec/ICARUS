@@ -144,6 +144,13 @@ public final class IcarusMcpServer {
 
             ### 4. Active Validation & Impact Escalation (PoC)
 
+            0. **Rebind stale findings first:** `validate_finding` / `exploit_finding` resend a finding's captured
+               request, which needs a live HTTP service. Findings restored from an older project file, or whose
+               target was down at save time, come back service-less and fail. Before triaging those, call
+               `rescan_finding` with the hash — it resends the finding's own request (right method/body/host) and
+               re-runs the active scan, producing fresh findings bound to a live service. It's also the only way to
+               re-confirm a `STRING_SSRF` (one-time Collaborator payload — not directly replayable).
+
             1. **Practical Escalation Protocol:**
                - Prove the maximum real impact of the flaw (don't report purely theoretically):
                  - **IDOR / BOLA / BAC:** manipulate other accounts' identifiers and prove the data segregation break.
@@ -248,7 +255,7 @@ public final class IcarusMcpServer {
             McpServerFeatures.SyncToolSpecification[] tools = {
                     listFindingsTool(), addFindingTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
                     getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
-                    getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
+                    getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
@@ -442,6 +449,51 @@ public final class IcarusMcpServer {
             }
             orchestrator.runScan(result, true);
             return McpSchema.CallToolResult.builder().addTextContent("Scan triggered for " + url).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification rescanFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("rescan_finding",
+                "Re-run ICARUS's active scan against the endpoint a finding came from",
+                "Resends the finding's OWN captured request live — correct method, body, headers and target — then runs the full active scan on the "
+                        + "response. Use this to rebind stale injection/SSRF findings to a live HTTP service (so validate_finding/exploit_finding work "
+                        + "afterwards) and to get a fresh Burp Collaborator confirmation for STRING_SSRF, which can't be replayed directly. Unlike "
+                        + "trigger_scan it needs no URL — the target is taken from the finding — but note the captured request still carries the "
+                        + "original payload in one field; the scan mutates every field independently so this is a weird baseline, not a blocker. "
+                        + "Runs asynchronously; poll list_findings for the newly bound results.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            if (finding.evidence() == null || finding.evidence().request() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("This finding has no captured request to rescan from.").isError(true).build();
+            }
+            HttpRequest req = withRebuiltService(finding.evidence().request());
+            if (req == null) {
+                return McpSchema.CallToolResult.builder().addTextContent(
+                        "This finding has no target binding and no Host header to rebuild one — use trigger_scan with an explicit URL instead.").isError(true).build();
+            }
+            HttpRequestResponse result;
+            try {
+                result = api.http().sendRequest(req);
+            } catch (Exception e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Resend failed: " + e.getMessage()).isError(true).build();
+            }
+            if (result == null || result.response() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent(
+                        "No response from " + req.httpService().host() + ":" + req.httpService().port() + " — target may be down.").isError(true).build();
+            }
+            orchestrator.runScan(result, true);
+            return McpSchema.CallToolResult.builder().addTextContent(
+                    "Rescan triggered against " + req.method() + " " + req.httpService().host() + ":" + req.httpService().port()
+                            + req.path() + " (from finding " + finding.type() + "). Poll list_findings.").build();
         });
     }
 
@@ -1077,6 +1129,24 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
      * original). {@code reproduced} is {@code null} whenever there's no reliable way to answer
      * true/false rather than guessing.
      */
+    /**
+     * Ensure a captured request has an {@link burp.api.montoya.http.HttpService} so it can be
+     * resent. Live requests already carry one; findings saved before the codec persisted
+     * host/port come back service-less — rebuild it from the Host header (host:port, secure
+     * iff port 443). Returns null when there's nothing to rebuild from.
+     */
+    private HttpRequest withRebuiltService(HttpRequest req) {
+        if (req.httpService() != null) return req;
+        String hostHeader = req.headerValue("Host");
+        if (hostHeader == null || hostHeader.isBlank()) return null;
+        String h = hostHeader.trim();
+        int colon = h.lastIndexOf(':');
+        String host = colon > 0 ? h.substring(0, colon) : h;
+        int port = 80;
+        try { if (colon > 0) port = Integer.parseInt(h.substring(colon + 1)); } catch (NumberFormatException ignored) {}
+        return req.withService(burp.api.montoya.http.HttpService.httpService(host, port, port == 443));
+    }
+
     private RecheckResult recheckFinding(Finding finding) {
         if (finding.evidence() == null) {
             return new RecheckResult(null, "This finding has no captured request to resend.", null);
@@ -1084,21 +1154,9 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
         long start = System.currentTimeMillis();
         HttpRequestResponse fresh;
         try {
-            HttpRequest req = finding.evidence().request();
-            // Findings saved before the codec persisted host/port come back service-less;
-            // rebuild the binding from the Host header so they stay revalidatable.
-            if (req.httpService() == null) {
-                String hostHeader = req.headerValue("Host");
-                if (hostHeader == null || hostHeader.isBlank()) {
-                    return new RecheckResult(null, "This finding has no target binding (saved by an older ICARUS) and no Host header to rebuild one — re-run the scan to refresh it.", null);
-                }
-                String h = hostHeader.trim();
-                int colon = h.lastIndexOf(':');
-                String host = colon > 0 ? h.substring(0, colon) : h;
-                int port = 80;
-                try { if (colon > 0) port = Integer.parseInt(h.substring(colon + 1)); } catch (NumberFormatException ignored) {}
-                boolean secure = port == 443;
-                req = req.withService(burp.api.montoya.http.HttpService.httpService(host, port, secure));
+            HttpRequest req = withRebuiltService(finding.evidence().request());
+            if (req == null) {
+                return new RecheckResult(null, "This finding has no target binding (saved by an older ICARUS) and no Host header to rebuild one — re-run the scan to refresh it.", null);
             }
             fresh = api.http().sendRequest(req);
         } catch (Exception e) {

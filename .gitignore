@@ -43,3 +43,6 @@ CLAUDE.md
 PLAN.md
 # Added by code-review-graph
 .code-review-graph/
+
+# Debug build (local only)
+icarus-extension/build_debug.sh

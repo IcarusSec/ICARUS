@@ -99,6 +99,8 @@ public class ReportingSettingsTab {
         JPanel column = new JPanel();
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
         column.setOpaque(false);
+        // Force the column to a strict maximum width
+        column.setMaximumSize(new Dimension(800, Integer.MAX_VALUE));
 
         column.add(buildProfileCard());
         column.add(Box.createVerticalStrut(16));
@@ -111,44 +113,18 @@ public class ReportingSettingsTab {
         column.add(buildContentPolicyCard());
         column.add(Box.createVerticalStrut(16));
         column.add(buildActionsCard());
-        column.add(Box.createVerticalGlue());
 
-        // Outer wrapper: centers the column with a max-width of 720px.
-        // On narrow screens (<720px), it fills 100%. On ultrawide, it sits centered.
-        final int MAX_WIDTH = 720;
-        JPanel wrapper = new JPanel(new GridBagLayout());
+        // Outer wrapper: perfectly centers the column horizontally using glue
+        JPanel wrapper = new JPanel();
+        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.X_AXIS));
         wrapper.setBackground(themeHelper.getBackgroundColor());
         wrapper.setBorder(new EmptyBorder(16, 16, 16, 16));
 
-        GridBagConstraints gc = new GridBagConstraints();
-        gc.gridx = 0; gc.gridy = 0;
-        gc.weightx = 1.0; gc.weighty = 1.0;
-        gc.fill = GridBagConstraints.VERTICAL;
-        gc.anchor = GridBagConstraints.NORTH;
-        // Column has a max width but can shrink below it
-        column.setMaximumSize(new Dimension(MAX_WIDTH, Integer.MAX_VALUE));
-        column.setPreferredSize(new Dimension(MAX_WIDTH, column.getPreferredSize().height));
+        wrapper.add(Box.createHorizontalGlue());
+        wrapper.add(column);
+        wrapper.add(Box.createHorizontalGlue());
 
-        // The trick: add glue left, column center, glue right
-        JPanel centered = new JPanel(new BorderLayout());
-        centered.setOpaque(false);
-        centered.add(column, BorderLayout.CENTER);
-
-        gc.fill = GridBagConstraints.BOTH;
-        wrapper.add(centered, gc);
-
-        // Constrain max width via a wrapper that caps it
-        return new JPanel(new BorderLayout()) {
-            { setOpaque(false); add(wrapper, BorderLayout.CENTER); }
-            @Override public void doLayout() {
-                // Let wrapper fill, but cap the inner column width
-                super.doLayout();
-                int available = getWidth() - 32; // account for padding
-                int w = Math.min(available, MAX_WIDTH);
-                column.setPreferredSize(new Dimension(w, column.getPreferredSize().height));
-                column.revalidate();
-            }
-        };
+        return wrapper;
     }
 
     // ── Card: Profile Selector ──────────────────────────────────────
@@ -330,7 +306,7 @@ public class ReportingSettingsTab {
         CardPanel card = new CardPanel("Branding & Metadata", "shield");
 
         txtDocTitle       = new JTextField();
-        txtClassification = new JTextField("Confidencial");
+        txtClassification = new JTextField("Confidential");
         txtAuthor         = new JTextField();
         txtReviewer       = new JTextField();
         txtApprover       = new JTextField();
@@ -502,6 +478,25 @@ public class ReportingSettingsTab {
             e.getValue().setSelected(c.findingFields().contains(e.getKey()));
     }
 
+    private void autoCloneProfile() {
+        if (currentProfile == null || !currentProfile.builtIn()) return;
+        int suffix = 1;
+        String base = "CUSTOM ";
+        String newName;
+        while (true) {
+            newName = base + suffix;
+            String finalName = newName;
+            if (profileManager.list().stream().noneMatch(p -> p.name().equalsIgnoreCase(finalName))) {
+                break;
+            }
+            suffix++;
+        }
+        ReportProfile cloned = profileManager.clone(currentProfile.id(), newName);
+        profileManager.setActive(cloned.id());
+        refreshProfileList(); // this switches the UI to the newly cloned profile, enabling everything
+        showToast("Auto-cloned to '" + cloned.name() + "' for editing");
+    }
+
     private void saveCurrentProfileChanges() {
         if (currentProfile == null || currentProfile.builtIn()) return;
 
@@ -642,7 +637,9 @@ public class ReportingSettingsTab {
     }
 
     private void addSection() {
-        if (currentProfile != null && currentProfile.builtIn()) return;
+        if (currentProfile != null && currentProfile.builtIn()) {
+            autoCloneProfile();
+        }
         String name = JOptionPane.showInputDialog(containerPanel, "Section identifier (e.g. CUSTOM_NOTES):");
         if (name != null && !name.isBlank()) {
             int nextOrder = sectionsTableModel.getRowCount() + 1;
@@ -651,7 +648,9 @@ public class ReportingSettingsTab {
     }
 
     private void removeSection() {
-        if (currentProfile != null && currentProfile.builtIn()) return;
+        if (currentProfile != null && currentProfile.builtIn()) {
+            autoCloneProfile();
+        }
         int idx = sectionsTable.getSelectedRow();
         if (idx < 0) return;
         Boolean required = (Boolean) sectionsTableModel.getValueAt(idx, 3);
@@ -796,7 +795,9 @@ public class ReportingSettingsTab {
         hex.setFont(hex.getFont().deriveFont(Font.PLAIN, 11f));
 
         btn.addActionListener(e -> {
-            if (currentProfile != null && currentProfile.builtIn()) return;
+            if (currentProfile != null && currentProfile.builtIn()) {
+                autoCloneProfile();
+            }
             Color c = JColorChooser.showDialog(panel, "Pick Color", btn.getBackground());
             if (c != null) {
                 btn.setBackground(c);

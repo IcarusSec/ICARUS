@@ -29,7 +29,7 @@ public record ReportProfile(
         if (schemaVersion == null || schemaVersion.isBlank()) schemaVersion = CURRENT_SCHEMA_VERSION;
         if (id == null || id.isBlank()) id = UUID.randomUUID().toString();
         if (name == null || name.isBlank()) name = "Custom Profile";
-        if (locale == null || locale.isBlank()) locale = "pt-BR";
+        if (locale == null || locale.isBlank()) locale = "en";
         if (coverRenderer == null) coverRenderer = CoverRendererId.GRADIENT_HERO;
         if (findingRenderer == null) findingRenderer = FindingRendererId.ELEVATED_CARD;
         if (sections == null) sections = new SectionGraph(Collections.emptyList());

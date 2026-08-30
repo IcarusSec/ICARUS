@@ -157,4 +157,11 @@ public class PayloadRepository {
     public static final String FORMAT_STRING_DEFAULT = "%s%x%n\n%p%p%p";
 
     public static final String UNICODE_DEFAULT = "‮test😀";
+
+    public static boolean isEvasionPayload(String payload) {
+        return SQLI_EVASION.contains(payload) || XSS_EVASION.contains(payload)
+            || PATH_TRAVERSAL_EVASION.contains(payload) || CMDI_EVASION.contains(payload)
+            || SSTI_EVASION.contains(payload) || NOSQLI_EVASION.contains(payload)
+            || SSRF_EVASION.contains(payload);
+    }
 }

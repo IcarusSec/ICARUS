@@ -274,6 +274,33 @@ public final class ScanRunner {
         }
 
         Optional<icarus.modules.WafVendor> vendor = icarus.modules.WafFingerprint.detect(target.response());
+        boolean baselineLooksBlocked = icarus.modules.WafFingerprint.looksBlocked(target.response());
+
+        // Active Probing: If baseline isn't blocked, send a malicious probe to see if a WAF intercepts it.
+        // This triggers silent WAFs (like Coraza/ModSecurity) that don't brand normal 200 OK responses.
+        if (!baselineLooksBlocked) {
+            try {
+                burp.api.montoya.http.message.requests.HttpRequest probeRequest = target.request()
+                        .withAddedParameters(burp.api.montoya.http.message.params.HttpParameter.urlParameter("icarus_waf_probe", "<script>alert(1)</script> union select 1,2,3--"));
+                HttpRequestResponse probeResult = api.http().sendRequest(probeRequest);
+                if (probeResult.response() != null) {
+                    Optional<icarus.modules.WafVendor> probeVendor = icarus.modules.WafFingerprint.detect(probeResult.response());
+                    boolean probeLooksBlocked = icarus.modules.WafFingerprint.looksBlocked(probeResult.response());
+                    
+                    if (probeVendor.isPresent() && probeLooksBlocked) {
+                        vendor = probeVendor;
+                        baselineLooksBlocked = true; // Force prompt
+                    } else if (probeResult.response().statusCode() == 403 || probeResult.response().statusCode() == 406) {
+                        // Behavioral fallback: 403 on a malicious probe implies a WAF/filter.
+                        vendor = Optional.of(icarus.modules.WafVendor.GENERIC);
+                        baselineLooksBlocked = true; // Force prompt
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore probe failure and proceed normally
+            }
+        }
+
         if (vendor.isEmpty()) {
             return new WafDecision(false, Optional.empty(), false);
         }
@@ -285,7 +312,7 @@ public final class ScanRunner {
         // baseline response itself looks like a block page; otherwise just note it and run
         // normally — the ParamValidator 403 backoff prompt is the safety net if it does start
         // blocking mid-scan.
-        if (!icarus.modules.WafFingerprint.looksBlocked(target.response())) {
+        if (!baselineLooksBlocked) {
             log.accept(I18n.t("settings.waf.log.present", friendlyName));
             return new WafDecision(true, vendor, false);
         }

@@ -494,6 +494,7 @@ public final class ParamValidatorModule implements IcarusModule {
         List<HttpRequestResponse> responses = new ArrayList<>();
 
         boolean promptedThrottle = false;
+        boolean jumpToEvasion = false;
         int delayMs = 0;
 
         int blockStreak = 0;
@@ -505,6 +506,15 @@ public final class ParamValidatorModule implements IcarusModule {
                 break;
             }
             Mutation m = mutations.get(i);
+            
+            if (jumpToEvasion && m.category() == Category.INJECTION && m.value() instanceof String) {
+                if (!icarus.modules.PayloadRepository.isEvasionPayload((String) m.value())) {
+                    responses.add(null);
+                    requestTimes[i] = 0;
+                    continue;
+                }
+            }
+            
             logger.accept(I18n.t("module.pv.log.testing_mutation", shortPath(m.path()), m.description().toLowerCase()));
 
             if (delayMs > 0) {
@@ -532,20 +542,31 @@ public final class ParamValidatorModule implements IcarusModule {
                         logger.accept(I18n.t("module.pv.log.tool_returning", st));
                         if (!promptedThrottle) {
                             promptedThrottle = true;
-                            // Blocking dialog must run on the EDT (CLAUDE.md) — same invokeAndWait
-                            // pattern ScanRunner already uses for its Akamai prompt.
-                            int[] choiceHolder = { javax.swing.JOptionPane.NO_OPTION };
+                            int[] choiceHolder = { 0 };
                             try {
-                                javax.swing.SwingUtilities.invokeAndWait(() -> choiceHolder[0] = javax.swing.JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(),
-                                    I18n.t("module.pv.ui.waf_throttle_msg", st),
-                                    I18n.t("module.pv.ui.waf_throttle_title"), javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE));
+                                javax.swing.SwingUtilities.invokeAndWait(() -> {
+                                    String[] options = { "Delay (2s)", "Try Evasion Payloads", "Ignore" };
+                                    choiceHolder[0] = javax.swing.JOptionPane.showOptionDialog(
+                                        api.userInterface().swingUtils().suiteFrame(),
+                                        "WAF detected via blocked payloads (streak of 403s).\nDo you want to delay or skip to testing the evasion payloads?\n(Note: Evasion payloads are only queued if scan depth is set to DEEP)",
+                                        I18n.t("module.pv.ui.waf_throttle_title"),
+                                        javax.swing.JOptionPane.YES_NO_CANCEL_OPTION,
+                                        javax.swing.JOptionPane.WARNING_MESSAGE,
+                                        null, options, options[0]);
+                                });
                             } catch (InterruptedException ex) {
                                 Thread.currentThread().interrupt();
-                            } catch (java.lang.reflect.InvocationTargetException ex) {
-                                api.logging().logToError(I18n.t("module.pv.err.waf_dialog_failed", ex.getCause()));
+                            } catch (Exception ex) {
+                                api.logging().logToError("WAF dialog failed: " + ex);
                             }
-                            if (choiceHolder[0] == javax.swing.JOptionPane.YES_OPTION) {
+                            
+                            if (choiceHolder[0] == 0) { // Delay
                                 delayMs = 2000;
+                            } else if (choiceHolder[0] == 1) { // Try Evasion
+                                jumpToEvasion = true;
+                                blockStreak = 0;
+                                delayMs = 0;
+                                logger.accept("WAF Detected (Behavioral) — skipping standard payloads, jumping to evasion payloads...");
                             }
                         }
                     } else {

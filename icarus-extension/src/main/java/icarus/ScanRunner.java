@@ -237,7 +237,9 @@ public final class ScanRunner {
         };
         logger.accept("ICARUS → Running " + module.name());
         icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " starting, isManual=" + isManual);
-        WafDecision decision = maybePromptForWaf(target, logger);
+        WafDecision decision = module.sendsActivePayloads()
+                ? maybePromptForWaf(target, logger)
+                : new WafDecision(false, Optional.empty(), false);
         ModuleConfig scanConfig = safeModeConfig(decision);
         List<Finding> findings;
         try {
@@ -277,6 +279,17 @@ public final class ScanRunner {
         }
 
         String friendlyName = friendlyVendorName(vendor.get());
+
+        // A WAF/CDN in front of the target (Cloudflare especially) is extremely common and
+        // usually isn't actively blocking. Only interrupt with the Safe-Mode prompt when the
+        // baseline response itself looks like a block page; otherwise just note it and run
+        // normally — the ParamValidator 403 backoff prompt is the safety net if it does start
+        // blocking mid-scan.
+        if (!icarus.modules.WafFingerprint.looksBlocked(target.response())) {
+            log.accept(I18n.t("settings.waf.log.present", friendlyName));
+            return new WafDecision(true, vendor, false);
+        }
+
         int[] choiceHolder = { -1 };
         runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(
                 api.userInterface().swingUtils().suiteFrame(),

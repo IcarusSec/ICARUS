@@ -31,6 +31,11 @@ public class HttpVerbModule implements IcarusModule {
     }
 
     @Override
+    public boolean sendsActivePayloads() {
+        return true;
+    }
+
+    @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("hv.enabled", true)) {
             return List.of();

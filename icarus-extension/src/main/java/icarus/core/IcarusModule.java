@@ -36,4 +36,13 @@ public interface IcarusModule {
     default boolean includeInBulkScan() {
         return true;
     }
+
+    /**
+     * Whether this module sends active/mutated payloads to the target (vs. only
+     * inspecting the captured request/response). Drives the WAF Safe-Mode prompt:
+     * a passive module like the JWT checker shouldn't trigger it. Default false.
+     */
+    default boolean sendsActivePayloads() {
+        return false;
+    }
 }

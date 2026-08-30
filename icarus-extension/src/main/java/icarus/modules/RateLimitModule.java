@@ -55,6 +55,11 @@ public class RateLimitModule implements IcarusModule {
     }
 
     @Override
+    public boolean sendsActivePayloads() {
+        return true;
+    }
+
+    @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         DebugLog.log("RateLimitModule.run: entered");
         if (!config.getBool("rl.enabled", true)) { DebugLog.log("RateLimitModule.run: skipped — rl.enabled=false"); return List.of(); }

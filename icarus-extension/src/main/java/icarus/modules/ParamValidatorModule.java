@@ -40,6 +40,11 @@ public final class ParamValidatorModule implements IcarusModule {
         return "ParamValidator";
     }
 
+    @Override
+    public boolean sendsActivePayloads() {
+        return true;
+    }
+
     record MutationSpec(String type, String description, Object value, boolean remove, Category category, icarus.modules.ast.mutators.AstMutationResult astResult) {
         public MutationSpec(String type, String description, Object value, boolean remove, Category category) {
             this(type, description, value, remove, category, null);
@@ -600,6 +605,22 @@ public final class ParamValidatorModule implements IcarusModule {
                             injectionDesc += "\n[UNCERTAIN] " + I18n.t("module.pv.finding.desc.xss_uncertain");
                         }
                     }
+                }
+            }
+
+            // Canary probes carry `'"` and `<>`. If one comes back byte-for-byte (not
+            // HTML-entity-escaped), the parameter echoes attacker input unsanitised into the
+            // response — an injection point worth a manual XSS/HTMLi look even though the canary
+            // itself isn't a working payload. Escaped reflection produces no match, so no noise.
+            if (mutation.type().equals("CANARY_PROBE") && !isInjectionFinding
+                    && mutation.value() instanceof String canary && bodyStr.contains(canary)) {
+                String ct = mutatedResponse.headerValue("Content-Type");
+                boolean textualBody = ct == null || ct.toLowerCase().contains("html") || ct.toLowerCase().contains("xml");
+                if (textualBody) {
+                    isInjectionFinding = true;
+                    injectionSeverity = Severity.LOW;
+                    extractedContext = extractContext(bodyStr, canary, 60);
+                    injectionDesc = I18n.t("module.pv.finding.desc.canary_reflected", extractedContext);
                 }
             }
 

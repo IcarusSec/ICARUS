@@ -9,25 +9,35 @@ import javax.swing.*;
 import java.awt.*;
 
 public class ToolbarPanel implements ResponsiveSection {
-    // One left-aligned flow row for every control; WrapLayout wraps to a second
-    // row when it doesn't fit. A wide strut separates the profile group from the
-    // preview/save actions. No left/right split -> both rows always share the
-    // same left edge instead of one hugging the right.
-    private final JPanel component = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 8));
+    // Two left-aligned rows, always stacked: profile management on top, the
+    // preview/save actions below. Both start at the same left edge (no
+    // right-hugging, no split strut that wraps oddly). Each row is a WrapLayout
+    // so it still wraps within itself on a very narrow window.
+    private final JPanel component = new JPanel(new GridBagLayout());
+    private final JPanel profileRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
+    private final JPanel actionRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
 
     public ToolbarPanel(JComboBox<ReportProfile> comboProfiles,
                         JButton btnClone, JButton btnExport, JButton btnImport, JButton btnDelete,
                         JButton btnPreviewPdf, JButton btnPreviewHtml, JButton btnSave) {
-        component.add(new JLabel("Profile:"));
-        component.add(comboProfiles);
-        component.add(btnClone);
-        component.add(btnExport);
-        component.add(btnImport);
-        component.add(btnDelete);
-        component.add(Box.createHorizontalStrut(24));
-        component.add(btnPreviewPdf);
-        component.add(btnPreviewHtml);
-        component.add(btnSave);
+        profileRow.add(new JLabel("Profile:"));
+        profileRow.add(comboProfiles);
+        profileRow.add(btnClone);
+        profileRow.add(btnExport);
+        profileRow.add(btnImport);
+        profileRow.add(btnDelete);
+
+        actionRow.add(btnPreviewPdf);
+        actionRow.add(btnPreviewHtml);
+        actionRow.add(btnSave);
+
+        GridBagConstraints g = new GridBagConstraints();
+        g.gridx = 0; g.weightx = 1.0;
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.anchor = GridBagConstraints.WEST;
+        g.gridy = 0; component.add(profileRow, g);
+        g.gridy = 1; g.insets = new Insets(2, 0, 0, 0);
+        component.add(actionRow, g);
     }
 
     @Override
@@ -37,6 +47,6 @@ public class ToolbarPanel implements ResponsiveSection {
 
     @Override
     public void onBreakpointChanged(Breakpoint bp) {
-        // WrapLayout handles reflow on its own.
+        // Each row's WrapLayout handles its own reflow.
     }
 }

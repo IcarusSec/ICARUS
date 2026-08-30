@@ -22,6 +22,8 @@ import java.util.List;
 
 /**
  * Settings tab for configuring, cloning, styling, and managing Report Profiles.
+ * Layout uses vertical BoxLayout with GridBagLayout forms — no fixed widths,
+ * no horizontal scroll.
  */
 public class ReportingSettingsTab {
 
@@ -40,23 +42,23 @@ public class ReportingSettingsTab {
     private JButton btnPreviewPdf;
     private JButton btnPreviewHtml;
 
-    // Tabs / Form fields
+    // Layout tab
     private JRadioButton rdoCoverGradient;
     private JRadioButton rdoCoverHeaderBand;
     private JRadioButton rdoCoverNone;
-
     private JRadioButton rdoFindingCard;
     private JRadioButton rdoFindingTabular;
-
     private DefaultTableModel sectionsTableModel;
     private JTable sectionsTable;
 
+    // Theme tab
     private JPanel colorPrimaryPanel;
     private JPanel colorSecondaryPanel;
     private JComboBox<String> comboFontStack;
     private JSpinner spinFontSize;
     private Map<Severity, JPanel> severityColorPanels = new EnumMap<>(Severity.class);
 
+    // Branding tab
     private JTextField txtCompanyLogo;
     private JTextField txtClientLogo;
     private JTextField txtDocTitle;
@@ -66,6 +68,7 @@ public class ReportingSettingsTab {
     private JTextField txtApprover;
     private JTextField txtEnvironment;
 
+    // Content tab
     private JCheckBox chkIncludeEvidence;
     private JCheckBox chkIncludeReq;
     private JSpinner spinMaxReqBytes;
@@ -91,6 +94,7 @@ public class ReportingSettingsTab {
         JPanel mainPanel = buildReportingTab();
         JScrollPane masterScroll = new JScrollPane(mainPanel);
         masterScroll.getVerticalScrollBar().setUnitIncrement(16);
+        masterScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         masterScroll.setBorder(null);
         themeHelper.applyTheme(masterScroll);
 
@@ -108,172 +112,200 @@ public class ReportingSettingsTab {
         }
     }
 
+    // ─── Main Layout ────────────────────────────────────────────────
+
     private JPanel buildReportingTab() {
-        JPanel mainPanel = new JPanel();
-        mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
-        mainPanel.setBorder(new EmptyBorder(16, 16, 16, 16));
-        themeHelper.applyTheme(mainPanel);
+        JPanel main = new JPanel();
+        main.setLayout(new BoxLayout(main, BoxLayout.Y_AXIS));
+        main.setBorder(new EmptyBorder(16, 16, 16, 16));
+        themeHelper.applyTheme(main);
 
-        // 1. Profile Selector Strip
-        mainPanel.add(buildProfileStrip());
-        mainPanel.add(Box.createVerticalStrut(12));
+        main.add(buildProfileSelector());
+        main.add(Box.createVerticalStrut(12));
 
-        // 2. Editor Tabs
-        JTabbedPane tabbedPane = new JTabbedPane();
-        tabbedPane.addTab(I18n.t("ui.reporting.tab.layout", "Layout & Sections"), buildLayoutAndSectionsTab());
-        tabbedPane.addTab(I18n.t("ui.reporting.tab.theme", "Colors & Theme"), buildThemeTab());
-        tabbedPane.addTab(I18n.t("ui.reporting.tab.branding", "Branding & Metadata"), buildBrandingTab());
-        tabbedPane.addTab(I18n.t("ui.reporting.tab.content", "Content & Policy"), buildContentPolicyTab());
+        JTabbedPane tabs = new JTabbedPane();
+        tabs.putClientProperty("JTabbedPane.tabType", "underlined");
+        tabs.addTab(I18n.t("ui.reporting.tab.layout", "Layout & Sections"), buildLayoutTab());
+        tabs.addTab(I18n.t("ui.reporting.tab.theme", "Colors & Theme"), buildThemeTab());
+        tabs.addTab(I18n.t("ui.reporting.tab.branding", "Branding & Metadata"), buildBrandingTab());
+        tabs.addTab(I18n.t("ui.reporting.tab.content", "Content & Policy"), buildContentPolicyTab());
+        tabs.setAlignmentX(Component.LEFT_ALIGNMENT);
+        main.add(tabs);
+        main.add(Box.createVerticalStrut(12));
 
-        tabbedPane.setAlignmentX(Component.LEFT_ALIGNMENT);
-        mainPanel.add(tabbedPane);
-        mainPanel.add(Box.createVerticalStrut(12));
-
-        // 3. Bottom Action Bar (Preview & Save)
-        mainPanel.add(buildBottomActionBar());
-
-        return mainPanel;
+        main.add(buildBottomBar());
+        return main;
     }
 
-    private JPanel buildProfileStrip() {
-        JPanel strip = new JPanel(new BorderLayout(8, 0));
-        strip.setBackground(UIManager.getColor("TextField.background"));
-        strip.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createTitledBorder(I18n.t("ui.reporting.section.profile", "Active Report Model / Profile")),
-            new EmptyBorder(8, 8, 8, 8)
-        ));
-        strip.setAlignmentX(Component.LEFT_ALIGNMENT);
+    // ─── Profile Selector (responsive, stacked) ────────────────────
 
+    private JPanel buildProfileSelector() {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(UIManager.getColor("Component.borderColor"), 1, true),
+                " Report Profile ",
+                TitledBorder.LEFT, TitledBorder.TOP,
+                UIManager.getFont("TitledBorder.font")
+            ),
+            new EmptyBorder(10, 12, 10, 12)
+        ));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        // Row 1: Combo (full width)
         comboProfiles = new JComboBox<>();
+        comboProfiles.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        comboProfiles.setAlignmentX(Component.LEFT_ALIGNMENT);
         comboProfiles.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
                 super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
                 if (value instanceof ReportProfile p) {
-                    setText((p.builtIn() ? "🔒 " : "✏️ ") + p.name() + (p.builtIn() ? " [Built-in]" : " [Custom]"));
+                    String icon = p.builtIn() ? "\uD83D\uDD12" : "\u270F\uFE0F";
+                    String tag = p.builtIn() ? "Built-in" : "Custom";
+                    setText(icon + "  " + p.name() + "  [" + tag + "]");
                 }
                 return this;
             }
         });
         comboProfiles.addActionListener(e -> {
             if (isUpdatingUi) return;
-            ReportProfile selected = (ReportProfile) comboProfiles.getSelectedItem();
-            if (selected != null) {
-                profileManager.setActive(selected.id());
-                loadProfileIntoForm(selected);
+            ReportProfile sel = (ReportProfile) comboProfiles.getSelectedItem();
+            if (sel != null) {
+                profileManager.setActive(sel.id());
+                loadProfileIntoForm(sel);
             }
         });
 
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        buttons.setOpaque(false);
+        card.add(comboProfiles);
+        card.add(Box.createVerticalStrut(8));
 
-        btnClone = new JButton(I18n.t("ui.reporting.btn.clone", "📋 Clone"), EvidenceUiHelpers.createIcon("copy"));
-        btnClone.setToolTipText("Clone selected profile into a new customizable profile");
+        // Row 2: Action buttons (wrap-friendly)
+        JPanel btns = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+        btns.setOpaque(false);
+        btns.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        btnClone = makeSmallButton("Clone", "copy");
+        btnClone.setToolTipText("Create an editable copy of the selected profile");
         btnClone.addActionListener(e -> onCloneProfile());
 
-        btnExport = new JButton(I18n.t("ui.reporting.btn.export_json", "📤 Export JSON"), EvidenceUiHelpers.createIcon("download"));
+        btnExport = makeSmallButton("Export", "download");
+        btnExport.setToolTipText("Export profile as a JSON file");
         btnExport.addActionListener(e -> onExportProfile());
 
-        btnImport = new JButton(I18n.t("ui.reporting.btn.import_json", "📥 Import JSON"), EvidenceUiHelpers.createIcon("upload"));
+        btnImport = makeSmallButton("Import", "folder");
+        btnImport.setToolTipText("Import a profile from a JSON file");
         btnImport.addActionListener(e -> onImportProfile());
 
-        btnDelete = new JButton(I18n.t("ui.reporting.btn.delete", "🗑️ Delete"), EvidenceUiHelpers.createIcon("trash"));
+        btnDelete = makeSmallButton("Delete", "trash");
+        btnDelete.setToolTipText("Delete selected custom profile");
         btnDelete.addActionListener(e -> onDeleteProfile());
 
-        buttons.add(btnClone);
-        buttons.add(btnExport);
-        buttons.add(btnImport);
-        buttons.add(btnDelete);
+        btns.add(btnClone);
+        btns.add(btnExport);
+        btns.add(btnImport);
+        btns.add(btnDelete);
 
-        strip.add(comboProfiles, BorderLayout.CENTER);
-        strip.add(buttons, BorderLayout.EAST);
-
-        return strip;
+        card.add(btns);
+        return card;
     }
 
-    private JPanel buildLayoutAndSectionsTab() {
+    // ─── Tab 1: Layout & Sections ──────────────────────────────────
+
+    private JPanel buildLayoutTab() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(12, 12, 12, 12));
 
-        // Cover Style
-        JPanel pnlCover = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
-        pnlCover.setBorder(BorderFactory.createTitledBorder(I18n.t("ui.reporting.lbl.cover_style", "Cover Page Layout (PDF)")));
+        // Cover Page Style — vertical radio group
+        JPanel pnlCover = new JPanel();
+        pnlCover.setLayout(new BoxLayout(pnlCover, BoxLayout.Y_AXIS));
+        pnlCover.setBorder(makeSectionBorder("Cover Page Layout (PDF)"));
         ButtonGroup grpCover = new ButtonGroup();
         rdoCoverGradient = new JRadioButton("Gradient Hero (Modern Executive)");
         rdoCoverHeaderBand = new JRadioButton("Header Band (Classic Technical)");
         rdoCoverNone = new JRadioButton("None (Direct Flow)");
-        grpCover.add(rdoCoverGradient);
-        grpCover.add(rdoCoverHeaderBand);
-        grpCover.add(rdoCoverNone);
-        pnlCover.add(rdoCoverGradient);
-        pnlCover.add(rdoCoverHeaderBand);
-        pnlCover.add(rdoCoverNone);
+        for (JRadioButton r : List.of(rdoCoverGradient, rdoCoverHeaderBand, rdoCoverNone)) {
+            grpCover.add(r);
+            r.setAlignmentX(Component.LEFT_ALIGNMENT);
+            pnlCover.add(r);
+            pnlCover.add(Box.createVerticalStrut(2));
+        }
         pnlCover.setAlignmentX(Component.LEFT_ALIGNMENT);
+        setMaxWidth(pnlCover);
         panel.add(pnlCover);
         panel.add(Box.createVerticalStrut(10));
 
-        // Finding Style
-        JPanel pnlFinding = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 4));
-        pnlFinding.setBorder(BorderFactory.createTitledBorder(I18n.t("ui.reporting.lbl.finding_style", "Finding Card Layout")));
+        // Finding Card Style — vertical radio group
+        JPanel pnlFinding = new JPanel();
+        pnlFinding.setLayout(new BoxLayout(pnlFinding, BoxLayout.Y_AXIS));
+        pnlFinding.setBorder(makeSectionBorder("Finding Card Layout"));
         ButtonGroup grpFinding = new ButtonGroup();
         rdoFindingCard = new JRadioButton("Elevated Card (Modern Rounded)");
         rdoFindingTabular = new JRadioButton("Tabular Grid (Classic Boxed)");
-        grpFinding.add(rdoFindingCard);
-        grpFinding.add(rdoFindingTabular);
-        pnlFinding.add(rdoFindingCard);
-        pnlFinding.add(rdoFindingTabular);
+        for (JRadioButton r : List.of(rdoFindingCard, rdoFindingTabular)) {
+            grpFinding.add(r);
+            r.setAlignmentX(Component.LEFT_ALIGNMENT);
+            pnlFinding.add(r);
+            pnlFinding.add(Box.createVerticalStrut(2));
+        }
         pnlFinding.setAlignmentX(Component.LEFT_ALIGNMENT);
+        setMaxWidth(pnlFinding);
         panel.add(pnlFinding);
         panel.add(Box.createVerticalStrut(10));
 
-        // Sections Reordering Table
+        // Sections table
         JPanel pnlSections = new JPanel(new BorderLayout(8, 8));
-        pnlSections.setBorder(BorderFactory.createTitledBorder(I18n.t("ui.reporting.lbl.sections_order", "Report Sections Flow")));
+        pnlSections.setBorder(makeSectionBorder("Report Sections Flow"));
+        pnlSections.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        sectionsTableModel = new DefaultTableModel(new Object[]{"Enabled", "Order", "Section Identifier", "Required"}, 0) {
+        sectionsTableModel = new DefaultTableModel(new Object[]{"Enabled", "#", "Section", "Required"}, 0) {
             @Override
-            public Class<?> getColumnClass(int columnIndex) {
-                if (columnIndex == 0 || columnIndex == 3) return Boolean.class;
-                if (columnIndex == 1) return Integer.class;
+            public Class<?> getColumnClass(int col) {
+                if (col == 0 || col == 3) return Boolean.class;
+                if (col == 1) return Integer.class;
                 return String.class;
             }
 
             @Override
-            public boolean isCellEditable(int row, int column) {
+            public boolean isCellEditable(int row, int col) {
                 if (currentProfile != null && currentProfile.builtIn()) return false;
-                if (column == 0) {
+                if (col == 0) {
                     Boolean req = (Boolean) getValueAt(row, 3);
-                    return req == null || !req; // cannot disable required section
+                    return req == null || !req;
                 }
                 return false;
             }
         };
-
         sectionsTable = new JTable(sectionsTableModel);
         sectionsTable.setRowHeight(24);
-        sectionsTable.getColumnModel().getColumn(0).setMaxWidth(70);
-        sectionsTable.getColumnModel().getColumn(1).setMaxWidth(60);
-        sectionsTable.getColumnModel().getColumn(3).setMaxWidth(80);
+        sectionsTable.getColumnModel().getColumn(0).setMaxWidth(60);
+        sectionsTable.getColumnModel().getColumn(0).setMinWidth(50);
+        sectionsTable.getColumnModel().getColumn(1).setMaxWidth(35);
+        sectionsTable.getColumnModel().getColumn(1).setMinWidth(30);
+        sectionsTable.getColumnModel().getColumn(3).setMaxWidth(65);
+        sectionsTable.getColumnModel().getColumn(3).setMinWidth(55);
 
         JScrollPane scrollTable = new JScrollPane(sectionsTable);
-        scrollTable.setPreferredSize(new Dimension(500, 180));
+        scrollTable.setPreferredSize(new Dimension(100, 180));
         pnlSections.add(scrollTable, BorderLayout.CENTER);
 
-        JPanel pnlOrderButtons = new JPanel(new GridLayout(2, 1, 4, 4));
-        JButton btnUp = new JButton("▲ Move Up");
-        JButton btnDown = new JButton("▼ Move Down");
+        JPanel pnlOrderBtns = new JPanel(new GridLayout(2, 1, 4, 4));
+        pnlOrderBtns.setOpaque(false);
+        JButton btnUp = makeSmallButton("Up", "arrow-up");
+        JButton btnDown = makeSmallButton("Down", "arrow-down");
         btnUp.addActionListener(e -> moveSectionRow(-1));
         btnDown.addActionListener(e -> moveSectionRow(1));
-        pnlOrderButtons.add(btnUp);
-        pnlOrderButtons.add(btnDown);
-        pnlSections.add(pnlOrderButtons, BorderLayout.EAST);
+        pnlOrderBtns.add(btnUp);
+        pnlOrderBtns.add(btnDown);
+        pnlSections.add(pnlOrderBtns, BorderLayout.EAST);
 
-        pnlSections.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(pnlSections);
-
         return panel;
     }
+
+    // ─── Tab 2: Colors & Theme ─────────────────────────────────────
 
     private JPanel buildThemeTab() {
         JPanel panel = new JPanel(new GridBagLayout());
@@ -281,48 +313,80 @@ public class ReportingSettingsTab {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(6, 6, 6, 6);
         gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
 
-        // Primary Color
-        gbc.gridx = 0; gbc.gridy = 0; gbc.weightx = 0.0;
+        int row = 0;
+        // Primary
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
         panel.add(new JLabel("Primary Accent Color:"), gbc);
-        colorPrimaryPanel = createColorPickerComponent("Primary");
+        colorPrimaryPanel = createColorSwatch();
         gbc.gridx = 1; gbc.weightx = 1.0;
         panel.add(colorPrimaryPanel, gbc);
 
-        // Secondary Color
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0;
+        // Secondary
+        row++;
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
         panel.add(new JLabel("Secondary Accent Color:"), gbc);
-        colorSecondaryPanel = createColorPickerComponent("Secondary");
+        colorSecondaryPanel = createColorSwatch();
         gbc.gridx = 1; gbc.weightx = 1.0;
         panel.add(colorSecondaryPanel, gbc);
 
-        // Typography
-        gbc.gridx = 0; gbc.gridy = 2; gbc.weightx = 0.0;
-        panel.add(new JLabel("Base Font Family:"), gbc);
+        // Font
+        row++;
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        panel.add(new JLabel("Font Family:"), gbc);
         comboFontStack = new JComboBox<>(new String[]{"Helvetica", "Times-Roman", "Courier"});
         gbc.gridx = 1; gbc.weightx = 1.0;
         panel.add(comboFontStack, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 3; gbc.weightx = 0.0;
-        panel.add(new JLabel("Base Font Size (PDF):"), gbc);
+        // Font size
+        row++;
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0;
+        panel.add(new JLabel("Font Size (PDF):"), gbc);
         spinFontSize = new JSpinner(new SpinnerNumberModel(10, 8, 14, 1));
         gbc.gridx = 1; gbc.weightx = 1.0;
         panel.add(spinFontSize, gbc);
 
-        // Severity Colors Box
-        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2;
-        JPanel pnlSev = new JPanel(new GridLayout(2, 4, 8, 8));
-        pnlSev.setBorder(BorderFactory.createTitledBorder("Severity Badge Colors"));
+        // Severity Colors — use a WrapLayout (3 columns GridBag) inside a titled panel
+        row++;
+        gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 2; gbc.weightx = 1.0;
 
-        for (Severity s : List.of(Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO, Severity.FIXED, Severity.NOT_FIXED)) {
-            JPanel p = createColorPickerComponent(s.name());
-            severityColorPanels.put(s, p);
-            pnlSev.add(p);
+        JPanel pnlSev = new JPanel(new GridBagLayout());
+        pnlSev.setBorder(makeSectionBorder("Severity Badge Colors"));
+        GridBagConstraints sg = new GridBagConstraints();
+        sg.insets = new Insets(4, 4, 4, 4);
+        sg.fill = GridBagConstraints.HORIZONTAL;
+        sg.weightx = 1.0;
+
+        Severity[] sevs = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO, Severity.FIXED, Severity.NOT_FIXED};
+        for (int i = 0; i < sevs.length; i++) {
+            sg.gridx = i % 3;
+            sg.gridy = i / 3;
+            JPanel swatch = createColorSwatch();
+            severityColorPanels.put(sevs[i], swatch);
+
+            // Wrap with label
+            JPanel labeled = new JPanel(new BorderLayout(4, 0));
+            labeled.setOpaque(false);
+            labeled.add(new JLabel(formatSeverityLabel(sevs[i])), BorderLayout.WEST);
+            labeled.add(swatch, BorderLayout.CENTER);
+            pnlSev.add(labeled, sg);
         }
+        // filler for last row
+        sg.gridx = sevs.length % 3;
+        sg.gridy = sevs.length / 3;
+        sg.gridwidth = 3 - (sevs.length % 3);
+        if (sg.gridwidth > 0 && sg.gridwidth < 3) {
+            pnlSev.add(Box.createGlue(), sg);
+        }
+
         panel.add(pnlSev, gbc);
+        gbc.gridwidth = 1; // reset
 
         return panel;
     }
+
+    // ─── Tab 3: Branding & Metadata ────────────────────────────────
 
     private JPanel buildBrandingTab() {
         JPanel panel = new JPanel(new GridBagLayout());
@@ -330,15 +394,16 @@ public class ReportingSettingsTab {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 6, 4, 6);
         gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.anchor = GridBagConstraints.WEST;
 
-        txtCompanyLogo = new JTextField();
-        txtClientLogo = new JTextField();
         txtDocTitle = new JTextField();
         txtClassification = new JTextField("Confidencial");
         txtAuthor = new JTextField();
         txtReviewer = new JTextField();
         txtApprover = new JTextField();
         txtEnvironment = new JTextField();
+        txtCompanyLogo = new JTextField();
+        txtClientLogo = new JTextField();
 
         int row = 0;
         addFormRow(panel, gbc, row++, "Document Title:", txtDocTitle);
@@ -347,11 +412,13 @@ public class ReportingSettingsTab {
         addFormRow(panel, gbc, row++, "Reviewer:", txtReviewer);
         addFormRow(panel, gbc, row++, "Approver:", txtApprover);
         addFormRow(panel, gbc, row++, "Environment:", txtEnvironment);
-        addFilePickerRow(panel, gbc, row++, "Company Logo (PDF Header):", txtCompanyLogo);
-        addFilePickerRow(panel, gbc, row++, "Client Logo (Cover Page):", txtClientLogo);
+        addFilePickerRow(panel, gbc, row++, "Company Logo:", txtCompanyLogo);
+        addFilePickerRow(panel, gbc, row++, "Client Logo:", txtClientLogo);
 
         return panel;
     }
+
+    // ─── Tab 4: Content & Policy ───────────────────────────────────
 
     private JPanel buildContentPolicyTab() {
         JPanel panel = new JPanel();
@@ -363,53 +430,87 @@ public class ReportingSettingsTab {
         spinMaxReqBytes = new JSpinner(new SpinnerNumberModel(4096, 512, 65536, 512));
         chkIncludeRes = new JCheckBox("Include Raw HTTP Response", true);
         spinMaxResBytes = new JSpinner(new SpinnerNumberModel(4096, 512, 65536, 512));
-        chkToc = new JCheckBox("Generate Table of Contents (TOC / PDF Bookmarks)", true);
+        chkToc = new JCheckBox("Generate Table of Contents", true);
 
-        JPanel pnlGating = new JPanel(new GridLayout(3, 2, 8, 8));
-        pnlGating.setBorder(BorderFactory.createTitledBorder("Evidence & Excerpt Caps"));
-        pnlGating.add(chkIncludeEvidence);
-        pnlGating.add(chkToc);
-        pnlGating.add(chkIncludeReq);
-        pnlGating.add(wrapWithLabel("Max Request Bytes:", spinMaxReqBytes));
-        pnlGating.add(chkIncludeRes);
-        pnlGating.add(wrapWithLabel("Max Response Bytes:", spinMaxResBytes));
+        // Evidence & Excerpt section
+        JPanel pnlGating = new JPanel(new GridBagLayout());
+        pnlGating.setBorder(makeSectionBorder("Evidence & Excerpt Caps"));
         pnlGating.setAlignmentX(Component.LEFT_ALIGNMENT);
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.insets = new Insets(3, 6, 3, 6);
+        gc.fill = GridBagConstraints.HORIZONTAL;
+        gc.anchor = GridBagConstraints.WEST;
+
+        gc.gridx = 0; gc.gridy = 0; gc.weightx = 1.0; gc.gridwidth = 2;
+        pnlGating.add(chkIncludeEvidence, gc);
+        gc.gridy = 1;
+        pnlGating.add(chkToc, gc);
+        gc.gridy = 2; gc.gridwidth = 1; gc.weightx = 0;
+        pnlGating.add(chkIncludeReq, gc);
+        gc.gridx = 1; gc.weightx = 1.0;
+        pnlGating.add(wrapWithLabel("Max bytes:", spinMaxReqBytes), gc);
+        gc.gridx = 0; gc.gridy = 3; gc.weightx = 0;
+        pnlGating.add(chkIncludeRes, gc);
+        gc.gridx = 1; gc.weightx = 1.0;
+        pnlGating.add(wrapWithLabel("Max bytes:", spinMaxResBytes), gc);
+
+        setMaxWidth(pnlGating);
         panel.add(pnlGating);
         panel.add(Box.createVerticalStrut(10));
 
-        JPanel pnlFields = new JPanel(new GridLayout(2, 4, 8, 8));
-        pnlFields.setBorder(BorderFactory.createTitledBorder("Finding Fields Visibility"));
-        for (FindingField f : FindingField.values()) {
-            JCheckBox chk = new JCheckBox(f.name(), true);
-            fieldCheckboxes.put(f, chk);
-            pnlFields.add(chk);
-        }
+        // Finding Fields
+        JPanel pnlFields = new JPanel(new GridBagLayout());
+        pnlFields.setBorder(makeSectionBorder("Finding Fields Visibility"));
         pnlFields.setAlignmentX(Component.LEFT_ALIGNMENT);
+        GridBagConstraints fg = new GridBagConstraints();
+        fg.insets = new Insets(2, 6, 2, 6);
+        fg.fill = GridBagConstraints.HORIZONTAL;
+        fg.anchor = GridBagConstraints.WEST;
+        fg.weightx = 1.0;
+
+        FindingField[] fields = FindingField.values();
+        for (int i = 0; i < fields.length; i++) {
+            fg.gridx = i % 3;
+            fg.gridy = i / 3;
+            JCheckBox chk = new JCheckBox(formatFieldLabel(fields[i]), true);
+            fieldCheckboxes.put(fields[i], chk);
+            pnlFields.add(chk, fg);
+        }
+
+        setMaxWidth(pnlFields);
         panel.add(pnlFields);
 
         return panel;
     }
 
-    private JPanel buildBottomActionBar() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 4));
-        bar.setAlignmentX(Component.LEFT_ALIGNMENT);
+    // ─── Bottom Bar ────────────────────────────────────────────────
 
-        btnPreviewPdf = new JButton("👁️ Preview PDF", EvidenceUiHelpers.createIcon("file-type-pdf"));
+    private JPanel buildBottomBar() {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 4));
+        bar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+
+        btnPreviewPdf = makeSmallButton("Preview PDF", "file-text");
         btnPreviewPdf.addActionListener(e -> runPreview(PreviewService.Format.PDF));
 
-        btnPreviewHtml = new JButton("👁️ Preview HTML", EvidenceUiHelpers.createIcon("file-type-html"));
+        btnPreviewHtml = makeSmallButton("Preview HTML", "external-link");
         btnPreviewHtml.addActionListener(e -> runPreview(PreviewService.Format.HTML));
 
-        btnSave = new JButton("💾 Save Profile Changes", EvidenceUiHelpers.createIcon("check"));
-        btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold;");
+        btnSave = new JButton("Save Profile");
+        btnSave.setIcon(EvidenceUiHelpers.createIcon("check"));
+        btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold $defaultFont;");
+        btnSave.setFocusPainted(false);
         btnSave.addActionListener(e -> saveCurrentProfileChanges());
 
         bar.add(btnPreviewPdf);
         bar.add(btnPreviewHtml);
+        bar.add(Box.createHorizontalStrut(12));
         bar.add(btnSave);
 
         return bar;
     }
+
+    // ─── Data loading / saving ─────────────────────────────────────
 
     private void refreshProfileList() {
         isUpdatingUi = true;
@@ -450,14 +551,14 @@ public class ReportingSettingsTab {
         }
 
         // Colors
-        setColorPickerValue(colorPrimaryPanel, p.pdfTheme().primaryHex());
-        setColorPickerValue(colorSecondaryPanel, p.pdfTheme().secondaryHex());
+        setSwatchColor(colorPrimaryPanel, p.pdfTheme().primaryHex());
+        setSwatchColor(colorSecondaryPanel, p.pdfTheme().secondaryHex());
         comboFontStack.setSelectedItem(p.pdfTheme().fontStack());
         spinFontSize.setValue(p.pdfTheme().baseFontSize());
 
         for (Map.Entry<Severity, String> entry : p.pdfTheme().severityHex().entrySet()) {
             JPanel cp = severityColorPanels.get(entry.getKey());
-            if (cp != null) setColorPickerValue(cp, entry.getValue());
+            if (cp != null) setSwatchColor(cp, entry.getValue());
         }
 
         // Branding
@@ -493,14 +594,12 @@ public class ReportingSettingsTab {
 
         FindingRendererId finding = rdoFindingTabular.isSelected() ? FindingRendererId.TABULAR : FindingRendererId.ELEVATED_CARD;
 
-        // Sections
         List<SectionNode> nodes = new ArrayList<>();
         for (int i = 0; i < sectionsTableModel.getRowCount(); i++) {
             boolean en = (Boolean) sectionsTableModel.getValueAt(i, 0);
-            int order = i + 1;
             String id = (String) sectionsTableModel.getValueAt(i, 2);
             boolean req = (Boolean) sectionsTableModel.getValueAt(i, 3);
-            nodes.add(SectionNode.of(id, en, order, req));
+            nodes.add(SectionNode.of(id, en, i + 1, req));
         }
 
         String primary = (String) colorPrimaryPanel.getClientProperty("hexValue");
@@ -563,8 +662,10 @@ public class ReportingSettingsTab {
         );
 
         profileManager.saveUserProfile(updated);
-        showToast("Profile '" + updated.name() + "' saved successfully!");
+        showToast("Profile '" + updated.name() + "' saved.");
     }
+
+    // ─── Profile Actions ───────────────────────────────────────────
 
     private void showToast(String message) {
         Frame parent = api != null ? api.userInterface().swingUtils().suiteFrame() : null;
@@ -579,7 +680,7 @@ public class ReportingSettingsTab {
 
     private void onCloneProfile() {
         if (currentProfile == null) return;
-        String name = JOptionPane.showInputDialog(containerPanel, "Enter name for cloned profile:", currentProfile.name() + " (Custom)");
+        String name = JOptionPane.showInputDialog(containerPanel, "Enter name for the new profile:", currentProfile.name() + " (Custom)");
         if (name != null && !name.isBlank()) {
             ReportProfile cloned = profileManager.clone(currentProfile.id(), name.trim());
             profileManager.setActive(cloned.id());
@@ -596,7 +697,7 @@ public class ReportingSettingsTab {
             try {
                 String json = profileManager.exportJson(currentProfile.id());
                 Files.writeString(chooser.getSelectedFile().toPath(), json);
-                showToast("Profile exported to JSON!");
+                showToast("Profile exported.");
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(containerPanel, "Export failed: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -611,7 +712,7 @@ public class ReportingSettingsTab {
                 ReportProfile imported = profileManager.importJson(json);
                 profileManager.setActive(imported.id());
                 refreshProfileList();
-                showToast("Imported profile '" + imported.name() + "'!");
+                showToast("Imported profile '" + imported.name() + "'");
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(containerPanel, "Import failed: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
@@ -620,7 +721,7 @@ public class ReportingSettingsTab {
 
     private void onDeleteProfile() {
         if (currentProfile == null || currentProfile.builtIn()) return;
-        int opt = JOptionPane.showConfirmDialog(containerPanel, "Delete profile '" + currentProfile.name() + "'?", "Confirm Delete", JOptionPane.YES_NO_OPTION);
+        int opt = JOptionPane.showConfirmDialog(containerPanel, "Delete profile '" + currentProfile.name() + "'?", "Confirm", JOptionPane.YES_NO_OPTION);
         if (opt == JOptionPane.YES_OPTION) {
             profileManager.deleteUserProfile(currentProfile.id());
             refreshProfileList();
@@ -659,61 +760,79 @@ public class ReportingSettingsTab {
         sectionsTable.setRowSelectionInterval(target, target);
     }
 
-    private JPanel createColorPickerComponent(String label) {
-        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    // ─── UI Helper Methods ─────────────────────────────────────────
+
+    /** Creates a compact button with an SVG icon and short text label. */
+    private JButton makeSmallButton(String text, String iconName) {
+        JButton btn = new JButton(text);
+        Icon icon = EvidenceUiHelpers.createIcon(iconName);
+        if (icon != null) btn.setIcon(icon);
+        btn.setFocusPainted(false);
+        btn.setMargin(new Insets(3, 8, 3, 8));
+        return btn;
+    }
+
+    /** Creates a color swatch: [color square] [#HEXHEX] — clickable to open color chooser. */
+    private JPanel createColorSwatch() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         panel.setOpaque(false);
-        if (label != null && !label.isEmpty()) {
-            panel.add(new JLabel(label));
-        }
+
         JButton colorBtn = new JButton();
         colorBtn.setPreferredSize(new Dimension(22, 22));
-        colorBtn.putClientProperty("FlatLaf.style", "arc: 6; borderWidth: 1; borderColor: $Component.borderColor");
-        colorBtn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        colorBtn.setMinimumSize(new Dimension(22, 22));
+        colorBtn.setMaximumSize(new Dimension(22, 22));
+        colorBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         colorBtn.setOpaque(true);
+        colorBtn.setBorderPainted(true);
+        colorBtn.setFocusPainted(false);
 
         JLabel hexLabel = new JLabel("#------");
+        hexLabel.setFont(hexLabel.getFont().deriveFont(Font.PLAIN, 11f));
+
         colorBtn.addActionListener(e -> {
             if (currentProfile != null && currentProfile.builtIn()) return;
             Color chosen = JColorChooser.showDialog(panel, "Choose Color", colorBtn.getBackground());
             if (chosen != null) {
                 colorBtn.setBackground(chosen);
-                String hex = String.format("#%02x%02x%02x", chosen.getRed(), chosen.getGreen(), chosen.getBlue()).toUpperCase();
+                String hex = String.format("#%02X%02X%02X", chosen.getRed(), chosen.getGreen(), chosen.getBlue());
                 hexLabel.setText(hex);
                 panel.putClientProperty("hexValue", hex);
             }
         });
+
         panel.add(colorBtn);
         panel.add(hexLabel);
         return panel;
     }
 
-    private void setColorPickerValue(JPanel panel, String hex) {
-        if (panel == null) return;
-        JButton btn = (JButton) panel.getComponent(panel.getComponentCount() - 2);
-        JLabel lbl = (JLabel) panel.getComponent(panel.getComponentCount() - 1);
-        if (hex != null && hex.matches("^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$")) {
-            try {
-                btn.setBackground(Color.decode(hex));
-                lbl.setText(hex.toUpperCase());
-                panel.putClientProperty("hexValue", hex.toUpperCase());
-            } catch (Exception ignored) {}
-        }
+    /** Sets the color swatch background and hex label from a hex string. */
+    private void setSwatchColor(JPanel swatch, String hex) {
+        if (swatch == null || hex == null) return;
+        if (!hex.matches("^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$")) return;
+        try {
+            // swatch children: [0]=colorBtn, [1]=hexLabel
+            JButton btn = (JButton) swatch.getComponent(0);
+            JLabel lbl = (JLabel) swatch.getComponent(1);
+            btn.setBackground(Color.decode(hex));
+            lbl.setText(hex.toUpperCase());
+            swatch.putClientProperty("hexValue", hex.toUpperCase());
+        } catch (Exception ignored) {}
     }
 
     private void addFormRow(JPanel panel, GridBagConstraints gbc, int row, String label, JTextField field) {
-        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0.0;
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0; gbc.gridwidth = 1;
         panel.add(new JLabel(label), gbc);
         gbc.gridx = 1; gbc.weightx = 1.0;
         panel.add(field, gbc);
     }
 
     private void addFilePickerRow(JPanel panel, GridBagConstraints gbc, int row, String label, JTextField field) {
-        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0.0;
+        gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0; gbc.gridwidth = 1;
         panel.add(new JLabel(label), gbc);
         JPanel p = new JPanel(new BorderLayout(4, 0));
         p.setOpaque(false);
         p.add(field, BorderLayout.CENTER);
-        JButton btnBrowse = new JButton("Browse...");
+        JButton btnBrowse = makeSmallButton("Browse", "folder");
         btnBrowse.addActionListener(e -> {
             JFileChooser fc = new JFileChooser();
             if (fc.showOpenDialog(panel) == JFileChooser.APPROVE_OPTION) {
@@ -731,6 +850,33 @@ public class ReportingSettingsTab {
         p.add(new JLabel(label));
         p.add(comp);
         return p;
+    }
+
+    private javax.swing.border.Border makeSectionBorder(String title) {
+        return BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder(
+                BorderFactory.createLineBorder(UIManager.getColor("Component.borderColor"), 1, true),
+                " " + title + " ",
+                TitledBorder.LEFT, TitledBorder.TOP
+            ),
+            new EmptyBorder(6, 8, 6, 8)
+        );
+    }
+
+    /** Caps maxWidth so BoxLayout children don't stretch horizontally. */
+    private static void setMaxWidth(JComponent comp) {
+        comp.setMaximumSize(new Dimension(Integer.MAX_VALUE, comp.getPreferredSize().height));
+    }
+
+    /** Converts UPPER_SNAKE to Title Case for display. */
+    private static String formatFieldLabel(FindingField f) {
+        String raw = f.name().toLowerCase().replace('_', ' ');
+        return Character.toUpperCase(raw.charAt(0)) + raw.substring(1);
+    }
+
+    private static String formatSeverityLabel(Severity s) {
+        String raw = s.name().toLowerCase().replace('_', ' ');
+        return Character.toUpperCase(raw.charAt(0)) + raw.substring(1);
     }
 
     private static String blankToNull(String s) {

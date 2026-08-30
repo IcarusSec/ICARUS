@@ -536,7 +536,9 @@ public final class IcarusMcpServer {
                 Path written = orchestrator.generateReport(format, templateVariables);
                 if (written == null) {
                     return McpSchema.CallToolResult.builder()
-                            .addTextContent("No report was written — there are no unsuppressed findings to include.")
+                            .addTextContent("No report was written — the reportable set is empty. The report renders the Evidence "
+                                    + "Manager's included findings (see get_reportable_findings), not the whole findings registry. "
+                                    + "Run capture_evidence for the findings you want in the deliverable first.")
                             .isError(true)
                             .build();
                 }

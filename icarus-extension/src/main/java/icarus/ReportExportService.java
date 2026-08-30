@@ -71,10 +71,10 @@ public class ReportExportService {
     }
 
     public void previewReport(Component parent, JButton triggerButton) {
-                List<Finding> reportFindings = new java.util.ArrayList<>();
-        for (icarus.core.FindingRecord record : findings.getAllFindingRecords()) {
-            if (!record.isSuppressed()) reportFindings.add(record.getFinding());
-        }
+        // The deliverable is the Evidence Manager's included set — not every finding the
+        // registry has accumulated across past scans/sessions. Rendering the raw registry
+        // made the preview balloon to hundreds of auto-rendered evidence images.
+        List<Finding> reportFindings = getReportableFindings();
         if (reportFindings.isEmpty()) {
             JOptionPane.showMessageDialog(parent,
                     "No evidence to preview yet — use \"Send to Reporter Creation\" or the Evidence Manager first.");
@@ -141,10 +141,9 @@ public class ReportExportService {
     }
 
     public Path generateReport(String format, Map<String, String> templateVariables) throws Exception {
-                List<Finding> reportFindings = new java.util.ArrayList<>();
-        for (icarus.core.FindingRecord record : findings.getAllFindingRecords()) {
-            if (!record.isSuppressed()) reportFindings.add(record.getFinding());
-        }
+        // Same set as previewReport / get_reportable_findings — the Evidence Manager's
+        // included findings, not the whole cross-session registry.
+        List<Finding> reportFindings = getReportableFindings();
         if (reportFindings.isEmpty()) return null;
 
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);

@@ -120,11 +120,10 @@ public class ReportingSettingsTab {
         btnDelete = btn("Delete", "trash",     e -> onDeleteProfile());
         btnPreviewPdf  = btn("Preview PDF",  "file-text",     e -> runPreview(PreviewService.Format.PDF));
         btnPreviewHtml = btn("Preview HTML", "external-link", e -> runPreview(PreviewService.Format.HTML));
-        btnSave = new JButton("Save Profile");
-        btnSave.setIcon(EvidenceUiHelpers.createIcon("check"));
-        btnSave.setFocusPainted(false);
+        // Built via btn() so height / margins / icon sizing match Preview PDF/HTML;
+        // FlatLaf style just recolors it as the primary action.
+        btnSave = btn("Save Profile", "device-floppy", e -> saveCurrentProfileChanges());
         btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold $defaultFont;");
-        btnSave.addActionListener(e -> saveCurrentProfileChanges());
 
         toolbarPanel = new ToolbarPanel(comboProfiles, btnClone, btnExport, btnImport, btnDelete, btnPreviewPdf, btnPreviewHtml, btnSave);
         responsiveContainer.registerSection(wrapInCard("Report Profile & Actions", "file-text", toolbarPanel));

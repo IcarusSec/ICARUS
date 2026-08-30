@@ -33,17 +33,27 @@ public class ContentSectionPanel implements ResponsiveSection {
     }
 
     private void setupToggles() {
+        // One shared 2-column grid: col 0 = the four toggle rows, col 1 = the
+        // byte-limit control belonging to that row (only the two HTTP rows have
+        // one). weightx sits on a trailing spacer so the two columns stay
+        // adjacent instead of the right column floating off to the edge.
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL;
-        g.weightx = 1.0; g.insets = new Insets(0, 0, 8, 8);
+        g.anchor = GridBagConstraints.WEST;
+        g.weightx = 0; g.insets = new Insets(0, 0, 8, 24);
 
-        g.gridx = 0; g.gridy = 0; pnlToggles.add(createTogglePanel("Attach evidence screenshots to findings", chkIncludeEvidence), g);
+        g.gridx = 0;
+        g.gridy = 0; pnlToggles.add(createTogglePanel("Attach evidence screenshots to findings", chkIncludeEvidence), g);
         g.gridy = 1; pnlToggles.add(createTogglePanel("Generate Table of Contents", chkToc), g);
         g.gridy = 2; pnlToggles.add(createTogglePanel("Include HTTP Request", chkIncludeReq), g);
         g.gridy = 3; pnlToggles.add(createTogglePanel("Include HTTP Response", chkIncludeRes), g);
-        
+
+        g.insets = new Insets(0, 0, 8, 0);
         g.gridx = 1; g.gridy = 2; pnlToggles.add(createSpinnerPanel("Request max bytes", spinMaxReqBytes), g);
         g.gridy = 3; pnlToggles.add(createSpinnerPanel("Response max bytes", spinMaxResBytes), g);
+
+        g.gridx = 2; g.gridy = 0; g.weightx = 1.0;
+        pnlToggles.add(Box.createHorizontalGlue(), g);
     }
 
     private JPanel createTogglePanel(String label, ToggleSwitch toggle) {

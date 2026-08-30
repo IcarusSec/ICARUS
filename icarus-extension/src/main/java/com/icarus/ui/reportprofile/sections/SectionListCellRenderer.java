@@ -25,13 +25,10 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
         this.currentRow = value;
         this.isSelected = isSelected;
         
-        if (isSelected) {
-            setBackground(list.getSelectionBackground());
-            setForeground(list.getSelectionForeground());
-        } else {
-            setBackground(list.getBackground());
-            setForeground(list.getForeground());
-        }
+        // Selection is painted by hand (accent tint + border) to match the
+        // ThumbnailCard selected style, so keep the panel background neutral.
+        setBackground(list.getBackground());
+        setForeground(list.getForeground());
         
         return this;
     }
@@ -46,10 +43,15 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
         
         var palette = ThemeColors.current();
 
-        // Selected-row accent bar (mirrors the Layout thumbnail selection style)
+        // Selected row: accent tint + 2px accent border, arc 8 -- identical
+        // treatment to ThumbnailCard so both selection cues read as one system.
         if (isSelected) {
+            int w = getWidth(), h = getHeight();
+            g2.setColor(palette.accentSoft());
+            g2.fillRect(0, 0, w, h);
             g2.setColor(palette.accent());
-            g2.fillRect(0, 0, 3, getHeight());
+            g2.setStroke(new BasicStroke(2f));
+            g2.drawRoundRect(1, 1, w - 3, h - 3, 8, 8);
         }
 
         // Grip glyph

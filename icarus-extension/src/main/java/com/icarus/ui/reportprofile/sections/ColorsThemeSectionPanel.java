@@ -40,6 +40,9 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
             String name = com.icarus.ui.reportprofile.model.SectionLabelFormatter.format(s.name());
             p.add(new JLabel(name + ":"));
             p.add(severityColorPanels.get(s));
+            // Fixed cell width so WrapLayout tiles them into an aligned grid
+            // instead of a ragged second row.
+            p.setPreferredSize(new Dimension(180, 26));
             badgesRow.add(p);
         }
         badgesPanel.add(badgesRow, BorderLayout.CENTER);

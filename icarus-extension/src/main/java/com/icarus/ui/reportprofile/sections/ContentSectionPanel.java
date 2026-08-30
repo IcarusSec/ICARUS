@@ -37,13 +37,13 @@ public class ContentSectionPanel implements ResponsiveSection {
         g.fill = GridBagConstraints.HORIZONTAL;
         g.weightx = 1.0; g.insets = new Insets(0, 0, 8, 8);
 
-        g.gridx = 0; g.gridy = 0; pnlToggles.add(createTogglePanel("Include Evidence Screenshots", chkIncludeEvidence), g);
+        g.gridx = 0; g.gridy = 0; pnlToggles.add(createTogglePanel("Attach evidence screenshots to findings", chkIncludeEvidence), g);
         g.gridy = 1; pnlToggles.add(createTogglePanel("Generate Table of Contents", chkToc), g);
         g.gridy = 2; pnlToggles.add(createTogglePanel("Include HTTP Request", chkIncludeReq), g);
         g.gridy = 3; pnlToggles.add(createTogglePanel("Include HTTP Response", chkIncludeRes), g);
         
-        g.gridx = 1; g.gridy = 2; pnlToggles.add(createSpinnerPanel("Max bytes", spinMaxReqBytes), g);
-        g.gridy = 3; pnlToggles.add(createSpinnerPanel("Max bytes", spinMaxResBytes), g);
+        g.gridx = 1; g.gridy = 2; pnlToggles.add(createSpinnerPanel("Request max bytes", spinMaxReqBytes), g);
+        g.gridy = 3; pnlToggles.add(createSpinnerPanel("Response max bytes", spinMaxResBytes), g);
     }
 
     private JPanel createTogglePanel(String label, ToggleSwitch toggle) {
@@ -92,12 +92,18 @@ public class ContentSectionPanel implements ResponsiveSection {
         gbc.weightx = 1.0;
         gbc.insets = new Insets(0, 0, 16, 16);
 
+        JPanel fieldsWrapper = new JPanel(new BorderLayout());
+        JLabel fieldsLabel = new JLabel("Finding fields to include");
+        fieldsLabel.setFont(fieldsLabel.getFont().deriveFont(java.awt.Font.BOLD));
+        fieldsWrapper.add(fieldsLabel, BorderLayout.NORTH);
+        fieldsWrapper.add(pnlFields, BorderLayout.CENTER);
+
         if (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW) {
             gbc.gridx = 0; gbc.gridy = 0; component.add(pnlToggles, gbc);
-            gbc.gridy = 1; component.add(pnlFields, gbc);
+            gbc.gridy = 1; component.add(fieldsWrapper, gbc);
         } else {
             gbc.gridx = 0; gbc.gridy = 0; component.add(pnlToggles, gbc);
-            gbc.gridx = 1; component.add(pnlFields, gbc);
+            gbc.gridx = 1; component.add(fieldsWrapper, gbc);
         }
         component.revalidate();
         component.repaint();

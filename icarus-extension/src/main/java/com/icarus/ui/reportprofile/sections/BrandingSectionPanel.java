@@ -26,14 +26,34 @@ public class BrandingSectionPanel implements ResponsiveSection {
         return panel;
     }
 
+    private JPanel createFilePanel(String label, JTextField field) {
+        JPanel panel = new JPanel(new BorderLayout(0, 4));
+        panel.add(new JLabel(label), BorderLayout.NORTH);
+        
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(field, BorderLayout.CENTER);
+        JButton browseBtn = new JButton("Browse…");
+        browseBtn.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+            if (chooser.showOpenDialog(panel) == JFileChooser.APPROVE_OPTION) {
+                field.setText(chooser.getSelectedFile().getAbsolutePath());
+            }
+        });
+        centerPanel.add(browseBtn, BorderLayout.EAST);
+        
+        panel.add(centerPanel, BorderLayout.CENTER);
+        return panel;
+    }
+
     private final JPanel pnlDocTitle = createFieldPanel("Document Title", txtDocTitle);
     private final JPanel pnlClassification = createFieldPanel("Classification", txtClassification);
     private final JPanel pnlAuthor = createFieldPanel("Author", txtAuthor);
     private final JPanel pnlReviewer = createFieldPanel("Reviewer", txtReviewer);
     private final JPanel pnlApprover = createFieldPanel("Approver", txtApprover);
     private final JPanel pnlEnvironment = createFieldPanel("Environment", txtEnvironment);
-    private final JPanel pnlCompanyLogo = createFieldPanel("Company Logo", txtCompanyLogo);
-    private final JPanel pnlClientLogo = createFieldPanel("Client Logo", txtClientLogo);
+    private final JPanel pnlCompanyLogo = createFilePanel("Company Logo", txtCompanyLogo);
+    private final JPanel pnlClientLogo = createFilePanel("Client Logo", txtClientLogo);
 
     @Override
     public Component component() {

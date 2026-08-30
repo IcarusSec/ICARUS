@@ -45,9 +45,15 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         
         var palette = ThemeColors.current();
-        
+
+        // Selected-row accent bar (mirrors the Layout thumbnail selection style)
+        if (isSelected) {
+            g2.setColor(palette.accent());
+            g2.fillRect(0, 0, 3, getHeight());
+        }
+
         // Grip glyph
-        g2.setColor(palette.textTertiary());
+        g2.setColor(palette.textSecondary());
         g2.drawString("⋮⋮", 9, 18);
         
         // Toggle switch

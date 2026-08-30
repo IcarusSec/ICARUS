@@ -26,6 +26,7 @@ public class DetailPane implements ResponsiveSection {
         bodyWell.setFont(FontLoader.mono(13f));
         chipRow = new VariableChipRow(token -> {
             try {
+                bodyWell.requestFocusInWindow();
                 bodyWell.getStyledDocument().insertString(bodyWell.getCaretPosition(), token, null);
             } catch (BadLocationException e) {
                 e.printStackTrace();
@@ -33,16 +34,39 @@ public class DetailPane implements ResponsiveSection {
         });
 
         JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(new JLabel("Title"), BorderLayout.NORTH);
+        topPanel.add(new JLabel("Section title"), BorderLayout.NORTH);
         topPanel.add(titleField, BorderLayout.CENTER);
-        topPanel.add(chipRow, BorderLayout.SOUTH);
+        
+        JPanel chipWrapper = new JPanel();
+        chipWrapper.setLayout(new BoxLayout(chipWrapper, BoxLayout.Y_AXIS));
+        JLabel helperLabel = new JLabel("Body supports Markdown. Click a token to insert it at the cursor.");
+        helperLabel.setFont(helperLabel.getFont().deriveFont(java.awt.Font.ITALIC, 11f));
+        chipWrapper.add(helperLabel);
+        chipWrapper.add(chipRow);
+        topPanel.add(chipWrapper, BorderLayout.SOUTH);
 
-        JScrollPane scrollPane = new JScrollPane(bodyWell, 
-                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, 
+        JScrollPane scrollPane = new JScrollPane(bodyWell,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
                 JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        // bodyWell is a JTextPane but the card that hosts DetailPane collapses to
+        // preferred height, so without this the editor renders one line tall.
+        scrollPane.setPreferredSize(new Dimension(0, 240));
+
+        JPanel bodyWrapper = new JPanel(new BorderLayout());
+        JLabel bodyLabel = new JLabel("Body");
+        bodyLabel.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+        bodyWrapper.add(bodyLabel, BorderLayout.NORTH);
+        bodyWrapper.add(scrollPane, BorderLayout.CENTER);
                 
         component.add(topPanel, BorderLayout.NORTH);
-        component.add(scrollPane, BorderLayout.CENTER);
+        component.add(bodyWrapper, BorderLayout.CENTER);
+
+        // The token chip row uses WrapLayout, whose preferred width during the
+        // first layout pass is "all 8 chips on one line" (~750px). Without a
+        // minimum-size cap that width propagates out through SectionFlowPanel
+        // and forces the whole Reporting tab into horizontal overflow. Cap it
+        // low so GridBag can shrink us; WrapLayout then wraps the chips.
+        component.setMinimumSize(new Dimension(320, 280));
 
         setupSyntaxHighlighting();
     }

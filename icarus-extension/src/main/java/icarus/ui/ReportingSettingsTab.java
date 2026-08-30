@@ -269,6 +269,13 @@ public class ReportingSettingsTab {
         for (SectionNode n : p.sections().nodes()) {
             sectionListPanel.model.addElement(n);
         }
+        // Select the first section once isUpdatingUi has cleared, so the editor
+        // opens populated instead of blank.
+        SwingUtilities.invokeLater(() -> {
+            if (!sectionListPanel.model.isEmpty() && sectionListPanel.list.getSelectedIndex() < 0) {
+                sectionListPanel.list.setSelectedIndex(0);
+            }
+        });
 
         // Colors
         setSwatchHex(colorPrimaryPanel,   p.pdfTheme().primaryHex());

@@ -9,13 +9,34 @@
   "findingRenderer": "ELEVATED_CARD",
   "sections": {
     "nodes": [
-      { "id": "EXECUTIVE_SUMMARY", "enabled": true, "order": 1, "required": false, "rendererKey": "EXECUTIVE_SUMMARY", "params": {} },
-      { "id": "DOCUMENT_CONTROL", "enabled": true, "order": 2, "required": false, "rendererKey": "DOCUMENT_CONTROL", "params": {} },
-      { "id": "REVISION_HISTORY", "enabled": true, "order": 3, "required": false, "rendererKey": "REVISION_HISTORY", "params": {} },
-      { "id": "ASSESSMENT_SCOPE", "enabled": true, "order": 4, "required": false, "rendererKey": "ASSESSMENT_SCOPE", "params": {} },
-      { "id": "ACCESS_PROFILES", "enabled": false, "order": 5, "required": false, "rendererKey": "ACCESS_PROFILES", "params": {} },
-      { "id": "CVSS4_MATRIX", "enabled": true, "order": 6, "required": false, "rendererKey": "CVSS4_MATRIX", "params": {} },
-      { "id": "TECHNICAL_REFERENCES", "enabled": true, "order": 7, "required": false, "rendererKey": "TECHNICAL_REFERENCES", "params": {} },
+      { "id": "EXECUTIVE_SUMMARY", "enabled": true, "order": 1, "required": false, "rendererKey": "EXECUTIVE_SUMMARY", "params": {
+        "title": "Executive Summary",
+        "content": "This document consolidates the results of the penetration tests conducted on the component **{{team}}/{{component}}**, as requested by {{requester}}, performed in the **{{environment}}** environment by the {{author}} team on {{date}}.\n\nDuring the tests, **{{finding_count}}** vulnerabilities were identified, classified according to their criticality and potential impact on the evaluated assets. The detected findings include: {{finding_types}}, which are technically detailed in the subsequent sections of this report, along with mitigation and remediation recommendations.\n\nThis report aims to provide technical management and security governance with a clear view of the identified risks, as well as support strategic decisions to strengthen the organization's security posture."
+      } },
+      { "id": "DOCUMENT_CONTROL", "enabled": true, "order": 2, "required": false, "rendererKey": "DOCUMENT_CONTROL", "params": {
+        "title": "Document Control",
+        "content": "### Information Classification: {{classification}}\n\n* **Prepared By:** {{author}}\n* **Reviewed By:** {{reviewer}}\n* **Approved By:** {{approver}}\n* **Distribution:** Internal Use Only"
+      } },
+      { "id": "REVISION_HISTORY", "enabled": true, "order": 3, "required": false, "rendererKey": "REVISION_HISTORY", "params": {
+        "title": "Revision History",
+        "content": "* **v0.1** — Execution of tests and draft creation.\n* **v1.0** — Final version delivered."
+      } },
+      { "id": "ASSESSMENT_SCOPE", "enabled": true, "order": 4, "required": false, "rendererKey": "ASSESSMENT_SCOPE", "params": {
+        "title": "Assessment Scope",
+        "content": "* **Address / Hostname / Target:** {{team}}/{{component}}\n* **Environment:** {{environment}}\n* **Methodology:** {{method}}"
+      } },
+      { "id": "ACCESS_PROFILES", "enabled": false, "order": 5, "required": false, "rendererKey": "ACCESS_PROFILES", "params": {
+        "title": "Users and Access Profiles",
+        "content": "* **Unauthenticated** — Anonymous network access\n* **Standard User** — Authenticated with basic privileges"
+      } },
+      { "id": "CVSS4_MATRIX", "enabled": true, "order": 6, "required": false, "rendererKey": "CVSS4_MATRIX", "params": {
+        "title": "Classification Matrix (CVSS 4)",
+        "content": "Based on the results obtained during the analysis, the vulnerabilities were mapped and classified according to the CVSS 4.0 standard (Common Vulnerability Scoring System), which provides an open framework for assigning impact and severity scores to security vulnerabilities."
+      } },
+      { "id": "TECHNICAL_REFERENCES", "enabled": true, "order": 7, "required": false, "rendererKey": "TECHNICAL_REFERENCES", "params": {
+        "title": "Technical References",
+        "content": "* OWASP Top 10 - 2021\n* NIST National Vulnerability Database\n* CWE (Common Weakness Enumeration)"
+      } },
       { "id": "VULNERABILITY_SUMMARY", "enabled": true, "order": 8, "required": false, "rendererKey": "VULNERABILITY_SUMMARY", "params": {} },
       { "id": "FINDINGS", "enabled": true, "order": 9, "required": true, "rendererKey": "FINDINGS", "params": {} }
     ]

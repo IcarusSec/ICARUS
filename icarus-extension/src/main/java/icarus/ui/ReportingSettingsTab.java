@@ -244,13 +244,20 @@ public class ReportingSettingsTab {
         tableRow.add(sideBtns, BorderLayout.EAST);
 
         // Right side: Detail Panel
-        JPanel detailPanel = new JPanel(new BorderLayout(0, 6));
+        JPanel detailPanel = new JPanel(new BorderLayout(0, 10));
         detailPanel.setOpaque(false);
+        detailPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        detailPanel.setMinimumSize(new Dimension(300, 0));
+        
         JTextField txtTitle = new JTextField();
         JTextArea txtContent = new JTextArea();
         txtContent.setLineWrap(true);
         txtContent.setWrapStyleWord(true);
+        txtContent.setRows(5);
+        
         JScrollPane contentScroll = new JScrollPane(txtContent);
+        contentScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+        contentScroll.setBorder(BorderFactory.createEmptyBorder());
         
         detailPanel.add(inlineLabel("Title:", txtTitle), BorderLayout.NORTH);
         detailPanel.add(contentScroll, BorderLayout.CENTER);
@@ -266,7 +273,10 @@ public class ReportingSettingsTab {
                 
                 isUpdatingUi = true;
                 txtTitle.setText(params.getOrDefault("title", titleCase(id)));
+                txtTitle.setCaretPosition(0);
+                
                 txtContent.setText(params.getOrDefault("content", ""));
+                txtContent.setCaretPosition(0);
                 
                 boolean editable = (currentProfile == null || !currentProfile.builtIn());
                 txtTitle.setEnabled(editable);
@@ -282,6 +292,8 @@ public class ReportingSettingsTab {
                 txtContent.setEnabled(false);
                 isUpdatingUi = false;
             }
+            detailPanel.revalidate();
+            detailPanel.repaint();
         });
 
         // Bind Edits
@@ -307,11 +319,15 @@ public class ReportingSettingsTab {
         txtTitle.getDocument().addDocumentListener(dl);
         txtContent.getDocument().addDocumentListener(dl);
 
+        tableRow.setMinimumSize(new Dimension(250, 0));
+
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableRow, detailPanel);
         split.setOpaque(false);
         split.setBorder(null);
+        split.setContinuousLayout(true);
+        split.setDividerLocation(300);
         split.setResizeWeight(0.4);
-        split.setPreferredSize(new Dimension(0, 220));
+        split.setPreferredSize(new Dimension(800, 260)); 
         
         card.addFormRow(split);
 

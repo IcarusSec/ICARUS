@@ -632,25 +632,29 @@ public class ReportingSettingsTab {
         if (i < 0) return;
         int t = i + delta;
         if (t < 0 || t >= sectionsTableModel.getRowCount()) return;
+        
+        if (currentProfile != null && currentProfile.builtIn()) {
+            autoCloneProfile();
+            // Restore selection after model reload
+            sectionsTable.setRowSelectionInterval(i, i);
+        }
+        
         sectionsTableModel.moveRow(i, i, t);
         sectionsTable.setRowSelectionInterval(t, t);
     }
 
     private void addSection() {
-        if (currentProfile != null && currentProfile.builtIn()) {
-            autoCloneProfile();
-        }
         String name = JOptionPane.showInputDialog(containerPanel, "Section identifier (e.g. CUSTOM_NOTES):");
         if (name != null && !name.isBlank()) {
+            if (currentProfile != null && currentProfile.builtIn()) {
+                autoCloneProfile();
+            }
             int nextOrder = sectionsTableModel.getRowCount() + 1;
             sectionsTableModel.addRow(new Object[]{true, nextOrder, name.trim().toUpperCase().replace(' ', '_'), false});
         }
     }
 
     private void removeSection() {
-        if (currentProfile != null && currentProfile.builtIn()) {
-            autoCloneProfile();
-        }
         int idx = sectionsTable.getSelectedRow();
         if (idx < 0) return;
         Boolean required = (Boolean) sectionsTableModel.getValueAt(idx, 3);
@@ -658,6 +662,11 @@ public class ReportingSettingsTab {
             JOptionPane.showMessageDialog(containerPanel, "Cannot remove a required section.", "Info", JOptionPane.INFORMATION_MESSAGE);
             return;
         }
+        
+        if (currentProfile != null && currentProfile.builtIn()) {
+            autoCloneProfile();
+        }
+        
         sectionsTableModel.removeRow(idx);
         // Renumber
         for (int i = 0; i < sectionsTableModel.getRowCount(); i++) {
@@ -795,11 +804,11 @@ public class ReportingSettingsTab {
         hex.setFont(hex.getFont().deriveFont(Font.PLAIN, 11f));
 
         btn.addActionListener(e -> {
-            if (currentProfile != null && currentProfile.builtIn()) {
-                autoCloneProfile();
-            }
             Color c = JColorChooser.showDialog(panel, "Pick Color", btn.getBackground());
             if (c != null) {
+                if (currentProfile != null && currentProfile.builtIn()) {
+                    autoCloneProfile();
+                }
                 btn.setBackground(c);
                 String h = String.format("#%02X%02X%02X", c.getRed(), c.getGreen(), c.getBlue());
                 hex.setText(h);

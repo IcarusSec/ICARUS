@@ -9,26 +9,25 @@ import javax.swing.*;
 import java.awt.*;
 
 public class ToolbarPanel implements ResponsiveSection {
-    private final JPanel component;
+    // One left-aligned flow row for every control; WrapLayout wraps to a second
+    // row when it doesn't fit. A wide strut separates the profile group from the
+    // preview/save actions. No left/right split -> both rows always share the
+    // same left edge instead of one hugging the right.
+    private final JPanel component = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 8));
 
-    private final JPanel left = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 8));
-    private final JPanel right = new JPanel(new WrapLayout(FlowLayout.RIGHT, 8, 8));
-
-    public ToolbarPanel(JComboBox<ReportProfile> comboProfiles, 
+    public ToolbarPanel(JComboBox<ReportProfile> comboProfiles,
                         JButton btnClone, JButton btnExport, JButton btnImport, JButton btnDelete,
                         JButton btnPreviewPdf, JButton btnPreviewHtml, JButton btnSave) {
-        component = new JPanel(new GridBagLayout());
-        
-        left.add(new JLabel("Profile:"));
-        left.add(comboProfiles);
-        left.add(btnClone);
-        left.add(btnExport);
-        left.add(btnImport);
-        left.add(btnDelete);
-        
-        right.add(btnPreviewPdf);
-        right.add(btnPreviewHtml);
-        right.add(btnSave);
+        component.add(new JLabel("Profile:"));
+        component.add(comboProfiles);
+        component.add(btnClone);
+        component.add(btnExport);
+        component.add(btnImport);
+        component.add(btnDelete);
+        component.add(Box.createHorizontalStrut(24));
+        component.add(btnPreviewPdf);
+        component.add(btnPreviewHtml);
+        component.add(btnSave);
     }
 
     @Override
@@ -38,20 +37,6 @@ public class ToolbarPanel implements ResponsiveSection {
 
     @Override
     public void onBreakpointChanged(Breakpoint bp) {
-        component.removeAll();
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 1.0;
-        
-        if (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW) {
-            gbc.gridy = 0; gbc.gridx = 0; component.add(left, gbc);
-            gbc.gridy = 1; component.add(right, gbc);
-        } else {
-            gbc.gridy = 0;
-            gbc.gridx = 0; component.add(left, gbc);
-            gbc.gridx = 1; component.add(right, gbc);
-        }
-        component.revalidate();
-        component.repaint();
+        // WrapLayout handles reflow on its own.
     }
 }

@@ -16,8 +16,9 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
     private final JPanel secondaryPanel;
     private final JPanel fontPanel;
     private final JPanel fontSizePanel;
-    private final JPanel badgesPanel = new JPanel(new BorderLayout());
+    private final JPanel badgesPanel = new JPanel(new GridBagLayout());
     private final JPanel badgesRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 8));
+    private final JPanel retestRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 8));
 
     public ColorsThemeSectionPanel(JPanel colorPrimaryPanel, JPanel colorSecondaryPanel, 
                                    JComboBox<String> comboFontStack, JSpinner spinFontSize,
@@ -31,23 +32,36 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
         fontSizeHold.add(spinFontSize);
         this.fontSizePanel = createFieldPanel("Font Size", fontSizeHold);
         
-        badgesPanel.add(new JLabel("Severity Badge Colors"), BorderLayout.NORTH);
-        
-        Severity[] sevs = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW,
-                           Severity.INFO, Severity.FIXED, Severity.NOT_FIXED};
-        for (Severity s : sevs) {
-            JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-            String name = com.icarus.ui.reportprofile.model.SectionLabelFormatter.format(s.name());
-            JLabel lbl = new JLabel(name + ":");
-            // Fixed label width so the swatch starts at the same x in every cell
-            // -> swatches line up in a column when the row wraps.
-            lbl.setPreferredSize(new Dimension(64, lbl.getPreferredSize().height));
-            p.add(lbl);
-            p.add(severityColorPanels.get(s));
-            p.setPreferredSize(new Dimension(180, 26));
-            badgesRow.add(p);
+        // Severity badges and retest-status (Fixed / Not Fixed) colours are two
+        // different concepts -- keep them in separate labelled rows.
+        for (Severity s : new Severity[]{Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM,
+                                         Severity.LOW, Severity.INFO}) {
+            badgesRow.add(swatchCell(s, severityColorPanels));
         }
-        badgesPanel.add(badgesRow, BorderLayout.CENTER);
+        for (Severity s : new Severity[]{Severity.FIXED, Severity.NOT_FIXED}) {
+            retestRow.add(swatchCell(s, severityColorPanels));
+        }
+
+        GridBagConstraints bg = new GridBagConstraints();
+        bg.gridx = 0; bg.weightx = 1.0; bg.fill = GridBagConstraints.HORIZONTAL;
+        bg.anchor = GridBagConstraints.WEST;
+        bg.gridy = 0; badgesPanel.add(new JLabel("Severity Badge Colors"), bg);
+        bg.gridy = 1; badgesPanel.add(badgesRow, bg);
+        bg.gridy = 2; bg.insets = new Insets(12, 0, 0, 0);
+        badgesPanel.add(new JLabel("Retest Status Colors"), bg);
+        bg.gridy = 3; bg.insets = new Insets(0, 0, 0, 0);
+        badgesPanel.add(retestRow, bg);
+    }
+
+    /** label + swatch cell with fixed geometry so cells align into a grid on wrap. */
+    private JPanel swatchCell(Severity s, Map<Severity, JPanel> swatches) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        JLabel lbl = new JLabel(com.icarus.ui.reportprofile.model.SectionLabelFormatter.format(s.name()) + ":");
+        lbl.setPreferredSize(new Dimension(64, lbl.getPreferredSize().height));
+        p.add(lbl);
+        p.add(swatches.get(s));
+        p.setPreferredSize(new Dimension(180, 26));
+        return p;
     }
 
     private JPanel createFieldPanel(String label, JComponent comp) {

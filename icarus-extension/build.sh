@@ -88,7 +88,7 @@ mkdir -p build_manual/libs
 
 # 3. Find all Java files
 echo "[*] Discovering source files..."
-find src/main/java -name "*.java" > build_manual/sources.txt
+find src/main/java $([ -d src/test/java ] && echo src/test/java) -name "*.java" > build_manual/sources.txt
 SOURCE_COUNT=$(wc -l < build_manual/sources.txt)
 echo "[+] Found $SOURCE_COUNT Java files"
 

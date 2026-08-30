@@ -90,12 +90,38 @@ public void addCweChip(JPanel pnlChips, List<String> selectedCwe, String cweId) 
         try {
             FlatSVGIcon baseIcon = loadSvgIcon(type);
             if (baseIcon != null) {
-                baseIcon = baseIcon.derive(size, size);
                 Color iconColor = overrideColor != null ? overrideColor : UIManager.getColor("Label.foreground");
-                if (iconColor != null) {
-                    baseIcon.setColorFilter(new FlatSVGIcon.ColorFilter(color -> iconColor));
-                }
-                return baseIcon;
+                if (iconColor == null) iconColor = new Color(0xC8C8C8);
+                final Color fc = iconColor;
+                // Burp on Windows scales the UI by font size, not the Java2D
+                // transform, so a FlatSVGIcon rasterised at the logical size gets
+                // bitmap-upscaled by the OS and looks mushy. Render it once at 4x
+                // into a buffer and downscale with bicubic at paint time -- crisp
+                // whether or not the host is HiDPI-aware.
+                int hi = Math.max(size * 4, 96);
+                FlatSVGIcon svg = baseIcon.derive(hi, hi);
+                svg.setColorFilter(new FlatSVGIcon.ColorFilter(color -> fc));
+                BufferedImage buf = new BufferedImage(hi, hi, BufferedImage.TYPE_INT_ARGB);
+                Graphics2D bg = buf.createGraphics();
+                bg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                bg.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+                bg.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                bg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                svg.paintIcon(null, bg, 0, 0);
+                bg.dispose();
+                return new Icon() {
+                    @Override public void paintIcon(Component c, Graphics g, int x, int y) {
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                                RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+                        g2.setRenderingHint(RenderingHints.KEY_RENDERING,
+                                RenderingHints.VALUE_RENDER_QUALITY);
+                        g2.drawImage(buf, x, y, size, size, null);
+                        g2.dispose();
+                    }
+                    @Override public int getIconWidth() { return size; }
+                    @Override public int getIconHeight() { return size; }
+                };
             }
         } catch (Exception ex) {
             // fallback

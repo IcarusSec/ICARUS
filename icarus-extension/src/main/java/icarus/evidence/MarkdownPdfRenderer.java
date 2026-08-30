@@ -30,7 +30,7 @@ import java.util.ArrayList;
  * ponytail: nested lists (a list inside a list item) render as a second flat top-level list,
  * not true visual nesting — upgrade if reports actually nest list items.
  */
-final class MarkdownPdfRenderer extends AbstractVisitor {
+public final class MarkdownPdfRenderer extends AbstractVisitor {
 
     private final Font bodyFont;
     private final Font boldFont;
@@ -61,10 +61,25 @@ final class MarkdownPdfRenderer extends AbstractVisitor {
     }
 
     /** Renders {@code document}'s block content as a list of OpenPDF elements, ready to add to a PdfPCell/Document. */
-    static java.util.List<Element> render(Node document, Font bodyFont, Color headingColor) {
+    public static java.util.List<Element> render(Node document, Font bodyFont, Color headingColor) {
         MarkdownPdfRenderer renderer = new MarkdownPdfRenderer(bodyFont, headingColor);
         document.accept(renderer);
         return renderer.elements;
+    }
+
+    public static java.util.List<Element> render(String markdown, Font bodyFont, Color headingColor) {
+        if (markdown == null || markdown.isBlank()) return java.util.Collections.emptyList();
+        org.commonmark.parser.Parser parser = org.commonmark.parser.Parser.builder().build();
+        Node doc = parser.parse(markdown);
+        return render(doc, bodyFont, headingColor);
+    }
+
+    public static void renderToCell(String markdown, com.lowagie.text.pdf.PdfPCell cell, Font bodyFont) {
+        if (markdown == null || markdown.isBlank() || cell == null) return;
+        var elements = render(markdown, bodyFont, bodyFont.getColor());
+        for (Element el : elements) {
+            cell.addElement(el);
+        }
     }
 
     private Font currentFont() {

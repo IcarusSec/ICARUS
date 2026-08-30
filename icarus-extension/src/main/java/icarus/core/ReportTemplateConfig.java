@@ -86,7 +86,7 @@ public final class ReportTemplateConfig {
         Map.entry("classification", "classificacao"), Map.entry("report_title", "titulo_relatorio"),
         Map.entry("project", "projeto"), Map.entry("version", "versao"), Map.entry("date", "data"),
         Map.entry("author", "autor"), Map.entry("reviewer", "revisor"), Map.entry("approver", "aprovador"),
-        Map.entry("team", "eht"), Map.entry("component", "componente"), Map.entry("requester", "solicitante"),
+        Map.entry("component", "componente"), Map.entry("requester", "solicitante"),
         Map.entry("owner", "responsavel"), Map.entry("environment", "ambiente"),
         Map.entry("assessment_period", "periodo_avaliacao"), Map.entry("method", "metodo")
     );

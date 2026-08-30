@@ -1,0 +1,98 @@
+{
+  "schemaVersion": "1",
+  "id": "builtin:executive-modern",
+  "name": "Executive Modern",
+  "locale": "pt-BR",
+  "builtIn": true,
+  "basedOnId": null,
+  "coverRenderer": "GRADIENT_HERO",
+  "findingRenderer": "ELEVATED_CARD",
+  "sections": {
+    "nodes": [
+      { "id": "EXECUTIVE_SUMMARY", "enabled": true, "order": 1, "required": false, "rendererKey": "EXECUTIVE_SUMMARY", "params": {} },
+      { "id": "DOCUMENT_CONTROL", "enabled": true, "order": 2, "required": false, "rendererKey": "DOCUMENT_CONTROL", "params": {} },
+      { "id": "REVISION_HISTORY", "enabled": true, "order": 3, "required": false, "rendererKey": "REVISION_HISTORY", "params": {} },
+      { "id": "ASSESSMENT_SCOPE", "enabled": true, "order": 4, "required": false, "rendererKey": "ASSESSMENT_SCOPE", "params": {} },
+      { "id": "ACCESS_PROFILES", "enabled": false, "order": 5, "required": false, "rendererKey": "ACCESS_PROFILES", "params": {} },
+      { "id": "CVSS4_MATRIX", "enabled": true, "order": 6, "required": false, "rendererKey": "CVSS4_MATRIX", "params": {} },
+      { "id": "TECHNICAL_REFERENCES", "enabled": true, "order": 7, "required": false, "rendererKey": "TECHNICAL_REFERENCES", "params": {} },
+      { "id": "VULNERABILITY_SUMMARY", "enabled": true, "order": 8, "required": false, "rendererKey": "VULNERABILITY_SUMMARY", "params": {} },
+      { "id": "FINDINGS", "enabled": true, "order": 9, "required": true, "rendererKey": "FINDINGS", "params": {} }
+    ]
+  },
+  "branding": {
+    "companyLogoPath": null,
+    "clientLogoPath": null,
+    "author": "",
+    "reviewer": "",
+    "approver": "",
+    "classification": "Confidencial",
+    "environment": "",
+    "documentTitle": "Relatório de Teste de Intrusão",
+    "team": "",
+    "component": "",
+    "requester": "",
+    "owner": "",
+    "assessmentPeriod": "",
+    "method": ""
+  },
+  "content": {
+    "includeEvidence": true,
+    "includeHttpRequest": true,
+    "includeHttpResponse": true,
+    "maxRequestBytes": 4096,
+    "maxResponseBytes": 4096,
+    "findingFields": [
+      "WHY", "WHEN", "WHERE", "HOW", "IMPACT", "DESCRIPTION", "REMEDIATION", "EVIDENCE"
+    ],
+    "cweMode": "HARDCODED_CATALOG",
+    "cweAllowlist": [],
+    "includeTocBookmarks": true
+  },
+  "pdfTheme": {
+    "primaryHex": "#FF6633",
+    "secondaryHex": "#6E6E6E",
+    "textHex": "#202020",
+    "headingHex": "#1A1A1A",
+    "tableHeaderHex": "#F7F7F7",
+    "severityHex": {
+      "CRITICAL": "#CC2E2E",
+      "HIGH": "#D9711F",
+      "MEDIUM": "#B38F00",
+      "LOW": "#2F7A77",
+      "INFO": "#6E6E6E",
+      "FIXED": "#2F9E44",
+      "NOT_FIXED": "#CC2E2E"
+    },
+    "fontStack": "Helvetica",
+    "baseFontSize": 10,
+    "pageBox": {
+      "pageSize": "A4",
+      "marginTop": 50.0,
+      "marginBottom": 40.0,
+      "marginLeft": 40.0,
+      "marginRight": 40.0,
+      "showHeader": true,
+      "showFooter": true
+    }
+  },
+  "htmlTheme": {
+    "primaryHex": "#FF6633",
+    "secondaryHex": "#6E6E6E",
+    "backgroundHex": "#FFFFFF",
+    "cardBackgroundHex": "#F7F7F7",
+    "textHex": "#1A1A1A",
+    "borderHex": "#DDDDDD",
+    "severityHex": {
+      "CRITICAL": "#CC2E2E",
+      "HIGH": "#D9711F",
+      "MEDIUM": "#B38F00",
+      "LOW": "#2F7A77",
+      "INFO": "#6E6E6E",
+      "FIXED": "#2F9E44",
+      "NOT_FIXED": "#CC2E2E"
+    },
+    "fontStack": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    "dark": false
+  }
+}

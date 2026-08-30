@@ -213,8 +213,147 @@ public final class PdfReportGenerator {
             if (doc.isOpen()) doc.close();
         }
 
-        api.logging().logToOutput("PDF Report generated at: " + outputPdfFile.toAbsolutePath());
+        if (api != null && api.logging() != null) {
+            api.logging().logToOutput("PDF Report generated at: " + outputPdfFile.toAbsolutePath());
+        }
         return true;
+    }
+
+    public boolean generate(icarus.report.render.ReportRenderContext ctx, Path outputPdfFile) throws IOException {
+        if (ctx == null || ctx.data() == null) return false;
+        Path reportDir = outputPdfFile.toAbsolutePath().getParent();
+        if (reportDir != null) Files.createDirectories(reportDir);
+
+        icarus.report.model.ReportProfile profile = ctx.profile();
+        Color accent = themeColor(profile.pdfTheme().primaryHex(), ACCENT);
+        Color accent2 = themeColor(profile.pdfTheme().secondaryHex(), accent);
+
+        Document doc = new Document(PageSize.A4, 40, 40, 50, 40);
+        try {
+            PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(outputPdfFile.toFile()));
+            writer.setStrictImageSequence(true);
+            doc.open();
+
+            // Cover
+            icarus.report.render.ReportRendererRegistry registry = new icarus.report.render.ReportRendererRegistry();
+            var cover = registry.getCover(profile.coverRenderer());
+            if (cover != null) {
+                cover.renderPdf(doc, writer, ctx);
+            }
+
+            // Header on page flow
+            appendProfileHeader(doc, ctx);
+
+            // Sections
+            for (var node : profile.sections().enabledInOrder()) {
+                String id = node.id().toUpperCase();
+                if ("FINDINGS".equals(id)) {
+                    appendProfileSummary(doc, ctx, accent);
+                    var findingRenderer = registry.getFinding(profile.findingRenderer());
+                    for (var fv : ctx.data().findings()) {
+                        findingRenderer.renderPdf(doc, writer, fv, ctx);
+                    }
+                } else if ("VULNERABILITY_SUMMARY".equals(id)) {
+                    appendProfileVulnerabilitySummary(doc, ctx, accent);
+                }
+            }
+        } catch (DocumentException e) {
+            throw new IOException("PDF generation failed", e);
+        } finally {
+            if (doc.isOpen()) doc.close();
+        }
+
+        if (api != null && api.logging() != null) {
+            api.logging().logToOutput("PDF Report generated at: " + outputPdfFile.toAbsolutePath());
+        }
+        return true;
+    }
+
+    private void appendProfileHeader(Document doc, icarus.report.render.ReportRenderContext ctx) throws DocumentException {
+        PdfPTable header = new PdfPTable(2);
+        header.setWidthPercentage(100);
+        header.setSpacingAfter(15f);
+
+        PdfPCell titleCell = new PdfPCell();
+        titleCell.setBorder(Rectangle.NO_BORDER);
+        titleCell.addElement(new Paragraph(ctx.data().reportTitle(), new Font(Font.HELVETICA, 16, Font.BOLD, decodeColor(ctx.profile().pdfTheme().headingHex(), Color.DARK_GRAY))));
+        if (ctx.data().projectName() != null && !ctx.data().projectName().isBlank()) {
+            titleCell.addElement(new Paragraph("Project: " + ctx.data().projectName(), new Font(Font.HELVETICA, 10, Font.NORMAL, Color.GRAY)));
+        }
+        header.addCell(titleCell);
+
+        PdfPCell metaCell = new PdfPCell();
+        metaCell.setBorder(Rectangle.NO_BORDER);
+        metaCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        String auth = ctx.profile().branding() != null ? ctx.profile().branding().author() : "";
+        if (!auth.isBlank()) {
+            metaCell.addElement(new Paragraph("Author: " + auth, new Font(Font.HELVETICA, 9, Font.NORMAL, Color.DARK_GRAY)));
+        }
+        header.addCell(metaCell);
+        doc.add(header);
+    }
+
+    private void appendProfileSummary(Document doc, icarus.report.render.ReportRenderContext ctx, Color accent) throws DocumentException {
+        PdfPTable summary = new PdfPTable(5);
+        summary.setWidthPercentage(100);
+        summary.setSpacingBefore(10f);
+        summary.setSpacingAfter(15f);
+
+        for (Severity sev : List.of(Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW, Severity.INFO)) {
+            PdfPCell cell = new PdfPCell();
+            cell.setBackgroundColor(new Color(247, 247, 247));
+            cell.setBorderColor(new Color(220, 220, 220));
+            cell.setPadding(8f);
+            cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+
+            long count = ctx.data().getCount(sev);
+            Color col = decodeColor(ctx.profile().pdfTheme().severityHex().get(sev), Color.GRAY);
+
+            Paragraph pCount = new Paragraph(String.valueOf(count), new Font(Font.HELVETICA, 16, Font.BOLD, col));
+            pCount.setAlignment(Element.ALIGN_CENTER);
+            Paragraph pLabel = new Paragraph(sev.name(), new Font(Font.HELVETICA, 8, Font.BOLD, Color.DARK_GRAY));
+            pLabel.setAlignment(Element.ALIGN_CENTER);
+
+            cell.addElement(pCount);
+            cell.addElement(pLabel);
+            summary.addCell(cell);
+        }
+        doc.add(summary);
+    }
+
+    private void appendProfileVulnerabilitySummary(Document doc, icarus.report.render.ReportRenderContext ctx, Color accent) throws DocumentException {
+        PdfPTable table = new PdfPTable(new float[]{0.8f, 3.8f, 1.4f});
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(10f);
+        table.setSpacingAfter(15f);
+
+        for (String h : new String[]{"#", "Vulnerability", "Severity"}) {
+            PdfPCell hc = new PdfPCell(new Phrase(h, new Font(Font.HELVETICA, 9, Font.BOLD, Color.WHITE)));
+            hc.setBackgroundColor(accent);
+            hc.setPadding(5f);
+            table.addCell(hc);
+        }
+
+        for (var f : ctx.data().findings()) {
+            PdfPCell c1 = new PdfPCell(new Phrase(String.valueOf(f.displayIndex()), new Font(Font.HELVETICA, 9, Font.NORMAL, Color.BLACK)));
+            c1.setPadding(4f);
+            PdfPCell c2 = new PdfPCell(new Phrase(f.title(), new Font(Font.HELVETICA, 9, Font.NORMAL, Color.BLACK)));
+            c2.setPadding(4f);
+            PdfPCell c3 = new PdfPCell(new Phrase(f.severity().name(), new Font(Font.HELVETICA, 8, Font.BOLD, Color.WHITE)));
+            c3.setBackgroundColor(decodeColor(ctx.profile().pdfTheme().severityHex().get(f.severity()), Color.GRAY));
+            c3.setPadding(4f);
+            c3.setHorizontalAlignment(Element.ALIGN_CENTER);
+
+            table.addCell(c1);
+            table.addCell(c2);
+            table.addCell(c3);
+        }
+        doc.add(table);
+    }
+
+    private static Color decodeColor(String hex, Color fallback) {
+        if (hex == null || hex.isBlank()) return fallback;
+        try { return Color.decode(hex.trim()); } catch (Exception e) { return fallback; }
     }
 
     /** Standalone first page: a full-bleed gradient hero band (the report's configured accent

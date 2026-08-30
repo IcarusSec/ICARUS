@@ -55,6 +55,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final AutoAuthModule autoAuth;
     private final ScanRunner scanRunner;
     private final FindingRegistry findings;
+    private final icarus.report.ReportProfileManager reportProfileManager;
 
     private final ReportExportService reportExportService;
     private final ProjectStateService projectStateService;
@@ -85,6 +86,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.autoAuth = autoAuth;
         this.findings = new FindingRegistry(api, config, SwingUtilities::invokeLater);
         this.scanRunner = new ScanRunner(api, modules, config, this::routeFindings);
+        this.reportProfileManager = new icarus.report.DefaultReportProfileManager(config);
 
         this.reportExportService = new ReportExportService(api, config, reportGenerator, this.pdfReportGenerator, evidenceCapture, this.findings);
         this.projectStateService = new ProjectStateService(api, config, evidenceCapture, this.findings);
@@ -116,6 +118,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     public EvidenceCapture getEvidenceCapture() {
         return evidenceCapture;
+    }
+
+    public icarus.report.ReportProfileManager getReportProfileManager() {
+        return reportProfileManager;
     }
 
     public void setShowEvidenceAction(Runnable action) {

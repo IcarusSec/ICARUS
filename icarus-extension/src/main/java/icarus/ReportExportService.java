@@ -173,8 +173,36 @@ public class ReportExportService {
                                           String extension, String defaultFileName, String formatLabel, ReportWriter writer) {
         JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));
         fc.setSelectedFile(new java.io.File(defaultFileName));
+
+        icarus.report.DefaultReportProfileManager profileManager = new icarus.report.DefaultReportProfileManager(config);
+        JPanel accessory = new JPanel(new BorderLayout(4, 4));
+        accessory.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createTitledBorder("Report Model / Profile"),
+            new javax.swing.border.EmptyBorder(4, 4, 4, 4)
+        ));
+        JComboBox<icarus.report.model.ReportProfile> profileCombo = new JComboBox<>();
+        for (var p : profileManager.list()) profileCombo.addItem(p);
+        profileCombo.setSelectedItem(profileManager.active());
+        profileCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                if (value instanceof icarus.report.model.ReportProfile p) {
+                    setText((p.builtIn() ? "🔒 " : "✏️ ") + p.name() + (p.builtIn() ? " [Built-in]" : " [Custom]"));
+                }
+                return this;
+            }
+        });
+        accessory.add(profileCombo, BorderLayout.CENTER);
+        fc.setAccessory(accessory);
+
         if (fc.showSaveDialog(parent) != JFileChooser.APPROVE_OPTION) {
             return;
+        }
+
+        var chosenProfile = (icarus.report.model.ReportProfile) profileCombo.getSelectedItem();
+        if (chosenProfile != null) {
+            profileManager.setActive(chosenProfile.id());
         }
 
         java.io.File selectedFile = fc.getSelectedFile();

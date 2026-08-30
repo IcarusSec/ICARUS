@@ -168,11 +168,14 @@ public final class ParamValidatorModule implements IcarusModule {
                 || (originalBody != null && (originalBody.trim().startsWith("{") || originalBody.trim().startsWith("[")));
         boolean hasJsonBody = originalBody != null && !originalBody.isBlank() && looksLikeJson;
 
-        List<ParsedHttpParameter> urlParams = request.parameters().stream()
-                .filter(p -> p.type() == HttpParameterType.URL)
+        // URL query params + form-urlencoded body params (Montoya only populates
+        // HttpParameterType.BODY for form-encoded bodies, so this list is naturally
+        // exclusive with hasJsonBody; the flat-param loop below is still guarded on !hasJsonBody).
+        List<ParsedHttpParameter> flatParams = request.parameters().stream()
+                .filter(p -> p.type() == HttpParameterType.URL || p.type() == HttpParameterType.BODY)
                 .toList();
 
-        if (!hasJsonBody && urlParams.isEmpty()) {
+        if (!hasJsonBody && flatParams.isEmpty()) {
             return List.of();
         }
 
@@ -208,7 +211,13 @@ public final class ParamValidatorModule implements IcarusModule {
             eligiblePaths.add(path);
         }
 
-        logger.accept(I18n.t("module.pv.log.detected_inputs", (eligiblePaths.size() + urlParams.size()), eligiblePaths.size(), urlParams.size()));
+        int jsonCount = eligiblePaths.size();
+        int urlOnlyCount = hasJsonBody ? 0
+                : (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.URL).count();
+        int formOnlyCount = hasJsonBody ? 0
+                : (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.BODY).count();
+        logger.accept(I18n.t("module.pv.log.detected_inputs",
+                jsonCount + urlOnlyCount + formOnlyCount, jsonCount, urlOnlyCount, formOnlyCount));
 
         String depth = config.getString("pv.depth", "MEDIUM"); // LIGHT | MEDIUM | DEEP
         int configuredMax = Math.max(0, config.getInt("pv.max_mutations", 0));
@@ -225,8 +234,8 @@ public final class ParamValidatorModule implements IcarusModule {
         // ~25 specs (multi-line injection payloads); depth-first order meant maxMutations was
         // often spent entirely on the first field or two, so later fields — often where numeric
         // params live — silently got zero boundary specs (e.g. NUMBER_NEGATIVE) generated at all.
-        // Each field is either a JSON body path (fieldPaths set, fieldUrlParam null) or a URL
-        // query parameter (fieldUrlParam set, fieldPaths null) — mutually exclusive per index.
+        // Each field is either a JSON body path (fieldPaths set, fieldFlatParam null) or a flat
+        // URL/form param (fieldFlatParam set, fieldPaths null) — mutually exclusive per index.
         // Collaborator client is shared across every field so each gets its own uniquely
         // correlatable payload from the same session; created once and reused, never per-field.
         // Burp Collaborator is unavailable in some environments (disabled, air-gapped network)
@@ -244,7 +253,7 @@ public final class ParamValidatorModule implements IcarusModule {
 
         List<String> fieldPathStrings = new ArrayList<>();
         List<List<Object>> fieldPaths = new ArrayList<>();
-        List<ParsedHttpParameter> fieldUrlParam = new ArrayList<>();
+        List<ParsedHttpParameter> fieldFlatParam = new ArrayList<>();
         List<List<MutationSpec>> fieldSpecs = new ArrayList<>();
         for (List<Object> path : eligiblePaths) {
             String pathString = JsonPaths.pathToString(path);
@@ -270,29 +279,32 @@ public final class ParamValidatorModule implements IcarusModule {
             if (!specs.isEmpty()) {
                 fieldPathStrings.add(pathString);
                 fieldPaths.add(path);
-                fieldUrlParam.add(null);
+                fieldFlatParam.add(null);
                 fieldSpecs.add(specs);
             }
         }
-        for (ParsedHttpParameter param : urlParams) {
-            String pathString = "url:" + param.name();
-            if (!pathRules.isIncluded(pathString)) continue;
-            if (pathRules.isExcluded(pathString)) continue;
+        // numeric-looking flat values are typed as String, matching URL-param behaviour
+        if (!hasJsonBody) {
+            for (ParsedHttpParameter param : flatParams) {
+                String pathString = (param.type() == HttpParameterType.BODY ? "body:" : "url:") + param.name();
+                if (!pathRules.isIncluded(pathString)) continue;
+                if (pathRules.isExcluded(pathString)) continue;
 
-            List<MutationSpec> specs = new ArrayList<>();
-            for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config, depth)) {
-                if (pathRules.isException(pathString, spec)) continue;
-                specs.add(spec);
-            }
-            for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField, depth)) {
-                if (pathRules.isException(pathString, spec)) continue;
-                specs.add(spec);
-            }
-            if (!specs.isEmpty()) {
-                fieldPathStrings.add(pathString);
-                fieldPaths.add(null);
-                fieldUrlParam.add(param);
-                fieldSpecs.add(specs);
+                List<MutationSpec> specs = new ArrayList<>();
+                for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config, depth)) {
+                    if (pathRules.isException(pathString, spec)) continue;
+                    specs.add(spec);
+                }
+                for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField, depth)) {
+                    if (pathRules.isException(pathString, spec)) continue;
+                    specs.add(spec);
+                }
+                if (!specs.isEmpty()) {
+                    fieldPathStrings.add(pathString);
+                    fieldPaths.add(null);
+                    fieldFlatParam.add(param);
+                    fieldSpecs.add(specs);
+                }
             }
         }
 
@@ -315,18 +327,30 @@ public final class ParamValidatorModule implements IcarusModule {
                 anyFieldHadSpecAtThisRound = true;
 
                 MutationSpec spec = specs.get(round);
-                ParsedHttpParameter urlParam = fieldUrlParam.get(f);
-                if (urlParam != null) {
+                ParsedHttpParameter fp = fieldFlatParam.get(f);
+                if (fp != null) {
+                    // §1.5: Montoya fixes Content-Length on withUpdatedParameters; whether it
+                    // percent-encodes the value is unverified — payloads with & = + # % need a
+                    // wire-capture check against testdata/echo_server.py before trusting this.
+                    boolean isBody = fp.type() == HttpParameterType.BODY;
+                    String v = spec.value() != null ? spec.value().toString() : "";
+                    HttpParameter removeTarget = isBody
+                            ? HttpParameter.bodyParameter(fp.name(), fp.value())
+                            : HttpParameter.urlParameter(fp.name(), fp.value());
+                    HttpParameter updateTarget = isBody
+                            ? HttpParameter.bodyParameter(fp.name(), v)
+                            : HttpParameter.urlParameter(fp.name(), v);
                     HttpRequest mutatedRequest = spec.remove()
-                            ? request.withRemovedParameters(HttpParameter.urlParameter(urlParam.name(), urlParam.value()))
-                            : request.withUpdatedParameters(HttpParameter.urlParameter(urlParam.name(), spec.value() != null ? spec.value().toString() : ""));
+                            ? request.withRemovedParameters(removeTarget)
+                            : request.withUpdatedParameters(updateTarget);
                     mutations.add(new Mutation(
                             fieldPathStrings.get(f),
                             spec.type(),
                             spec.description(),
                             spec.category(),
                             mutatedRequest,
-                            spec.value()
+                            spec.value(),
+                            spec.remove()
                     ));
                 } else {
                     if (spec.astResult() != null) {
@@ -338,7 +362,8 @@ public final class ParamValidatorModule implements IcarusModule {
                                     spec.description(),
                                     spec.category(),
                                     request.withBody(burp.api.montoya.core.ByteArray.byteArray(mutatedBody)),
-                                    spec.value()
+                                    spec.value(),
+                                    spec.remove()
                             ));
                         } catch (Exception e) {
                             api.logging().logToError("Failed to serialize AST: " + e.getMessage());
@@ -353,7 +378,8 @@ public final class ParamValidatorModule implements IcarusModule {
                                     spec.description(),
                                     spec.category(),
                                     request.withBody(JsonParser.write(clonedRoot)),
-                                    spec.value()
+                                    spec.value(),
+                                    spec.remove()
                             ));
                         }
                     }

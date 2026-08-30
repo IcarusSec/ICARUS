@@ -152,9 +152,12 @@ public class ReportingSettingsTab {
             sideBtns.add(b);
             sideBtns.add(Box.createVerticalStrut(3));
         }
-        ((JPanel) sectionListPanel.component()).add(sideBtns, BorderLayout.EAST);
+        JPanel listWrapper = new JPanel(new BorderLayout());
+        listWrapper.setOpaque(false);
+        listWrapper.add(sectionListPanel.component(), BorderLayout.CENTER);
+        listWrapper.add(sideBtns, BorderLayout.EAST);
         
-        flowPanel = new SectionFlowPanel((JComponent) sectionListPanel.component(), (JComponent) detailPane.component());
+        flowPanel = new SectionFlowPanel(listWrapper, (JComponent) detailPane.component());
         responsiveContainer.registerSection(flowPanel);
 
         // Theme

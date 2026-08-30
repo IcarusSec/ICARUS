@@ -248,19 +248,27 @@ public class ReportingSettingsTab {
 
         JPanel sevGrid = new JPanel(new GridBagLayout());
         sevGrid.setOpaque(false);
-        GridBagConstraints sg = gbc();
         Severity[] sevs = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW,
                            Severity.INFO, Severity.FIXED, Severity.NOT_FIXED};
         for (int i = 0; i < sevs.length; i++) {
-            sg.gridx = (i % 2) * 2;     // 0 or 2
-            sg.gridy = i / 2;
-            sg.weightx = 0;
-            sevGrid.add(new JLabel(titleCase(sevs[i].name()) + ":"), sg);
-            sg.gridx++;
-            sg.weightx = 1.0;
+            int col = i % 2;   // 0 or 1
+            int row2 = i / 2;
+
+            GridBagConstraints gl = new GridBagConstraints();
+            gl.gridx = col * 2; gl.gridy = row2;
+            gl.weightx = 0; gl.anchor = GridBagConstraints.WEST;
+            gl.insets = new Insets(3, col == 0 ? 4 : 16, 3, 4);
+            gl.fill = GridBagConstraints.NONE;
+            sevGrid.add(new JLabel(titleCase(sevs[i].name()) + ":"), gl);
+
+            GridBagConstraints gs = new GridBagConstraints();
+            gs.gridx = col * 2 + 1; gs.gridy = row2;
+            gs.weightx = 0.5; gs.anchor = GridBagConstraints.WEST;
+            gs.insets = new Insets(3, 0, 3, 4);
+            gs.fill = GridBagConstraints.NONE;
             JPanel swatch = createColorSwatch();
             severityColorPanels.put(sevs[i], swatch);
-            sevGrid.add(swatch, sg);
+            sevGrid.add(swatch, gs);
         }
         card.addFormRow(sevGrid);
 
@@ -632,8 +640,7 @@ public class ReportingSettingsTab {
         Icon ic = EvidenceUiHelpers.createIcon(icon);
         if (ic != null) b.setIcon(ic);
         b.setFocusPainted(false);
-        b.setMargin(new Insets(3, 8, 3, 8));
-        b.putClientProperty("JButton.buttonType", "toolBarButton");
+        b.setMargin(new Insets(4, 10, 4, 10));
         b.addActionListener(al);
         return b;
     }

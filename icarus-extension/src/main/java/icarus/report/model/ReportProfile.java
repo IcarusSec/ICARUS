@@ -42,6 +42,11 @@ public record ReportProfile(
     /**
      * Creates a mutable user-owned clone based on this profile.
      */
+    @Override
+    public String toString() {
+        return name + (builtIn ? " [Built-in]" : " [Custom]");
+    }
+
     public ReportProfile createClone(String newId, String newName) {
         return new ReportProfile(
             CURRENT_SCHEMA_VERSION,

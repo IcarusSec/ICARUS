@@ -26,6 +26,11 @@ public final class ModuleConfig {
         this.values = new LinkedHashMap<>(initial);
     }
 
+    /** Shallow-immutable copy: values are Strings, so this is a full independent copy. */
+    public ModuleConfig copy() {
+        return new ModuleConfig(this.values);
+    }
+
     // ── Writers (used by SettingsPanel) ──────────────────────────
 
     public void set(String key, String value) {

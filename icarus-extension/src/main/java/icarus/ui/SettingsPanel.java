@@ -104,8 +104,8 @@ public class SettingsPanel {
         cardGlobal.addFormRow(pnlGlobalGrid);
 
         CardPanel cardWaf = new CardPanel(I18n.t("settings.section.waf_evasion"), "shield");
-        addCheckboxToForm(cardWaf, "waf.detect_akamai", I18n.t("settings.checkbox.detect_akamai"), true);
-        addTextAreaToForm(cardWaf, "waf.safelist_payloads", I18n.t("settings.textarea.safelist_payloads"));
+        addCheckboxToForm(cardWaf, "waf.detect", I18n.t("settings.checkbox.waf.detect"), true);
+        cardWaf.addFormRow(mutedLabel(I18n.t("settings.help.waf.detect")));
 
         CardPanel cardAuto = new CardPanel(I18n.t("settings.section.autoauth"), "key");
         addSpinnerToForm(cardAuto, "autoauth.refresh_minutes", I18n.t("settings.field.autoauth.refresh_minutes"), 10, 1, 1440, 1);

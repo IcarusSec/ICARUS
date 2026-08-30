@@ -127,11 +127,11 @@ public class ReportingSettingsTab {
         btnSave.addActionListener(e -> saveCurrentProfileChanges());
 
         toolbarPanel = new ToolbarPanel(comboProfiles, btnClone, btnExport, btnImport, btnDelete, btnPreviewPdf, btnPreviewHtml, btnSave);
-        responsiveContainer.registerSection(toolbarPanel);
+        responsiveContainer.registerSection(wrapInCard("Report Profile & Actions", "file-text", toolbarPanel));
 
         // Layout
         layoutPanel = new LayoutSectionPanel();
-        responsiveContainer.registerSection(layoutPanel);
+        responsiveContainer.registerSection(wrapInCard("Layout", "square", layoutPanel));
 
         // Sections
         sectionListPanel = new SectionListPanel();
@@ -158,7 +158,7 @@ public class ReportingSettingsTab {
         listWrapper.add(sideBtns, BorderLayout.EAST);
         
         flowPanel = new SectionFlowPanel(listWrapper, (JComponent) detailPane.component());
-        responsiveContainer.registerSection(flowPanel);
+        responsiveContainer.registerSection(wrapInCard("Sections Flow", "list", flowPanel));
 
         // Theme
         colorPrimaryPanel = createColorSwatch();
@@ -171,15 +171,15 @@ public class ReportingSettingsTab {
             severityColorPanels.put(s, createColorSwatch());
         }
         themePanel = new ColorsThemeSectionPanel(colorPrimaryPanel, colorSecondaryPanel, comboFontStack, spinFontSize, severityColorPanels);
-        responsiveContainer.registerSection(themePanel);
+        responsiveContainer.registerSection(wrapInCard("Colors & Theme", "aperture", themePanel));
 
         // Branding
         brandingPanel = new BrandingSectionPanel();
-        responsiveContainer.registerSection(brandingPanel);
+        responsiveContainer.registerSection(wrapInCard("Branding & Metadata", "shield", brandingPanel));
 
         // Content
         contentPanel = new ContentSectionPanel();
-        responsiveContainer.registerSection(contentPanel);
+        responsiveContainer.registerSection(wrapInCard("Content & Policy", "adjustments-horizontal", contentPanel));
 
         // Add some padding around the container
         JPanel wrapper = new JPanel(new BorderLayout());
@@ -493,6 +493,61 @@ public class ReportingSettingsTab {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  UI Helpers
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /** Reusable card panel matching SettingsPanel's style. */
+    private class CardPanel extends JPanel {
+        CardPanel(String title, String iconName) {
+            setLayout(new GridBagLayout());
+            setBorder(new EmptyBorder(12, 14, 12, 14));
+            setBackground(themeHelper.getContainerBackgroundColor());
+            putClientProperty("FlatLaf.style", "arc: 12; borderWidth: 1; borderColor: $Component.borderColor");
+
+            JPanel header = new JPanel(new BorderLayout(0, 8));
+            header.setOpaque(false);
+            JLabel lbl = new JLabel(title);
+            lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 14f));
+            Icon ico = EvidenceUiHelpers.createIcon(iconName);
+            if (ico != null) { lbl.setIcon(ico); lbl.setIconTextGap(8); }
+            header.add(lbl, BorderLayout.NORTH);
+            header.add(new JSeparator(), BorderLayout.SOUTH);
+
+            GridBagConstraints g = new GridBagConstraints();
+            g.gridx = 0; g.gridy = 0;
+            g.weightx = 1.0; g.fill = GridBagConstraints.HORIZONTAL;
+            g.insets = new Insets(0, 0, 10, 0);
+            add(header, g);
+        }
+
+        @Override
+        public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+        }
+
+        void addFormRow(Component comp) {
+            GridBagConstraints g = new GridBagConstraints();
+            g.gridx = 0; g.gridy = getComponentCount();
+            g.weightx = 1.0; g.fill = GridBagConstraints.HORIZONTAL;
+            g.insets = new Insets(0, 0, 6, 0);
+            g.anchor = GridBagConstraints.NORTHWEST;
+            add(comp, g);
+        }
+    }
+
+
+    private ResponsiveSection wrapInCard(String title, String iconName, ResponsiveSection inner) {
+        CardPanel card = new CardPanel(title, iconName);
+        card.addFormRow(inner.component());
+        return new ResponsiveSection() {
+            @Override
+            public Component component() {
+                return card;
+            }
+            @Override
+            public void onBreakpointChanged(Breakpoint bp) {
+                inner.onBreakpointChanged(bp);
+            }
+        };
+    }
 
     private JButton btn(String text, String icon, java.awt.event.ActionListener al) {
         JButton b = new JButton(text);

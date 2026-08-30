@@ -50,7 +50,7 @@ public final class ParamValidatorModule implements IcarusModule {
             this(type, description, value, remove, category, null);
         }
     }
-    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value, boolean remove) {}
+    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value, boolean remove, boolean isEvasion) {}
 
     /** One baseline probe: send + measure. status/length == -1 and empty body on a null response. */
     record BaselineSample(int status, int length, long millis, String bodyLower) {}
@@ -177,8 +177,17 @@ public final class ParamValidatorModule implements IcarusModule {
      */
     private static List<MutationSpec> truncateFairlyByType(List<MutationSpec> specs, int budget) {
         LinkedHashMap<String, ArrayDeque<MutationSpec>> byType = new LinkedHashMap<>();
-        for (MutationSpec s : specs) byType.computeIfAbsent(s.type(), k -> new ArrayDeque<>()).add(s);
-        List<MutationSpec> out = new ArrayList<>(budget);
+        List<MutationSpec> evasion = new ArrayList<>();
+        
+        for (MutationSpec s : specs) {
+            if (s.value() instanceof String && icarus.modules.PayloadRepository.isEvasionPayload((String) s.value())) {
+                evasion.add(s);
+            } else {
+                byType.computeIfAbsent(s.type(), k -> new ArrayDeque<>()).add(s);
+            }
+        }
+        
+        List<MutationSpec> out = new ArrayList<>(budget + evasion.size());
         while (out.size() < budget) {
             boolean progressed = false;
             for (ArrayDeque<MutationSpec> q : byType.values()) {
@@ -189,6 +198,7 @@ public final class ParamValidatorModule implements IcarusModule {
             }
             if (!progressed) break;
         }
+        out.addAll(evasion);
         return out;
     }
 
@@ -356,15 +366,23 @@ public final class ParamValidatorModule implements IcarusModule {
             }
         }
 
-        for (int round = 0; mutations.size() < maxMutations; round++) {
+        int stdMutationsCount = 0;
+        for (int round = 0; ; round++) {
             boolean anyFieldHadSpecAtThisRound = false;
             for (int f = 0; f < fieldSpecs.size(); f++) {
-                if (mutations.size() >= maxMutations) break;
                 List<MutationSpec> specs = fieldSpecs.get(f);
                 if (round >= specs.size()) continue;
+                
+                MutationSpec spec = specs.get(round);
+                boolean isEvasion = spec.value() instanceof String && icarus.modules.PayloadRepository.isEvasionPayload((String) spec.value());
+                
+                if (!isEvasion) {
+                    if (stdMutationsCount >= maxMutations) continue;
+                    stdMutationsCount++;
+                }
+                
                 anyFieldHadSpecAtThisRound = true;
 
-                MutationSpec spec = specs.get(round);
                 ParsedHttpParameter fp = fieldFlatParam.get(f);
                 if (fp != null) {
                     // §1.5 (verified 2026-08-30 via icarus-lab echo): Montoya's
@@ -393,7 +411,8 @@ public final class ParamValidatorModule implements IcarusModule {
                             spec.category(),
                             mutatedRequest,
                             spec.value(),
-                            spec.remove()
+                            spec.remove(),
+                            isEvasion
                     ));
                 } else {
                     if (spec.astResult() != null) {
@@ -406,10 +425,11 @@ public final class ParamValidatorModule implements IcarusModule {
                                     spec.category(),
                                     request.withBody(burp.api.montoya.core.ByteArray.byteArray(mutatedBody)),
                                     spec.value(),
-                                    spec.remove()
+                                    spec.remove(),
+                                    isEvasion
                             ));
                         } catch (Exception e) {
-                            api.logging().logToError("Failed to serialize AST: " + e.getMessage());
+                            api.logging().logToError("AST serialization failed: " + e.getMessage());
                         }
                     } else {
                         Object clonedRoot = JsonParser.parse(originalBody);
@@ -422,7 +442,8 @@ public final class ParamValidatorModule implements IcarusModule {
                                     spec.category(),
                                     request.withBody(JsonParser.write(clonedRoot)),
                                     spec.value(),
-                                    spec.remove()
+                                    spec.remove(),
+                                    isEvasion
                             ));
                         }
                     }
@@ -512,15 +533,13 @@ public final class ParamValidatorModule implements IcarusModule {
             }
             Mutation m = mutations.get(i);
             
-            if (m.category() == Category.INJECTION && m.value() instanceof String) {
-                boolean isEvasion = icarus.modules.PayloadRepository.isEvasionPayload((String) m.value());
-                
-                if (jumpToEvasion && !isEvasion) {
+            if (m.category() == Category.INJECTION) {
+                if (jumpToEvasion && !m.isEvasion()) {
                     // We are jumping to evasion, so skip all standard noisy payloads
                     responses.add(null);
                     requestTimes[i] = 0;
                     continue;
-                } else if (!jumpToEvasion && isEvasion && !"DEEP".equals(depth)) {
+                } else if (!jumpToEvasion && m.isEvasion() && !"DEEP".equals(depth)) {
                     // Normal run on LIGHT/MEDIUM depth: skip the hidden evasion payloads
                     responses.add(null);
                     requestTimes[i] = 0;

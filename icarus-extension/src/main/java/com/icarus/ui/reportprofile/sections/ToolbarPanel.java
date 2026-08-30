@@ -18,13 +18,13 @@ public class ToolbarPanel implements ResponsiveSection {
     private final JPanel actionRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
 
     public ToolbarPanel(JComboBox<ReportProfile> comboProfiles,
-                        JButton btnClone, JButton btnExport, JButton btnImport, JButton btnDelete,
+                        JButton btnClone, JButton btnImport, JButton btnExport, JButton btnDelete,
                         JButton btnPreviewPdf, JButton btnPreviewHtml, JButton btnSave) {
         profileRow.add(new JLabel("Profile:"));
         profileRow.add(comboProfiles);
         profileRow.add(btnClone);
-        profileRow.add(btnExport);
         profileRow.add(btnImport);
+        profileRow.add(btnExport);
         profileRow.add(btnDelete);
 
         actionRow.add(btnPreviewPdf);
@@ -47,6 +47,13 @@ public class ToolbarPanel implements ResponsiveSection {
 
     @Override
     public void onBreakpointChanged(Breakpoint bp) {
-        // Each row's WrapLayout handles its own reflow.
+        // Centre the rows once they wrap on a narrow / vertical window; keep them
+        // left-anchored where there's room for a normal toolbar.
+        int align = (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW)
+                ? FlowLayout.CENTER : FlowLayout.LEFT;
+        ((FlowLayout) profileRow.getLayout()).setAlignment(align);
+        ((FlowLayout) actionRow.getLayout()).setAlignment(align);
+        profileRow.revalidate();
+        actionRow.revalidate();
     }
 }

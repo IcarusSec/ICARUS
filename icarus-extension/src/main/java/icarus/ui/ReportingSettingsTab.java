@@ -114,10 +114,10 @@ public class ReportingSettingsTab {
             if (sel != null) { profileManager.setActive(sel.id()); loadProfileIntoForm(sel); }
         });
 
-        btnClone  = btn("Clone",  "copy",     e -> onCloneProfile());
-        btnExport = btn("Export", "download",  e -> onExportProfile());
-        btnImport = btn("Import", "folder",    e -> onImportProfile());
-        btnDelete = btn("Delete", "trash",     e -> onDeleteProfile());
+        btnClone  = btn("Clone",  "copy",       e -> onCloneProfile());
+        btnImport = btn("Import", "arrow-down", e -> onImportProfile());
+        btnExport = btn("Export", "arrow-up",   e -> onExportProfile());
+        btnDelete = btn("Delete", "trash",      e -> onDeleteProfile());
         btnPreviewPdf  = btn("Preview PDF",  "file-text",     e -> runPreview(PreviewService.Format.PDF));
         btnPreviewHtml = btn("Preview HTML", "external-link", e -> runPreview(PreviewService.Format.HTML));
         // Built via btn() so margins / icon sizing match Preview PDF/HTML; the
@@ -129,7 +129,7 @@ public class ReportingSettingsTab {
         btnSave.setPreferredSize(new Dimension(
                 Math.max(saveRef.width, btnSave.getPreferredSize().width), saveRef.height));
 
-        toolbarPanel = new ToolbarPanel(comboProfiles, btnClone, btnExport, btnImport, btnDelete, btnPreviewPdf, btnPreviewHtml, btnSave);
+        toolbarPanel = new ToolbarPanel(comboProfiles, btnClone, btnImport, btnExport, btnDelete, btnPreviewPdf, btnPreviewHtml, btnSave);
         responsiveContainer.registerSection(wrapInCard("Report Profile & Actions", "file-text", toolbarPanel));
 
         // Layout

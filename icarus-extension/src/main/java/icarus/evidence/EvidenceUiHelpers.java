@@ -98,11 +98,15 @@ public void addCweChip(JPanel pnlChips, List<String> selectedCwe, String cweId) 
                 // bitmap-upscaled by the OS and looks mushy. Render it once at 4x
                 // into a buffer and downscale with bicubic at paint time -- crisp
                 // whether or not the host is HiDPI-aware.
-                int hi = Math.max(size * 4, 64);
+                int hi = Math.max(size * 4, 96);
                 FlatSVGIcon svg = baseIcon.derive(hi, hi);
                 svg.setColorFilter(new FlatSVGIcon.ColorFilter(color -> fc));
                 BufferedImage buf = new BufferedImage(hi, hi, BufferedImage.TYPE_INT_ARGB);
                 Graphics2D bg = buf.createGraphics();
+                bg.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                bg.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+                bg.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+                bg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                 svg.paintIcon(null, bg, 0, 0);
                 bg.dispose();
                 return new Icon() {

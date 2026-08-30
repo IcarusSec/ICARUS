@@ -219,7 +219,7 @@ public class ReportingSettingsTab {
         javax.swing.event.DocumentListener dl = new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { /* ignore attribute changes */ }
             private void update() {
                 if (isUpdatingUi) return;
                 int idx = sectionListPanel.list.getSelectedIndex();

@@ -9,6 +9,9 @@ import icarus.report.DefaultReportProfileManager;
 import icarus.report.PreviewService;
 import icarus.report.ReportProfileManager;
 import icarus.report.model.*;
+import com.icarus.ui.reportprofile.layout.*;
+import com.icarus.ui.reportprofile.sections.*;
+import com.icarus.ui.reportprofile.components.*;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -37,26 +40,20 @@ public class ReportingSettingsTab {
     private JButton btnClone, btnDelete, btnExport, btnImport;
     private JButton btnSave, btnPreviewPdf, btnPreviewHtml;
 
-    // Layout card
-    private JRadioButton rdoCoverGradient, rdoCoverHeaderBand, rdoCoverNone;
-    private JRadioButton rdoFindingCard, rdoFindingTabular;
-    private DefaultTableModel sectionsTableModel;
-    private JTable sectionsTable;
-
-    // Theme card
+    private LayoutSectionPanel layoutPanel;
+    private ColorsThemeSectionPanel themePanel;
+    private BrandingSectionPanel brandingPanel;
+    private ContentSectionPanel contentPanel;
+    private SectionListPanel sectionListPanel;
+    private DetailPane detailPane;
+    private SectionFlowPanel flowPanel;
+    private ToolbarPanel toolbarPanel;
+    
+    // Theme card components (needed for ColorsThemeSectionPanel)
     private JPanel colorPrimaryPanel, colorSecondaryPanel;
     private JComboBox<String> comboFontStack;
     private JSpinner spinFontSize;
     private final Map<Severity, JPanel> severityColorPanels = new EnumMap<>(Severity.class);
-
-    // Branding card
-    private JTextField txtCompanyLogo, txtClientLogo, txtDocTitle, txtClassification;
-    private JTextField txtAuthor, txtReviewer, txtApprover, txtEnvironment;
-
-    // Content card
-    private JCheckBox chkIncludeEvidence, chkIncludeReq, chkIncludeRes, chkToc;
-    private JSpinner spinMaxReqBytes, spinMaxResBytes;
-    private final Map<FindingField, JCheckBox> fieldCheckboxes = new EnumMap<>(FindingField.class);
 
     private ReportProfile currentProfile;
     private boolean isUpdatingUi = false;
@@ -95,43 +92,9 @@ public class ReportingSettingsTab {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private JPanel buildContent() {
-        // Inner column: the actual cards, stacked vertically
-        JPanel column = new JPanel();
-        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
-        column.setOpaque(false);
-        // Force the column to a strict maximum width
-        column.setMaximumSize(new Dimension(800, Integer.MAX_VALUE));
+        ResponsiveContainer responsiveContainer = new ResponsiveContainer();
 
-        column.add(buildProfileCard());
-        column.add(Box.createVerticalStrut(16));
-        column.add(buildLayoutCard());
-        column.add(Box.createVerticalStrut(16));
-        column.add(buildThemeCard());
-        column.add(Box.createVerticalStrut(16));
-        column.add(buildBrandingCard());
-        column.add(Box.createVerticalStrut(16));
-        column.add(buildContentPolicyCard());
-        column.add(Box.createVerticalStrut(16));
-        column.add(buildActionsCard());
-
-        // Outer wrapper: perfectly centers the column horizontally using glue
-        JPanel wrapper = new JPanel();
-        wrapper.setLayout(new BoxLayout(wrapper, BoxLayout.X_AXIS));
-        wrapper.setBackground(themeHelper.getBackgroundColor());
-        wrapper.setBorder(new EmptyBorder(16, 16, 16, 16));
-
-        wrapper.add(Box.createHorizontalGlue());
-        wrapper.add(column);
-        wrapper.add(Box.createHorizontalGlue());
-
-        return wrapper;
-    }
-
-    // ── Card: Profile Selector ──────────────────────────────────────
-
-    private JPanel buildProfileCard() {
-        CardPanel card = new CardPanel("Report Profile", "file-text");
-
+        // Initialize Toolbar components
         comboProfiles = new JComboBox<>();
         comboProfiles.setRenderer(new DefaultListCellRenderer() {
             @Override
@@ -150,84 +113,32 @@ public class ReportingSettingsTab {
             ReportProfile sel = (ReportProfile) comboProfiles.getSelectedItem();
             if (sel != null) { profileManager.setActive(sel.id()); loadProfileIntoForm(sel); }
         });
-        card.addFormRow(comboProfiles);
 
-        JPanel btns = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        btns.setOpaque(false);
         btnClone  = btn("Clone",  "copy",     e -> onCloneProfile());
         btnExport = btn("Export", "download",  e -> onExportProfile());
         btnImport = btn("Import", "folder",    e -> onImportProfile());
         btnDelete = btn("Delete", "trash",     e -> onDeleteProfile());
-        btns.add(btnClone); btns.add(btnExport); btns.add(btnImport); btns.add(btnDelete);
-        card.addFormRow(btns);
+        btnPreviewPdf  = btn("Preview PDF",  "file-text",     e -> runPreview(PreviewService.Format.PDF));
+        btnPreviewHtml = btn("Preview HTML", "external-link", e -> runPreview(PreviewService.Format.HTML));
+        btnSave = new JButton("Save Profile");
+        btnSave.setIcon(EvidenceUiHelpers.createIcon("check"));
+        btnSave.setFocusPainted(false);
+        btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold $defaultFont;");
+        btnSave.addActionListener(e -> saveCurrentProfileChanges());
 
-        return card;
-    }
+        toolbarPanel = new ToolbarPanel(comboProfiles, btnClone, btnExport, btnImport, btnDelete, btnPreviewPdf, btnPreviewHtml, btnSave);
+        responsiveContainer.registerSection(toolbarPanel);
 
-    // ── Card: Layout & Sections ─────────────────────────────────────
+        // Layout
+        layoutPanel = new LayoutSectionPanel();
+        responsiveContainer.registerSection(layoutPanel);
 
-    private JPanel buildLayoutCard() {
-        CardPanel card = new CardPanel("Layout & Sections", "square");
-
-        // Cover style
-        card.addFormRow(label("Cover Page (PDF):"));
-        ButtonGroup grpCover = new ButtonGroup();
-        rdoCoverGradient   = radio("Gradient Hero (Modern)");
-        rdoCoverHeaderBand = radio("Header Band (Classic)");
-        rdoCoverNone       = radio("None (Direct Flow)");
-        for (JRadioButton r : List.of(rdoCoverGradient, rdoCoverHeaderBand, rdoCoverNone)) {
-            grpCover.add(r);
-            card.addFormRow(indent(r));
-        }
-
-        card.addFormRow(Box.createVerticalStrut(6));
-
-        // Finding style
-        card.addFormRow(label("Finding Card Layout:"));
-        ButtonGroup grpFinding = new ButtonGroup();
-        rdoFindingCard   = radio("Elevated Card (Modern)");
-        rdoFindingTabular = radio("Tabular Grid (Classic)");
-        for (JRadioButton r : List.of(rdoFindingCard, rdoFindingTabular)) {
-            grpFinding.add(r);
-            card.addFormRow(indent(r));
-        }
-
-        card.addFormRow(Box.createVerticalStrut(6));
-
-        // Sections table — fully editable: toggle, rename, add, remove, reorder
-        card.addFormRow(label("Report Sections Flow:"));
-        sectionsTableModel = new DefaultTableModel(new Object[]{"On", "#", "Section", "Req", "Params"}, 0) {
-            @Override public Class<?> getColumnClass(int c) {
-                if (c == 0 || c == 3) return Boolean.class;
-                if (c == 1) return Integer.class;
-                if (c == 4) return Map.class;
-                return String.class;
-            }
-            @Override public boolean isCellEditable(int r, int c) {
-                if (currentProfile != null && currentProfile.builtIn()) return false;
-                if (c == 0) {
-                    Boolean req = (Boolean) getValueAt(r, 3);
-                    return req == null || !req;
-                }
-                if (c == 2) return true; // Section ID editable
-                return false;
-            }
-        };
-        sectionsTable = new JTable(sectionsTableModel);
-        sectionsTable.setRowHeight(24);
-        sectionsTable.getColumnModel().getColumn(0).setMaxWidth(40);
-        sectionsTable.getColumnModel().getColumn(1).setMaxWidth(30);
-        sectionsTable.getColumnModel().getColumn(3).setMaxWidth(40);
-        // Hide the Params column
-        sectionsTable.getColumnModel().removeColumn(sectionsTable.getColumnModel().getColumn(4));
-        sectionsTable.setFillsViewportHeight(true);
-
-        JScrollPane tableScroll = new JScrollPane(sectionsTable);
-
-        JPanel tableRow = new JPanel(new BorderLayout(6, 0));
-        tableRow.setOpaque(false);
-        tableRow.add(tableScroll, BorderLayout.CENTER);
-
+        // Sections
+        sectionListPanel = new SectionListPanel();
+        detailPane = new DetailPane();
+        bindSectionsFlow();
+        
+        // Setup side buttons for sectionListPanel
         JPanel sideBtns = new JPanel();
         sideBtns.setLayout(new BoxLayout(sideBtns, BoxLayout.Y_AXIS));
         sideBtns.setOpaque(false);
@@ -241,267 +152,92 @@ public class ReportingSettingsTab {
             sideBtns.add(b);
             sideBtns.add(Box.createVerticalStrut(3));
         }
-        tableRow.add(sideBtns, BorderLayout.EAST);
+        ((JPanel) sectionListPanel.component()).add(sideBtns, BorderLayout.EAST);
+        
+        flowPanel = new SectionFlowPanel((JComponent) sectionListPanel.component(), (JComponent) detailPane.component());
+        responsiveContainer.registerSection(flowPanel);
 
-        // Right side: Detail Panel
-        JPanel detailPanel = new JPanel(new BorderLayout(0, 10));
-        detailPanel.setOpaque(false);
-        detailPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        detailPanel.setMinimumSize(new Dimension(300, 0));
-        
-        JTextField txtTitle = new JTextField();
-        JTextArea txtContent = new JTextArea();
-        txtContent.setLineWrap(true);
-        txtContent.setWrapStyleWord(true);
-        txtContent.setRows(5);
-        
-        JScrollPane contentScroll = new JScrollPane(txtContent);
-        contentScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
-        contentScroll.setBorder(BorderFactory.createEmptyBorder());
-        
-        detailPanel.add(inlineLabel("Title:", txtTitle), BorderLayout.NORTH);
-        detailPanel.add(contentScroll, BorderLayout.CENTER);
+        // Theme
+        colorPrimaryPanel = createColorSwatch();
+        colorSecondaryPanel = createColorSwatch();
+        comboFontStack = new JComboBox<>(new String[]{"Helvetica", "Times-Roman", "Courier"});
+        spinFontSize = new JSpinner(new SpinnerNumberModel(10, 8, 14, 1));
+        Severity[] sevs = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW,
+                           Severity.INFO, Severity.FIXED, Severity.NOT_FIXED};
+        for (Severity s : sevs) {
+            severityColorPanels.put(s, createColorSwatch());
+        }
+        themePanel = new ColorsThemeSectionPanel(colorPrimaryPanel, colorSecondaryPanel, comboFontStack, spinFontSize, severityColorPanels);
+        responsiveContainer.registerSection(themePanel);
 
-        // Bind Selection
-        sectionsTable.getSelectionModel().addListSelectionListener(e -> {
+        // Branding
+        brandingPanel = new BrandingSectionPanel();
+        responsiveContainer.registerSection(brandingPanel);
+
+        // Content
+        contentPanel = new ContentSectionPanel();
+        responsiveContainer.registerSection(contentPanel);
+
+        // Add some padding around the container
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setBorder(new EmptyBorder(16, 16, 16, 16));
+        wrapper.setOpaque(false);
+        wrapper.add(responsiveContainer, BorderLayout.CENTER);
+        return wrapper;
+    }
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  Data: load / save
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    
+    private void bindSectionsFlow() {
+        sectionListPanel.list.addListSelectionListener(e -> {
             if (e.getValueIsAdjusting() || isUpdatingUi) return;
-            int r = sectionsTable.getSelectedRow();
-            if (r >= 0) {
-                @SuppressWarnings("unchecked")
-                Map<String, String> params = (Map<String, String>) sectionsTableModel.getValueAt(r, 4); // hidden col index is still 4 in model
-                String id = (String) sectionsTableModel.getValueAt(r, 2);
-                
+            icarus.report.model.SectionNode node = sectionListPanel.list.getSelectedValue();
+            if (node != null) {
                 isUpdatingUi = true;
-                txtTitle.setText(params.getOrDefault("title", titleCase(id)));
-                txtTitle.setCaretPosition(0);
+                detailPane.titleField.setText(node.params().getOrDefault("title", titleCase(node.id())));
+                detailPane.titleField.setCaretPosition(0);
+                detailPane.bodyWell.setText(node.params().getOrDefault("content", ""));
                 
-                txtContent.setText(params.getOrDefault("content", ""));
-                txtContent.setCaretPosition(0);
-                
-                boolean editable = (currentProfile == null || !currentProfile.builtIn());
-                txtTitle.setEnabled(editable);
-                // The FINDINGS and VULNERABILITY_SUMMARY sections are rendered internally, don't allow markdown edit
-                boolean isInternal = id.equals("FINDINGS") || id.equals("VULNERABILITY_SUMMARY");
-                txtContent.setEnabled(editable && !isInternal);
+                boolean disable = "EXECUTIVE_SUMMARY".equals(node.id()) && (currentProfile != null && currentProfile.builtIn());
+                detailPane.titleField.setEnabled(!disable);
+                detailPane.bodyWell.setEnabled(!disable);
                 isUpdatingUi = false;
             } else {
                 isUpdatingUi = true;
-                txtTitle.setText("");
-                txtContent.setText("");
-                txtTitle.setEnabled(false);
-                txtContent.setEnabled(false);
+                detailPane.titleField.setText("");
+                detailPane.bodyWell.setText("");
+                detailPane.titleField.setEnabled(false);
+                detailPane.bodyWell.setEnabled(false);
                 isUpdatingUi = false;
             }
-            detailPanel.revalidate();
-            detailPanel.repaint();
         });
 
-        // Bind Edits
         javax.swing.event.DocumentListener dl = new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
             public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
             private void update() {
                 if (isUpdatingUi) return;
-                int r = sectionsTable.getSelectedRow();
-                if (r >= 0) {
+                int idx = sectionListPanel.list.getSelectedIndex();
+                if (idx >= 0) {
                     if (currentProfile != null && currentProfile.builtIn()) {
-                        javax.swing.SwingUtilities.invokeLater(() -> autoCloneProfile());
+                        autoCloneProfile();
                     } else {
-                        @SuppressWarnings("unchecked")
-                        Map<String, String> params = (Map<String, String>) sectionsTableModel.getValueAt(r, 4);
-                        params.put("title", txtTitle.getText());
-                        params.put("content", txtContent.getText());
+                        icarus.report.model.SectionNode node = sectionListPanel.model.getElementAt(idx);
+                        java.util.Map<String, String> newParams = new java.util.HashMap<>(node.params());
+                        newParams.put("title", detailPane.titleField.getText());
+                        newParams.put("content", detailPane.bodyWell.getText());
+                        icarus.report.model.SectionNode updated = new icarus.report.model.SectionNode(node.id(), node.enabled(), node.order(), node.required(), node.rendererKey(), newParams);
+                        sectionListPanel.model.setElementAt(updated, idx);
                     }
                 }
             }
         };
-        txtTitle.getDocument().addDocumentListener(dl);
-        txtContent.getDocument().addDocumentListener(dl);
-
-        tableRow.setMinimumSize(new Dimension(250, 0));
-
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableRow, detailPanel);
-        split.setOpaque(false);
-        split.setBorder(null);
-        split.setContinuousLayout(true);
-        split.setDividerLocation(300);
-        split.setResizeWeight(0.4);
-        split.setPreferredSize(new Dimension(800, 260)); 
-        
-        card.addFormRow(split);
-
-        return card;
+        detailPane.titleField.getDocument().addDocumentListener(dl);
+        detailPane.bodyWell.getDocument().addDocumentListener(dl);
     }
-
-    // ── Card: Colors & Theme ────────────────────────────────────────
-
-    private JPanel buildThemeCard() {
-        CardPanel card = new CardPanel("Colors & Theme", "aperture");
-
-        JPanel form = new JPanel(new GridBagLayout());
-        form.setOpaque(false);
-        GridBagConstraints g = gbc();
-        int row = 0;
-
-        colorPrimaryPanel = createColorSwatch();
-        addLabeledRow(form, g, row++, "Primary Accent:", colorPrimaryPanel);
-
-        colorSecondaryPanel = createColorSwatch();
-        addLabeledRow(form, g, row++, "Secondary Accent:", colorSecondaryPanel);
-
-        comboFontStack = new JComboBox<>(new String[]{"Helvetica", "Times-Roman", "Courier"});
-        addLabeledRow(form, g, row++, "Font Family:", comboFontStack);
-
-        spinFontSize = new JSpinner(new SpinnerNumberModel(10, 8, 14, 1));
-        addLabeledRow(form, g, row++, "Font Size (PDF):", spinFontSize);
-
-        card.addFormRow(form);
-
-        // Severity badges — 2-column grid
-        card.addFormRow(Box.createVerticalStrut(4));
-        card.addFormRow(label("Severity Badge Colors:"));
-
-        JPanel sevGrid = new JPanel(new GridBagLayout());
-        sevGrid.setOpaque(false);
-        Severity[] sevs = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM, Severity.LOW,
-                           Severity.INFO, Severity.FIXED, Severity.NOT_FIXED};
-        for (int i = 0; i < sevs.length; i++) {
-            int col = i % 2;   // 0 or 1
-            int row2 = i / 2;
-
-            GridBagConstraints gl = new GridBagConstraints();
-            gl.gridx = col * 2; gl.gridy = row2;
-            gl.weightx = 0; gl.anchor = GridBagConstraints.WEST;
-            gl.insets = new Insets(3, col == 0 ? 4 : 16, 3, 4);
-            gl.fill = GridBagConstraints.NONE;
-            sevGrid.add(new JLabel(titleCase(sevs[i].name()) + ":"), gl);
-
-            GridBagConstraints gs = new GridBagConstraints();
-            gs.gridx = col * 2 + 1; gs.gridy = row2;
-            gs.weightx = 0.5; gs.anchor = GridBagConstraints.WEST;
-            gs.insets = new Insets(3, 0, 3, 4);
-            gs.fill = GridBagConstraints.NONE;
-            JPanel swatch = createColorSwatch();
-            severityColorPanels.put(sevs[i], swatch);
-            sevGrid.add(swatch, gs);
-        }
-        card.addFormRow(sevGrid);
-
-        return card;
-    }
-
-    // ── Card: Branding & Metadata ───────────────────────────────────
-
-    private JPanel buildBrandingCard() {
-        CardPanel card = new CardPanel("Branding & Metadata", "shield");
-
-        txtDocTitle       = new JTextField();
-        txtClassification = new JTextField("Confidential");
-        txtAuthor         = new JTextField();
-        txtReviewer       = new JTextField();
-        txtApprover       = new JTextField();
-        txtEnvironment    = new JTextField();
-        txtCompanyLogo    = new JTextField();
-        txtClientLogo     = new JTextField();
-
-        JPanel form = new JPanel(new GridBagLayout());
-        form.setOpaque(false);
-        GridBagConstraints g = gbc();
-        int row = 0;
-        addLabeledRow(form, g, row++, "Document Title:", txtDocTitle);
-        addLabeledRow(form, g, row++, "Classification:", txtClassification);
-        addLabeledRow(form, g, row++, "Author:",         txtAuthor);
-        addLabeledRow(form, g, row++, "Reviewer:",       txtReviewer);
-        addLabeledRow(form, g, row++, "Approver:",       txtApprover);
-        addLabeledRow(form, g, row++, "Environment:",    txtEnvironment);
-        addFileRow(form, g, row++, "Company Logo:", txtCompanyLogo);
-        addFileRow(form, g, row++, "Client Logo:",  txtClientLogo);
-        card.addFormRow(form);
-
-        return card;
-    }
-
-    // ── Card: Content & Policy ──────────────────────────────────────
-
-    private JPanel buildContentPolicyCard() {
-        CardPanel card = new CardPanel("Content & Policy", "adjustments-horizontal");
-
-        chkIncludeEvidence = new JCheckBox("Include Evidence Screenshots", true);
-        chkToc             = new JCheckBox("Generate Table of Contents", true);
-        chkIncludeReq      = new JCheckBox("Include HTTP Request", true);
-        chkIncludeRes      = new JCheckBox("Include HTTP Response", true);
-        spinMaxReqBytes    = new JSpinner(new SpinnerNumberModel(4096, 512, 65536, 512));
-        spinMaxResBytes    = new JSpinner(new SpinnerNumberModel(4096, 512, 65536, 512));
-
-        // Toggles in 2-col grid
-        JPanel toggles = new JPanel(new GridBagLayout());
-        toggles.setOpaque(false);
-        GridBagConstraints tg = gbc();
-        tg.gridx = 0; tg.gridy = 0; tg.gridwidth = 2;
-        toggles.add(chkIncludeEvidence, tg);
-        tg.gridy = 1;
-        toggles.add(chkToc, tg);
-
-        tg.gridwidth = 1; tg.gridy = 2; tg.gridx = 0; tg.weightx = 0;
-        toggles.add(chkIncludeReq, tg);
-        tg.gridx = 1; tg.weightx = 1.0;
-        toggles.add(inlineLabel("Max bytes:", spinMaxReqBytes), tg);
-
-        tg.gridy = 3; tg.gridx = 0; tg.weightx = 0;
-        toggles.add(chkIncludeRes, tg);
-        tg.gridx = 1; tg.weightx = 1.0;
-        toggles.add(inlineLabel("Max bytes:", spinMaxResBytes), tg);
-        card.addFormRow(toggles);
-
-        // Finding fields — 2-col grid
-        card.addFormRow(Box.createVerticalStrut(4));
-        card.addFormRow(label("Finding Fields Visibility:"));
-
-        JPanel fGrid = new JPanel(new GridBagLayout());
-        fGrid.setOpaque(false);
-        GridBagConstraints fg = gbc();
-        FindingField[] fields = FindingField.values();
-        for (int i = 0; i < fields.length; i++) {
-            fg.gridx = i % 2;
-            fg.gridy = i / 2;
-            fg.weightx = 1.0;
-            JCheckBox chk = new JCheckBox(titleCase(fields[i].name()), true);
-            fieldCheckboxes.put(fields[i], chk);
-            fGrid.add(chk, fg);
-        }
-        card.addFormRow(fGrid);
-
-        return card;
-    }
-
-    // ── Card: Actions (Preview & Save) ──────────────────────────────
-
-    private JPanel buildActionsCard() {
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        bar.setOpaque(false);
-        bar.setAlignmentX(Component.LEFT_ALIGNMENT);
-        bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
-
-        btnPreviewPdf  = btn("Preview PDF",  "file-text",     e -> runPreview(PreviewService.Format.PDF));
-        btnPreviewHtml = btn("Preview HTML", "external-link", e -> runPreview(PreviewService.Format.HTML));
-
-        btnSave = new JButton("Save Profile");
-        btnSave.setIcon(EvidenceUiHelpers.createIcon("check"));
-        btnSave.setFocusPainted(false);
-        btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold $defaultFont;");
-        btnSave.addActionListener(e -> saveCurrentProfileChanges());
-
-        bar.add(btnPreviewPdf);
-        bar.add(btnPreviewHtml);
-        bar.add(Box.createHorizontalStrut(8));
-        bar.add(btnSave);
-        return bar;
-    }
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  Data: load / save
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private void refreshProfileList() {
         isUpdatingUi = true;
@@ -521,20 +257,15 @@ public class ReportingSettingsTab {
         btnSave.setEnabled(editable);
         btnDelete.setEnabled(editable);
 
-        // Cover
-        switch (p.coverRenderer()) {
-            case GRADIENT_HERO -> rdoCoverGradient.setSelected(true);
-            case HEADER_BAND   -> rdoCoverHeaderBand.setSelected(true);
-            default            -> rdoCoverNone.setSelected(true);
-        }
-        // Finding
-        if (p.findingRenderer() == FindingRendererId.TABULAR) rdoFindingTabular.setSelected(true);
-        else rdoFindingCard.setSelected(true);
+        // Cover & Finding
+        layoutPanel.setCover(WireframeKind.valueOf(p.coverRenderer().name()));
+        layoutPanel.setFinding(p.findingRenderer() == FindingRendererId.TABULAR ? WireframeKind.TABULAR_GRID : WireframeKind.ELEVATED_CARD);
 
         // Sections
-        sectionsTableModel.setRowCount(0);
-        for (SectionNode n : p.sections().nodes())
-            sectionsTableModel.addRow(new Object[]{n.enabled(), n.order(), n.id(), n.required(), new HashMap<>(n.params())});
+        sectionListPanel.model.clear();
+        for (SectionNode n : p.sections().nodes()) {
+            sectionListPanel.model.addElement(n);
+        }
 
         // Colors
         setSwatchHex(colorPrimaryPanel,   p.pdfTheme().primaryHex());
@@ -548,27 +279,26 @@ public class ReportingSettingsTab {
 
         // Branding
         BrandingConfig b = p.branding();
-        txtDocTitle.setText(b != null ? b.documentTitle() : "");
-        txtClassification.setText(b != null ? b.classification() : "");
-        txtAuthor.setText(b != null ? b.author() : "");
-        txtReviewer.setText(b != null ? b.reviewer() : "");
-        txtApprover.setText(b != null ? b.approver() : "");
-        txtEnvironment.setText(b != null ? b.environment() : "");
-        txtCompanyLogo.setText(b != null && b.companyLogoPath() != null ? b.companyLogoPath() : "");
-        txtClientLogo.setText(b != null && b.clientLogoPath() != null ? b.clientLogoPath() : "");
+        brandingPanel.txtDocTitle.setText(b != null ? b.documentTitle() : "");
+        brandingPanel.txtClassification.setText(b != null ? b.classification() : "");
+        brandingPanel.txtAuthor.setText(b != null ? b.author() : "");
+        brandingPanel.txtReviewer.setText(b != null ? b.reviewer() : "");
+        brandingPanel.txtApprover.setText(b != null ? b.approver() : "");
+        brandingPanel.txtEnvironment.setText(b != null ? b.environment() : "");
+        brandingPanel.txtCompanyLogo.setText(b != null && b.companyLogoPath() != null ? b.companyLogoPath() : "");
+        brandingPanel.txtClientLogo.setText(b != null && b.clientLogoPath() != null ? b.clientLogoPath() : "");
 
         // Content
         ContentPolicy c = p.content();
-        chkIncludeEvidence.setSelected(c.includeEvidence());
-        chkIncludeReq.setSelected(c.includeHttpRequest());
-        spinMaxReqBytes.setValue(c.maxRequestBytes());
-        chkIncludeRes.setSelected(c.includeHttpResponse());
-        spinMaxResBytes.setValue(c.maxResponseBytes());
-        chkToc.setSelected(c.includeTocBookmarks());
-        for (var e : fieldCheckboxes.entrySet())
-            e.getValue().setSelected(c.findingFields().contains(e.getKey()));
+        contentPanel.chkIncludeEvidence.setOn(c.includeEvidence());
+        contentPanel.chkIncludeReq.setOn(c.includeHttpRequest());
+        contentPanel.spinMaxReqBytes.setValue(c.maxRequestBytes());
+        contentPanel.chkIncludeRes.setOn(c.includeHttpResponse());
+        contentPanel.spinMaxResBytes.setValue(c.maxResponseBytes());
+        contentPanel.chkToc.setOn(c.includeTocBookmarks());
+        for (var e : contentPanel.fieldCheckboxes.entrySet())
+            e.getValue().setOn(c.findingFields().contains(e.getKey()));
     }
-
     private void autoCloneProfile() {
         if (currentProfile == null || !currentProfile.builtIn()) return;
         int suffix = 1;
@@ -591,17 +321,13 @@ public class ReportingSettingsTab {
     private void saveCurrentProfileChanges() {
         if (currentProfile == null || currentProfile.builtIn()) return;
 
-        CoverRendererId cover = rdoCoverGradient.isSelected() ? CoverRendererId.GRADIENT_HERO
-            : rdoCoverHeaderBand.isSelected() ? CoverRendererId.HEADER_BAND : CoverRendererId.NONE;
-        FindingRendererId finding = rdoFindingTabular.isSelected() ? FindingRendererId.TABULAR : FindingRendererId.ELEVATED_CARD;
+        CoverRendererId cover = CoverRendererId.valueOf(layoutPanel.getCover().name());
+        FindingRendererId finding = layoutPanel.getFinding() == WireframeKind.TABULAR_GRID ? FindingRendererId.TABULAR : FindingRendererId.ELEVATED_CARD;
 
         List<SectionNode> nodes = new ArrayList<>();
-        for (int i = 0; i < sectionsTableModel.getRowCount(); i++) {
-            nodes.add(SectionNode.of(
-                (String) sectionsTableModel.getValueAt(i, 2),
-                (Boolean) sectionsTableModel.getValueAt(i, 0),
-                i + 1,
-                (Boolean) sectionsTableModel.getValueAt(i, 3)));
+        for (int i = 0; i < sectionListPanel.model.getSize(); i++) {
+            SectionNode node = sectionListPanel.model.getElementAt(i);
+            nodes.add(new SectionNode(node.id(), node.enabled(), i + 1, node.required(), node.rendererKey(), node.params()));
         }
 
         String primary   = (String) colorPrimaryPanel.getClientProperty("hexValue");
@@ -620,28 +346,27 @@ public class ReportingSettingsTab {
             "-apple-system, BlinkMacSystemFont, sans-serif", false);
 
         BrandingConfig branding = new BrandingConfig(
-            blankToNull(txtCompanyLogo.getText()), blankToNull(txtClientLogo.getText()),
-            txtAuthor.getText().trim(), txtReviewer.getText().trim(), txtApprover.getText().trim(),
-            txtClassification.getText().trim(), txtEnvironment.getText().trim(), txtDocTitle.getText().trim(),
+            blankToNull(brandingPanel.txtCompanyLogo.getText()), blankToNull(brandingPanel.txtClientLogo.getText()),
+            brandingPanel.txtAuthor.getText().trim(), brandingPanel.txtReviewer.getText().trim(), brandingPanel.txtApprover.getText().trim(),
+            brandingPanel.txtClassification.getText().trim(), brandingPanel.txtEnvironment.getText().trim(), brandingPanel.txtDocTitle.getText().trim(),
             "", "", "", "", "", "");
 
         List<FindingField> fields = new ArrayList<>();
-        fieldCheckboxes.forEach((f, chk) -> { if (chk.isSelected()) fields.add(f); });
+        contentPanel.fieldCheckboxes.forEach((f, chk) -> { if (chk.isOn()) fields.add(f); });
 
-        ContentPolicy content = new ContentPolicy(
-            chkIncludeEvidence.isSelected(), chkIncludeReq.isSelected(), chkIncludeRes.isSelected(),
-            (Integer) spinMaxReqBytes.getValue(), (Integer) spinMaxResBytes.getValue(),
-            fields, CweMode.HARDCODED_CATALOG, Collections.emptyList(), chkToc.isSelected());
+        ContentPolicy contentPolicy = new ContentPolicy(
+            contentPanel.chkIncludeEvidence.isOn(), contentPanel.chkIncludeReq.isOn(), contentPanel.chkIncludeRes.isOn(),
+            (Integer) contentPanel.spinMaxReqBytes.getValue(), (Integer) contentPanel.spinMaxResBytes.getValue(),
+            fields, CweMode.HARDCODED_CATALOG, Collections.emptyList(), contentPanel.chkToc.isOn());
 
         ReportProfile updated = new ReportProfile(
             ReportProfile.CURRENT_SCHEMA_VERSION, currentProfile.id(), currentProfile.name(),
             currentProfile.locale(), false, currentProfile.basedOnId(),
-            cover, finding, new SectionGraph(nodes), branding, content, pdfTheme, htmlTheme);
+            cover, finding, new SectionGraph(nodes), branding, contentPolicy, pdfTheme, htmlTheme);
 
         profileManager.saveUserProfile(updated);
         showToast("Profile '" + updated.name() + "' saved.");
     }
-
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  Actions
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -719,19 +444,20 @@ public class ReportingSettingsTab {
     }
 
     private void moveSectionRow(int delta) {
-        int i = sectionsTable.getSelectedRow();
+        int i = sectionListPanel.list.getSelectedIndex();
         if (i < 0) return;
         int t = i + delta;
-        if (t < 0 || t >= sectionsTableModel.getRowCount()) return;
+        if (t < 0 || t >= sectionListPanel.model.getSize()) return;
         
         if (currentProfile != null && currentProfile.builtIn()) {
             autoCloneProfile();
             // Restore selection after model reload
-            sectionsTable.setRowSelectionInterval(i, i);
+            sectionListPanel.list.setSelectedIndex(i);
         }
         
-        sectionsTableModel.moveRow(i, i, t);
-        sectionsTable.setRowSelectionInterval(t, t);
+        SectionNode n = sectionListPanel.model.remove(i);
+        sectionListPanel.model.add(t, n);
+        sectionListPanel.list.setSelectedIndex(t);
     }
 
     private void addSection() {
@@ -740,15 +466,15 @@ public class ReportingSettingsTab {
             if (currentProfile != null && currentProfile.builtIn()) {
                 autoCloneProfile();
             }
-            int nextOrder = sectionsTableModel.getRowCount() + 1;
-            sectionsTableModel.addRow(new Object[]{true, nextOrder, name.trim().toUpperCase().replace(' ', '_'), false, new HashMap<String, String>()});
+            int nextOrder = sectionListPanel.model.getSize() + 1;
+            sectionListPanel.model.addElement(new SectionNode(name.trim().toUpperCase().replace(' ', '_'), true, nextOrder, false, name.trim().toUpperCase().replace(' ', '_'), new java.util.HashMap<>()));
         }
     }
 
     private void removeSection() {
-        int idx = sectionsTable.getSelectedRow();
+        int idx = sectionListPanel.list.getSelectedIndex();
         if (idx < 0) return;
-        Boolean required = (Boolean) sectionsTableModel.getValueAt(idx, 3);
+        Boolean required = sectionListPanel.model.getElementAt(idx).required();
         if (required != null && required) {
             JOptionPane.showMessageDialog(containerPanel, "Cannot remove a required section.", "Info", JOptionPane.INFORMATION_MESSAGE);
             return;
@@ -758,55 +484,12 @@ public class ReportingSettingsTab {
             autoCloneProfile();
         }
         
-        sectionsTableModel.removeRow(idx);
-        // Renumber
-        for (int i = 0; i < sectionsTableModel.getRowCount(); i++) {
-            sectionsTableModel.setValueAt(i + 1, i, 1);
-        }
+        sectionListPanel.model.remove(idx);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  UI Helpers
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    /** Reusable card panel matching SettingsPanel's style. */
-    private class CardPanel extends JPanel {
-        CardPanel(String title, String iconName) {
-            setLayout(new GridBagLayout());
-            setBorder(new EmptyBorder(12, 14, 12, 14));
-            setBackground(themeHelper.getContainerBackgroundColor());
-            putClientProperty("FlatLaf.style", "arc: 12; borderWidth: 1; borderColor: $Component.borderColor");
-
-            JPanel header = new JPanel(new BorderLayout(0, 8));
-            header.setOpaque(false);
-            JLabel lbl = new JLabel(title);
-            lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 14f));
-            Icon ico = EvidenceUiHelpers.createIcon(iconName);
-            if (ico != null) { lbl.setIcon(ico); lbl.setIconTextGap(8); }
-            header.add(lbl, BorderLayout.NORTH);
-            header.add(new JSeparator(), BorderLayout.SOUTH);
-
-            GridBagConstraints g = new GridBagConstraints();
-            g.gridx = 0; g.gridy = 0;
-            g.weightx = 1.0; g.fill = GridBagConstraints.HORIZONTAL;
-            g.insets = new Insets(0, 0, 10, 0);
-            add(header, g);
-        }
-
-        @Override
-        public Dimension getMaximumSize() {
-            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
-        }
-
-        void addFormRow(Component comp) {
-            GridBagConstraints g = new GridBagConstraints();
-            g.gridx = 0; g.gridy = getComponentCount();
-            g.weightx = 1.0; g.fill = GridBagConstraints.HORIZONTAL;
-            g.insets = new Insets(0, 0, 6, 0);
-            g.anchor = GridBagConstraints.NORTHWEST;
-            add(comp, g);
-        }
-    }
 
     private JButton btn(String text, String icon, java.awt.event.ActionListener al) {
         JButton b = new JButton(text);
@@ -818,66 +501,6 @@ public class ReportingSettingsTab {
         return b;
     }
 
-    private static JRadioButton radio(String text) {
-        JRadioButton r = new JRadioButton(text);
-        r.setOpaque(false);
-        return r;
-    }
-
-    private static JLabel label(String text) {
-        JLabel l = new JLabel(text);
-        l.setFont(l.getFont().deriveFont(Font.BOLD));
-        return l;
-    }
-
-    /** Indent a component by wrapping it in a panel with left padding. */
-    private static JPanel indent(JComponent comp) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        p.setOpaque(false);
-        p.setBorder(new EmptyBorder(0, 20, 0, 0));
-        p.add(comp);
-        return p;
-    }
-
-    private static JPanel inlineLabel(String text, JComponent comp) {
-        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        p.setOpaque(false);
-        p.add(new JLabel(text));
-        p.add(comp);
-        return p;
-    }
-
-    private static GridBagConstraints gbc() {
-        GridBagConstraints g = new GridBagConstraints();
-        g.insets = new Insets(3, 4, 3, 4);
-        g.fill = GridBagConstraints.HORIZONTAL;
-        g.anchor = GridBagConstraints.WEST;
-        return g;
-    }
-
-    private static void addLabeledRow(JPanel panel, GridBagConstraints g, int row, String label, JComponent field) {
-        g.gridx = 0; g.gridy = row; g.weightx = 0; g.gridwidth = 1;
-        panel.add(new JLabel(label), g);
-        g.gridx = 1; g.weightx = 1.0;
-        panel.add(field, g);
-    }
-
-    private void addFileRow(JPanel panel, GridBagConstraints g, int row, String label, JTextField field) {
-        g.gridx = 0; g.gridy = row; g.weightx = 0; g.gridwidth = 1;
-        panel.add(new JLabel(label), g);
-        JPanel p = new JPanel(new BorderLayout(4, 0));
-        p.setOpaque(false);
-        p.add(field, BorderLayout.CENTER);
-        JButton browse = btn("Browse", "folder", e -> {
-            JFileChooser fc = new JFileChooser();
-            if (fc.showOpenDialog(panel) == JFileChooser.APPROVE_OPTION) field.setText(fc.getSelectedFile().getAbsolutePath());
-        });
-        p.add(browse, BorderLayout.EAST);
-        g.gridx = 1; g.weightx = 1.0;
-        panel.add(p, g);
-    }
-
-    /** Color swatch: [■ button] [#HEX label]. Click button to pick. */
     private JPanel createColorSwatch() {
         JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         panel.setOpaque(false);

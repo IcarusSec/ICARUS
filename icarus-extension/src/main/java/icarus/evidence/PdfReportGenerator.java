@@ -255,6 +255,25 @@ public final class PdfReportGenerator {
                     }
                 } else if ("VULNERABILITY_SUMMARY".equals(id)) {
                     appendProfileVulnerabilitySummary(doc, ctx, accent);
+                } else {
+                    String title = node.params().getOrDefault("title", id.replace('_', ' '));
+                    String md = node.params().getOrDefault("content", "");
+                    if (md != null && !md.isBlank()) {
+                        PdfPTable header = new PdfPTable(1);
+                        header.setWidthPercentage(100);
+                        PdfPCell c = new PdfPCell(new Phrase(title, SECTION_FONT));
+                        c.setBorder(Rectangle.BOTTOM);
+                        c.setBorderColor(accent);
+                        c.setPaddingBottom(12f);
+                        header.addCell(c);
+                        doc.add(header);
+                        
+                        var mdElements = icarus.evidence.MarkdownPdfRenderer.render(
+                            markdownParser.parse(ctx.interpolate(md)), BODY_FONT, accent);
+                        for (com.lowagie.text.Element el : mdElements) {
+                            doc.add(el);
+                        }
+                    }
                 }
             }
         } catch (DocumentException e) {

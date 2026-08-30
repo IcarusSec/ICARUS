@@ -196,17 +196,20 @@ public class ReportingSettingsTab {
 
         // Sections table — fully editable: toggle, rename, add, remove, reorder
         card.addFormRow(label("Report Sections Flow:"));
-        sectionsTableModel = new DefaultTableModel(new Object[]{"On", "#", "Section", "Req"}, 0) {
+        sectionsTableModel = new DefaultTableModel(new Object[]{"On", "#", "Section", "Req", "Params"}, 0) {
             @Override public Class<?> getColumnClass(int c) {
-                return (c == 0 || c == 3) ? Boolean.class : (c == 1 ? Integer.class : String.class);
+                if (c == 0 || c == 3) return Boolean.class;
+                if (c == 1) return Integer.class;
+                if (c == 4) return Map.class;
+                return String.class;
             }
             @Override public boolean isCellEditable(int r, int c) {
                 if (currentProfile != null && currentProfile.builtIn()) return false;
-                if (c == 0) { // "On" toggle — can't disable required sections
+                if (c == 0) {
                     Boolean req = (Boolean) getValueAt(r, 3);
                     return req == null || !req;
                 }
-                if (c == 2) return true; // "Section" name is always editable
+                if (c == 2) return true; // Section ID editable
                 return false;
             }
         };
@@ -215,10 +218,11 @@ public class ReportingSettingsTab {
         sectionsTable.getColumnModel().getColumn(0).setMaxWidth(40);
         sectionsTable.getColumnModel().getColumn(1).setMaxWidth(30);
         sectionsTable.getColumnModel().getColumn(3).setMaxWidth(40);
+        // Hide the Params column
+        sectionsTable.getColumnModel().removeColumn(sectionsTable.getColumnModel().getColumn(4));
         sectionsTable.setFillsViewportHeight(true);
 
         JScrollPane tableScroll = new JScrollPane(sectionsTable);
-        tableScroll.setPreferredSize(new Dimension(0, 170));
 
         JPanel tableRow = new JPanel(new BorderLayout(6, 0));
         tableRow.setOpaque(false);
@@ -238,7 +242,78 @@ public class ReportingSettingsTab {
             sideBtns.add(Box.createVerticalStrut(3));
         }
         tableRow.add(sideBtns, BorderLayout.EAST);
-        card.addFormRow(tableRow);
+
+        // Right side: Detail Panel
+        JPanel detailPanel = new JPanel(new BorderLayout(0, 6));
+        detailPanel.setOpaque(false);
+        JTextField txtTitle = new JTextField();
+        JTextArea txtContent = new JTextArea();
+        txtContent.setLineWrap(true);
+        txtContent.setWrapStyleWord(true);
+        JScrollPane contentScroll = new JScrollPane(txtContent);
+        
+        detailPanel.add(inlineLabel("Title:", txtTitle), BorderLayout.NORTH);
+        detailPanel.add(contentScroll, BorderLayout.CENTER);
+
+        // Bind Selection
+        sectionsTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting() || isUpdatingUi) return;
+            int r = sectionsTable.getSelectedRow();
+            if (r >= 0) {
+                @SuppressWarnings("unchecked")
+                Map<String, String> params = (Map<String, String>) sectionsTableModel.getValueAt(r, 4); // hidden col index is still 4 in model
+                String id = (String) sectionsTableModel.getValueAt(r, 2);
+                
+                isUpdatingUi = true;
+                txtTitle.setText(params.getOrDefault("title", titleCase(id)));
+                txtContent.setText(params.getOrDefault("content", ""));
+                
+                boolean editable = (currentProfile == null || !currentProfile.builtIn());
+                txtTitle.setEnabled(editable);
+                // The FINDINGS and VULNERABILITY_SUMMARY sections are rendered internally, don't allow markdown edit
+                boolean isInternal = id.equals("FINDINGS") || id.equals("VULNERABILITY_SUMMARY");
+                txtContent.setEnabled(editable && !isInternal);
+                isUpdatingUi = false;
+            } else {
+                isUpdatingUi = true;
+                txtTitle.setText("");
+                txtContent.setText("");
+                txtTitle.setEnabled(false);
+                txtContent.setEnabled(false);
+                isUpdatingUi = false;
+            }
+        });
+
+        // Bind Edits
+        javax.swing.event.DocumentListener dl = new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+            private void update() {
+                if (isUpdatingUi) return;
+                int r = sectionsTable.getSelectedRow();
+                if (r >= 0) {
+                    if (currentProfile != null && currentProfile.builtIn()) {
+                        javax.swing.SwingUtilities.invokeLater(() -> autoCloneProfile());
+                    } else {
+                        @SuppressWarnings("unchecked")
+                        Map<String, String> params = (Map<String, String>) sectionsTableModel.getValueAt(r, 4);
+                        params.put("title", txtTitle.getText());
+                        params.put("content", txtContent.getText());
+                    }
+                }
+            }
+        };
+        txtTitle.getDocument().addDocumentListener(dl);
+        txtContent.getDocument().addDocumentListener(dl);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tableRow, detailPanel);
+        split.setOpaque(false);
+        split.setBorder(null);
+        split.setResizeWeight(0.4);
+        split.setPreferredSize(new Dimension(0, 220));
+        
+        card.addFormRow(split);
 
         return card;
     }
@@ -443,7 +518,7 @@ public class ReportingSettingsTab {
         // Sections
         sectionsTableModel.setRowCount(0);
         for (SectionNode n : p.sections().nodes())
-            sectionsTableModel.addRow(new Object[]{n.enabled(), n.order(), n.id(), n.required()});
+            sectionsTableModel.addRow(new Object[]{n.enabled(), n.order(), n.id(), n.required(), new HashMap<>(n.params())});
 
         // Colors
         setSwatchHex(colorPrimaryPanel,   p.pdfTheme().primaryHex());
@@ -650,7 +725,7 @@ public class ReportingSettingsTab {
                 autoCloneProfile();
             }
             int nextOrder = sectionsTableModel.getRowCount() + 1;
-            sectionsTableModel.addRow(new Object[]{true, nextOrder, name.trim().toUpperCase().replace(' ', '_'), false});
+            sectionsTableModel.addRow(new Object[]{true, nextOrder, name.trim().toUpperCase().replace(' ', '_'), false, new HashMap<String, String>()});
         }
     }
 

@@ -171,6 +171,19 @@ public final class ReportGenerator {
                 for (var fv : ctx.data().findings()) {
                     findingRenderer.renderHtml(sb, fv, ctx);
                 }
+            } else if ("VULNERABILITY_SUMMARY".equals(id)) {
+                // Internal summary block, skip for now in basic HTML export
+            } else {
+                // Custom markdown section
+                String title = node.params().getOrDefault("title", id);
+                String md = node.params().getOrDefault("content", "");
+                if (md != null && !md.isBlank()) {
+                    String bodyHtml = markdownRenderer.render(markdownParser.parse(ctx.interpolate(md)));
+                    sb.append("<div class=\"section\">");
+                    sb.append("<h2>").append(escapeHtml(title)).append("</h2>\n");
+                    sb.append(bodyHtml);
+                    sb.append("</div>\n");
+                }
             }
         }
 

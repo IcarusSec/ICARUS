@@ -359,7 +359,8 @@ public class SettingsPanel {
     }
 
     private JLabel mutedLabel(String text) {
-        JLabel l = new JLabel("<html><body style='width:520px'>" + text + "</body></html>");
+        // No <html> wrapper: Burp disables HTML rendering in Swing labels, so it shows as literal markup.
+        JLabel l = new JLabel(text);
         l.setForeground(UIManager.getColor("Label.disabledForeground"));
         l.setFont(l.getFont().deriveFont(l.getFont().getSize2D() - 1f));
         return l;

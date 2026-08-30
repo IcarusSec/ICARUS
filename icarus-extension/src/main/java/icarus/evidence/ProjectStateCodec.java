@@ -1,6 +1,7 @@
 package icarus.evidence;
 
 import burp.api.montoya.core.ByteArray;
+import burp.api.montoya.http.HttpService;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
@@ -80,6 +81,15 @@ public final class ProjectStateCodec {
         if (rr != null && rr.request() != null) {
             Map<String, Object> evidenceJson = new LinkedHashMap<>();
             evidenceJson.put("request", Base64.getEncoder().encodeToString(rr.request().toByteArray().getBytes()));
+            // Persist the target binding too — toByteArray() is only the raw HTTP bytes, so
+            // without this a reloaded finding's request has a null HttpService and every
+            // validate_finding / exploit_finding resend throws "HTTP service cannot be null".
+            HttpService svc = rr.request().httpService();
+            if (svc != null) {
+                evidenceJson.put("host", svc.host());
+                evidenceJson.put("port", svc.port());
+                evidenceJson.put("secure", svc.secure());
+            }
             if (rr.response() != null) {
                 evidenceJson.put("response", Base64.getEncoder().encodeToString(rr.response().toByteArray().getBytes()));
             }
@@ -137,7 +147,17 @@ public final class ProjectStateCodec {
         if (evidenceRaw instanceof Map<?, ?> evidenceMap) {
             Object reqB64 = evidenceMap.get("request");
             if (reqB64 != null) {
-                HttpRequest request = HttpRequest.httpRequest(ByteArray.byteArray(Base64.getDecoder().decode(String.valueOf(reqB64))));
+                ByteArray reqBytes = ByteArray.byteArray(Base64.getDecoder().decode(String.valueOf(reqB64)));
+                Object host = evidenceMap.get("host");
+                Object port = evidenceMap.get("port");
+                HttpRequest request = (host != null && port instanceof Number)
+                        ? HttpRequest.httpRequest(
+                            HttpService.httpService(
+                                String.valueOf(host),
+                                ((Number) port).intValue(),
+                                Boolean.TRUE.equals(evidenceMap.get("secure"))),
+                            reqBytes)
+                        : HttpRequest.httpRequest(reqBytes); // pre-1.x project file — no target binding saved
                 HttpResponse response = null;
                 Object resB64 = evidenceMap.get("response");
                 if (resB64 != null) {

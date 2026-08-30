@@ -176,12 +176,13 @@ public class ReportingSettingsTab {
         contentPanel = new ContentSectionPanel();
         responsiveContainer.registerSection(wrapInCard("Content & Policy", "adjustments-horizontal", contentPanel));
 
-        // Add some padding around the container
-        JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setBorder(new EmptyBorder(16, 16, 16, 16));
-        wrapper.setOpaque(false);
-        wrapper.add(responsiveContainer, BorderLayout.CENTER);
-        return wrapper;
+        // Padding goes directly on the container: it must be the JScrollPane's
+        // own view so its Scrollable impl (tracksViewportWidth = true) is honored
+        // -- otherwise an intermediate wrapper is laid out at its unbounded
+        // preferred width and the breakpoint never sees the real viewport width.
+        responsiveContainer.setBorder(new EmptyBorder(16, 16, 16, 16));
+        responsiveContainer.setOpaque(false);
+        return responsiveContainer;
     }
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  Data: load / save

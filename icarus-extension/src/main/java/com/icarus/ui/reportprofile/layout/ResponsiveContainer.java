@@ -42,9 +42,22 @@ public final class ResponsiveContainer extends JPanel implements Scrollable {
         
         addComponentListener(new ComponentAdapter() {
             @Override public void componentResized(ComponentEvent e) {
-                applyBreakpoint(Breakpoint.forWidth(getWidth()));
+                applyBreakpoint(Breakpoint.forWidth(innerWidth()));
             }
         });
+    }
+
+    private int innerWidth() {
+        Insets in = getInsets();
+        return getWidth() - in.left - in.right;
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        // Resize events aren't guaranteed before the first paint; seed the layout
+        // so sections that build their content in onBreakpointChanged aren't blank.
+        applyBreakpoint(Breakpoint.forWidth(innerWidth()));
     }
 
     /** Register a child that needs to re-flow on breakpoint change. Order = build/insert order. */

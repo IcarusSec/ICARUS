@@ -796,6 +796,36 @@ public final class ParamValidatorModule implements IcarusModule {
                 }
             }
 
+            // ── §3: status-transition detection (behind pv.status_transition_detection) ──
+            // Runs after the dedicated per-type detectors, never downgrades a confirmed hit.
+            if (config.getBool("pv.status_transition_detection", false)
+                    && baselineStable && !isInjectionFinding
+                    && baselineStatus > 0 && status != baselineStatus) {
+                // Verbose-error regex only for 5xx (skip it on every 2xx mutation).
+                boolean bodyHasVerboseError = status >= 500
+                        && VerboseErrorDetector.getVerboseErrorMatch(bodyStr) != null;
+                StatusTransition.Transition t = StatusTransition.classifyTransition(
+                        baselineStatus, status, mutation.category(), mutation.remove(),
+                        baselineStable, true, behavioralAnalysis, bodyHasVerboseError);
+                if (t == StatusTransition.Transition.SESSION_LOST) {
+                    if (!sessionLostLogged) {
+                        sessionLostLogged = true;
+                        logger.accept(I18n.t("module.pv.log.session_lost", baselineStatus, status));
+                    }
+                } else if (t != StatusTransition.Transition.NONE) {
+                    boolean bypass = t == StatusTransition.Transition.BYPASS;
+                    String transitionClass = bypass ? "bypass" : "error";
+                    if (statusTransitionsSeen.add(mutation.path() + "|" + transitionClass)) {
+                        isInjectionFinding = true;
+                        injectionSeverity = Severity.MEDIUM;
+                        injectionDesc = I18n.t("module.pv.finding.desc.status_transition",
+                                baselineStatus, status,
+                                I18n.t(bypass ? "module.pv.finding.desc.status_bypass"
+                                              : "module.pv.finding.desc.status_error"));
+                    }
+                }
+            }
+
             // Immediately spin out dedicated Injection Findings for pentester review.
             // Named by mutation.type() (e.g. STRING_XSS, STRING_SQLI_TIME) so distinct
             // injection classes on the same parameter don't collide under one shared name.

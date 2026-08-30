@@ -280,6 +280,10 @@ public class SettingsPanel {
 
         addCheckboxToForm(cardPv, "pv.behavioral_analysis", I18n.t("settings.checkbox.pv.behavioral_analysis"), false);
 
+        // Advanced: baseline handling + status-transition detection
+        addCheckboxToForm(cardPv, "pv.scan_non_2xx_baseline", I18n.t("settings.checkbox.pv.scan_non_2xx_baseline"), true);
+        addCheckboxToForm(cardPv, "pv.status_transition_detection", I18n.t("settings.checkbox.pv.status_transition_detection"), false);
+
         // Payload editors
         ParamValidatorModule.ensurePayloadDefaults(config);
         JTabbedPane pvTabs = new JTabbedPane();

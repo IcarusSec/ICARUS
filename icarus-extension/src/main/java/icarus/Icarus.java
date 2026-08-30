@@ -158,6 +158,7 @@ public class Icarus implements BurpExtension {
         config.set("pv.finding_status_max", 299);
         config.set("pv.require_baseline", true);
         config.set("pv.scan_non_2xx_baseline", true);
+        config.set("pv.status_transition_detection", false);
         config.set("pv.filter_exact_match", false);
         config.set("pv.check_xss_reflection", true);
         config.set("pv.create_audit_issues", true);

@@ -151,19 +151,24 @@ public final class ParamValidatorModule implements IcarusModule {
         if (!isStockList(stored, seed)) return splitPayloads(stored);
 
         List<String> seedList = splitPayloads(seed);
+        List<String> combined = new ArrayList<>();
+        
         switch (depth == null ? "MEDIUM" : depth) {
             case "LIGHT":
-                return seedList.isEmpty() ? seedList : List.of(seedList.get(0));
-            case "DEEP": {
-                List<String> extras = deepExtras(key);
-                if (extras.isEmpty()) return seedList;
-                List<String> combined = new ArrayList<>(seedList);
-                for (String e : extras) if (!combined.contains(e)) combined.add(e);
-                return combined;
-            }
+                if (!seedList.isEmpty()) combined.add(seedList.get(0));
+                break;
+            case "MEDIUM":
+            case "DEEP":
             default:
-                return seedList;
+                combined.addAll(seedList);
+                break;
         }
+        
+        // Always append evasion payloads so they exist in the queue.
+        // The execution loop will skip them unless depth=DEEP or jumpToEvasion is triggered.
+        List<String> extras = deepExtras(key);
+        for (String e : extras) if (!combined.contains(e)) combined.add(e);
+        return combined;
     }
 
     /**
@@ -507,8 +512,16 @@ public final class ParamValidatorModule implements IcarusModule {
             }
             Mutation m = mutations.get(i);
             
-            if (jumpToEvasion && m.category() == Category.INJECTION && m.value() instanceof String) {
-                if (!icarus.modules.PayloadRepository.isEvasionPayload((String) m.value())) {
+            if (m.category() == Category.INJECTION && m.value() instanceof String) {
+                boolean isEvasion = icarus.modules.PayloadRepository.isEvasionPayload((String) m.value());
+                
+                if (jumpToEvasion && !isEvasion) {
+                    // We are jumping to evasion, so skip all standard noisy payloads
+                    responses.add(null);
+                    requestTimes[i] = 0;
+                    continue;
+                } else if (!jumpToEvasion && isEvasion && !"DEEP".equals(depth)) {
+                    // Normal run on LIGHT/MEDIUM depth: skip the hidden evasion payloads
                     responses.add(null);
                     requestTimes[i] = 0;
                     continue;
@@ -548,7 +561,7 @@ public final class ParamValidatorModule implements IcarusModule {
                                     String[] options = { "Delay (2s)", "Try Evasion Payloads", "Ignore" };
                                     choiceHolder[0] = javax.swing.JOptionPane.showOptionDialog(
                                         api.userInterface().swingUtils().suiteFrame(),
-                                        "WAF detected via blocked payloads (streak of 403s).\nDo you want to delay or skip to testing the evasion payloads?\n(Note: Evasion payloads are only queued if scan depth is set to DEEP)",
+                                        "WAF detected via blocked payloads (streak of 403s).\nDo you want to delay or skip to testing the evasion payloads?",
                                         I18n.t("module.pv.ui.waf_throttle_title"),
                                         javax.swing.JOptionPane.YES_NO_CANCEL_OPTION,
                                         javax.swing.JOptionPane.WARNING_MESSAGE,

@@ -138,24 +138,19 @@ public class ReportingSettingsTab {
         detailPane = new DetailPane();
         bindSectionsFlow();
         
-        // Setup side buttons for sectionListPanel
-        JPanel sideBtns = new JPanel();
-        sideBtns.setLayout(new BoxLayout(sideBtns, BoxLayout.Y_AXIS));
-        sideBtns.setOpaque(false);
-        JButton btnUp     = btn("Up",     "chevron-up",   e -> moveSectionRow(-1));
-        JButton btnDown   = btn("Down",   "chevron-down", e -> moveSectionRow(1));
-        JButton btnAddSec = btn("Add",    "plus",         e -> addSection());
-        JButton btnRmSec  = btn("Remove", "trash",        e -> removeSection());
-        for (JButton b : List.of(btnUp, btnDown, btnAddSec, btnRmSec)) {
-            b.setAlignmentX(Component.LEFT_ALIGNMENT);
-            b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-            sideBtns.add(b);
-            sideBtns.add(Box.createVerticalStrut(3));
-        }
-        JPanel listWrapper = new JPanel(new BorderLayout());
+        // Compact list toolbar. Reordering is drag-and-drop (the ⋮⋮ handle), so
+        // no Up/Down buttons -- just Add / Remove as icon buttons above the list.
+        JPanel listToolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        listToolbar.setOpaque(false);
+        JButton btnAddSec = iconBtn("plus",  "Add section",    e -> addSection());
+        JButton btnRmSec  = iconBtn("trash", "Remove section", e -> removeSection());
+        listToolbar.add(btnAddSec);
+        listToolbar.add(btnRmSec);
+
+        JPanel listWrapper = new JPanel(new BorderLayout(0, 6));
         listWrapper.setOpaque(false);
+        listWrapper.add(listToolbar, BorderLayout.NORTH);
         listWrapper.add(sectionListPanel.component(), BorderLayout.CENTER);
-        listWrapper.add(sideBtns, BorderLayout.EAST);
         
         flowPanel = new SectionFlowPanel(listWrapper, (JComponent) detailPane.component());
         responsiveContainer.registerSection(wrapInCard("Sections Flow", "list", flowPanel));
@@ -453,23 +448,6 @@ public class ReportingSettingsTab {
         }.execute();
     }
 
-    private void moveSectionRow(int delta) {
-        int i = sectionListPanel.list.getSelectedIndex();
-        if (i < 0) return;
-        int t = i + delta;
-        if (t < 0 || t >= sectionListPanel.model.getSize()) return;
-        
-        if (currentProfile != null && currentProfile.builtIn()) {
-            autoCloneProfile();
-            // Restore selection after model reload
-            sectionListPanel.list.setSelectedIndex(i);
-        }
-        
-        SectionNode n = sectionListPanel.model.remove(i);
-        sectionListPanel.model.add(t, n);
-        sectionListPanel.list.setSelectedIndex(t);
-    }
-
     private void addSection() {
         String name = JOptionPane.showInputDialog(containerPanel, "Section identifier (e.g. CUSTOM_NOTES):");
         if (name != null && !name.isBlank()) {
@@ -562,6 +540,16 @@ public class ReportingSettingsTab {
         if (ic != null) b.setIcon(ic);
         b.setFocusPainted(false);
         b.setMargin(new Insets(4, 10, 4, 10));
+        b.addActionListener(al);
+        return b;
+    }
+
+    /** Icon-only compact button for tight toolbars. */
+    private JButton iconBtn(String icon, String tooltip, java.awt.event.ActionListener al) {
+        JButton b = new JButton(EvidenceUiHelpers.createIcon(icon));
+        b.setToolTipText(tooltip);
+        b.setFocusPainted(false);
+        b.setMargin(new Insets(4, 6, 4, 6));
         b.addActionListener(al);
         return b;
     }

@@ -51,9 +51,9 @@ public class SectionFlowPanel implements ResponsiveSection {
             gbc.weighty = 1.0;
             
             // List 280px fixed
-            listPanel.setPreferredSize(new Dimension(360, -1));
-            listPanel.setMinimumSize(new Dimension(360, 0));
-            listPanel.setMaximumSize(new Dimension(360, Integer.MAX_VALUE));
+            listPanel.setPreferredSize(new Dimension(300, -1));
+            listPanel.setMinimumSize(new Dimension(300, 0));
+            listPanel.setMaximumSize(new Dimension(300, Integer.MAX_VALUE));
             component.add(listPanel, gbc);
             
             gbc.gridx = 1;

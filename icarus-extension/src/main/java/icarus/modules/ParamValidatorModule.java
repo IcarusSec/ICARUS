@@ -142,32 +142,30 @@ public final class ParamValidatorModule implements IcarusModule {
     }
 
     /**
-     * Resolve a payload list: a hand-authored (non-stock) list is used verbatim; a stock list is
-     * depth-shaped — LIGHT = first payload only, MEDIUM = full seed, DEEP = full seed + deepExtras.
+     * Resolve a payload list. Base payloads: a hand-authored (non-stock) list is used verbatim;
+     * a stock list is depth-shaped — LIGHT = first only, MEDIUM/DEEP = full seed. The built-in
+     * evasion extras are then appended in EVERY case — they're WAF-bypass coverage, orthogonal
+     * to which base payloads the user picked, and the execution loop skips them unless
+     * depth=DEEP or the mid-scan WAF jump fires. (Pre-fix, a customised list — including an
+     * install whose stored seed no longer matches an updated default — silently lost them.)
      */
     static List<String> payloadsFor(String key, String seed, String depth, ModuleConfig config) {
         String stored = config.getString(key, seed);
         if (stored == null || stored.isBlank()) stored = seed;
-        if (!isStockList(stored, seed)) return splitPayloads(stored);
 
-        List<String> seedList = splitPayloads(seed);
         List<String> combined = new ArrayList<>();
-        
-        switch (depth == null ? "MEDIUM" : depth) {
-            case "LIGHT":
+        if (!isStockList(stored, seed)) {
+            combined.addAll(splitPayloads(stored));
+        } else {
+            List<String> seedList = splitPayloads(seed);
+            if ("LIGHT".equals(depth)) {
                 if (!seedList.isEmpty()) combined.add(seedList.get(0));
-                break;
-            case "MEDIUM":
-            case "DEEP":
-            default:
+            } else {
                 combined.addAll(seedList);
-                break;
+            }
         }
-        
-        // Always append evasion payloads so they exist in the queue.
-        // The execution loop will skip them unless depth=DEEP or jumpToEvasion is triggered.
-        List<String> extras = deepExtras(key);
-        for (String e : extras) if (!combined.contains(e)) combined.add(e);
+
+        for (String e : deepExtras(key)) if (!combined.contains(e)) combined.add(e);
         return combined;
     }
 

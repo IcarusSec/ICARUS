@@ -185,11 +185,14 @@ public final class ParamValidatorModule implements IcarusModule {
                 || (originalBody != null && (originalBody.trim().startsWith("{") || originalBody.trim().startsWith("[")));
         boolean hasJsonBody = originalBody != null && !originalBody.isBlank() && looksLikeJson;
 
-        // URL query params + form-urlencoded body params (Montoya only populates
-        // HttpParameterType.BODY for form-encoded bodies, so this list is naturally
-        // exclusive with hasJsonBody; the flat-param loop below is still guarded on !hasJsonBody).
+        // URL query params always; form-urlencoded body params only when the body
+        // isn't JSON (a JSON body is walked via JsonPaths, and Montoya doesn't parse
+        // BODY params out of it anyway — the !hasJsonBody filter is belt-and-suspenders).
+        // URL params DO coexist with a JSON body (POST /x?foo=1 {...}) — they must
+        // still be scanned, same as main.
         List<ParsedHttpParameter> flatParams = request.parameters().stream()
-                .filter(p -> p.type() == HttpParameterType.URL || p.type() == HttpParameterType.BODY)
+                .filter(p -> p.type() == HttpParameterType.URL
+                        || (p.type() == HttpParameterType.BODY && !hasJsonBody))
                 .toList();
 
         if (!hasJsonBody && flatParams.isEmpty()) {
@@ -229,10 +232,8 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         int jsonCount = eligiblePaths.size();
-        int urlOnlyCount = hasJsonBody ? 0
-                : (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.URL).count();
-        int formOnlyCount = hasJsonBody ? 0
-                : (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.BODY).count();
+        int urlOnlyCount = (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.URL).count();
+        int formOnlyCount = (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.BODY).count();
         logger.accept(I18n.t("module.pv.log.detected_inputs",
                 jsonCount + urlOnlyCount + formOnlyCount, jsonCount, urlOnlyCount, formOnlyCount));
 
@@ -300,8 +301,10 @@ public final class ParamValidatorModule implements IcarusModule {
                 fieldSpecs.add(specs);
             }
         }
-        // numeric-looking flat values are typed as String, matching URL-param behaviour
-        if (!hasJsonBody) {
+        // numeric-looking flat values are typed as String, matching URL-param behaviour.
+        // flatParams already excludes BODY params when hasJsonBody (see filter above), so
+        // this loop runs for URL params even alongside a JSON body — same as main.
+        {
             for (ParsedHttpParameter param : flatParams) {
                 String pathString = (param.type() == HttpParameterType.BODY ? "body:" : "url:") + param.name();
                 if (!pathRules.isIncluded(pathString)) continue;

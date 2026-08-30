@@ -50,7 +50,24 @@ public final class ParamValidatorModule implements IcarusModule {
             this(type, description, value, remove, category, null);
         }
     }
-    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value) {}
+    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value, boolean remove) {}
+
+    /** One baseline probe: send + measure. status/length == -1 and empty body on a null response. */
+    record BaselineSample(int status, int length, long millis, String bodyLower) {}
+
+    private BaselineSample captureBaseline(HttpRequest request) {
+        long st = System.currentTimeMillis();
+        try {
+            HttpRequestResponse rr = api.http().sendRequest(request);
+            if (rr == null || rr.response() == null) return new BaselineSample(-1, -1, 0, "");
+            HttpResponse resp = rr.response();
+            return new BaselineSample(resp.statusCode(), resp.body().length(),
+                    System.currentTimeMillis() - st, resp.bodyToString().toLowerCase());
+        } catch (Exception e) {
+            api.logging().logToError(I18n.t("module.pv.err.baseline_failed", e));
+            return new BaselineSample(-1, -1, 0, "");
+        }
+    }
 
     /** Backfill any missing/blank payload key with its seed so existing installs stop showing blank tabs. */
     public static void ensurePayloadDefaults(ModuleConfig config) {
@@ -393,25 +410,50 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         boolean requireBaseline = config.getBool("pv.require_baseline", true);
-        int baselineStatusMin = 200;
-        int baselineStatusMax = 299;
+        int baselineStatus = -1;
         int baselineLength = -1;
+        long baselineTime = 0;
+        String baselineBodyLower = "";
+        boolean baselineStable = false;
 
         if (requireBaseline) {
-            HttpRequestResponse baselineResult = api.http().sendRequest(request);
-            if (baselineResult == null || baselineResult.response() == null) {
+            BaselineSample a = captureBaseline(request);
+            if (a.status() == -1) return List.of();   // PRESERVE main's null-response early return
+            BaselineSample b = captureBaseline(request);
+
+            baselineStatus = a.status();
+            baselineLength = a.length();
+            // TIMING: min of the two samples, NOT a.millis() (A eats TLS/cache-miss cost).
+            // B's -1 sentinel on a failed second probe must NOT leak into the min.
+            baselineTime = (b.status() != -1) ? Math.min(a.millis(), b.millis()) : a.millis();
+            // BODY: sample A, empty-fallback to B — only used for .contains() checks.
+            baselineBodyLower = !a.bodyLower().isEmpty() ? a.bodyLower() : b.bodyLower();
+
+            baselineStable = a.status() == b.status()
+                    && Math.abs(a.length() - b.length()) <= Math.max(32, a.length() / 50);
+            if (!baselineStable) {
+                logger.accept(I18n.t("module.pv.log.baseline_unstable",
+                        a.status(), a.length(), b.status(), b.length()));
+            }
+
+            boolean baselineNon2xx = baselineStatus < 200 || baselineStatus > 299;
+            if (baselineNon2xx && !config.getBool("pv.scan_non_2xx_baseline", true)) {
+                logger.accept(I18n.t("module.pv.log.baseline_non2xx_abort", baselineStatus));
                 return List.of();
             }
-            int baselineStatus = baselineResult.response().statusCode();
-            baselineLength = baselineResult.response().body().length();
-            
-            if (baselineStatus < baselineStatusMin || baselineStatus > baselineStatusMax) {
-                return List.of();
+            if (baselineNon2xx) {
+                logger.accept(I18n.t("module.pv.log.baseline_non2xx", baselineStatus));
             }
         } else {
-            if (requestResponse.response() != null) {
-                baselineLength = requestResponse.response().body().length();
+            // Passive scan: one sample, no pair — treat the baseline as untrustworthy so
+            // §2.3's relaxation and §3's transition detection both stay off.
+            HttpResponse r = requestResponse.response();
+            if (r != null) {
+                baselineStatus = r.statusCode();
+                baselineLength = r.body().length();
+                baselineBodyLower = r.bodyToString().toLowerCase();
             }
+            baselineStable = false;
         }
 
         mutations.sort((a, b) -> {
@@ -515,21 +557,12 @@ public final class ParamValidatorModule implements IcarusModule {
         int timeDelayMs = config.getInt("pv.payload_sqli_time_delay_ms", 10000);
 
         boolean behavioralAnalysis = config.getBool("pv.behavioral_analysis", false);
-        long baselineTime = 0;
-        String baselineBodyLower = "";
-        if (requireBaseline) {
-            long st = System.currentTimeMillis();
-            try {
-                HttpRequestResponse bl = api.http().sendRequest(request);
-                if (bl != null && bl.response() != null) baselineBodyLower = bl.response().bodyToString().toLowerCase();
-            } catch (Exception e) {
-                api.logging().logToError(I18n.t("module.pv.err.baseline_failed", e));
-            }
-            baselineTime = System.currentTimeMillis() - st;
-        }
 
         List<Finding> findings = new ArrayList<>();
         Map<String, List<MutationResult>> groupedByPath = new LinkedHashMap<>();
+        // §3.2: one status-transition finding per (path, transitionClass); session_lost logged once.
+        Set<String> statusTransitionsSeen = new HashSet<>();
+        boolean sessionLostLogged = false;
 
         int analyzedCount = Math.min(mutations.size(), responses.size());
         for (int i = 0; i < analyzedCount; i++) {
@@ -564,7 +597,14 @@ public final class ParamValidatorModule implements IcarusModule {
             // it. Time-based SQLi, XSS reflection, and the CWE-209 verbose-error check still
             // run on 4xx responses since apps commonly leak SQL/stack errors on validation
             // failure pages coded 400/422, not just 500.
-            boolean isExpectedRejection = status >= 400 && status <= 499;
+            // A 4xx mutation is "expected" (excluded from drift / verbose-error heuristics)
+            // ONLY when the baseline was 2xx. When the baseline was ITSELF a stable 4xx and the
+            // status_transition flag is on, both responses come from the same error handler, so
+            // drift between them is real signal — analyse it.
+            boolean baselineIs4xx = baselineStatus >= 400 && baselineStatus <= 499;
+            boolean relax4xxDrift = config.getBool("pv.status_transition_detection", false);
+            boolean isExpectedRejection = (status >= 400 && status <= 499)
+                    && !(baselineIs4xx && baselineStable && relax4xxDrift);
 
             // ── Injection Context Extraction Engine ──
             String extractedContext = "";

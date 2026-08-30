@@ -142,8 +142,98 @@ public final class ReportGenerator {
         }
 
         Files.writeString(outputHtmlFile, html);
-        api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
+        if (api != null && api.logging() != null) {
+            api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
+        }
         return true;
+    }
+
+    public boolean generate(icarus.report.render.ReportRenderContext ctx, Path outputHtmlFile) throws IOException {
+        if (ctx == null || ctx.data() == null) return false;
+        Path reportDir = outputHtmlFile.toAbsolutePath().getParent();
+        if (reportDir != null) Files.createDirectories(reportDir);
+
+        StringBuilder sb = new StringBuilder();
+        appendProfileHtmlHeader(sb, ctx);
+
+        icarus.report.render.ReportRendererRegistry registry = new icarus.report.render.ReportRendererRegistry();
+        var cover = registry.getCover(ctx.profile().coverRenderer());
+        if (cover != null) {
+            cover.renderHtml(sb, ctx);
+        }
+
+        appendProfileHtmlSummary(sb, ctx);
+
+        for (var node : ctx.profile().sections().enabledInOrder()) {
+            String id = node.id().toUpperCase();
+            if ("FINDINGS".equals(id)) {
+                var findingRenderer = registry.getFinding(ctx.profile().findingRenderer());
+                for (var fv : ctx.data().findings()) {
+                    findingRenderer.renderHtml(sb, fv, ctx);
+                }
+            } else if ("VULNERABILITY_SUMMARY".equals(id)) {
+                // Internal summary block, skip for now in basic HTML export
+            } else {
+                // Custom markdown section
+                String title = node.params().getOrDefault("title", id);
+                String md = node.params().getOrDefault("content", "");
+                if (md != null && !md.isBlank()) {
+                    String bodyHtml = markdownRenderer.render(markdownParser.parse(ctx.interpolate(md)));
+                    sb.append("<div class=\"section\">");
+                    sb.append("<h2>").append(escapeHtml(title)).append("</h2>\n");
+                    sb.append(bodyHtml);
+                    sb.append("</div>\n");
+                }
+            }
+        }
+
+        sb.append("</div></body></html>");
+        Files.writeString(outputHtmlFile, sb.toString(), java.nio.charset.StandardCharsets.UTF_8);
+
+        if (api != null && api.logging() != null) {
+            api.logging().logToOutput("HTML Report generated at: " + outputHtmlFile.toAbsolutePath());
+        }
+        return true;
+    }
+
+    private void appendProfileHtmlHeader(StringBuilder html, icarus.report.render.ReportRenderContext ctx) {
+        var theme = ctx.profile().htmlTheme();
+        html.append("<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n")
+            .append("  <meta charset=\"UTF-8\">\n")
+            .append("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
+            .append("  <title>").append(escapeHtml(ctx.data().reportTitle())).append("</title>\n")
+            .append("  <style>\n")
+            .append("    :root {\n")
+            .append("      --bg: ").append(theme.backgroundHex()).append(";\n")
+            .append("      --card-bg: ").append(theme.cardBackgroundHex()).append(";\n")
+            .append("      --text: ").append(theme.textHex()).append(";\n")
+            .append("      --border: ").append(theme.borderHex()).append(";\n")
+            .append("      --accent: ").append(theme.primaryHex()).append(";\n")
+            .append("      --accent2: ").append(theme.secondaryHex()).append(";\n")
+            .append("    }\n")
+            .append("    body {\n")
+            .append("      font-family: ").append(theme.fontStack()).append(";\n")
+            .append("      background-color: var(--bg);\n")
+            .append("      color: var(--text);\n")
+            .append("      line-height: 1.6;\n")
+            .append("      margin: 0; padding: 2rem;\n")
+            .append("    }\n")
+            .append("    .container { max-width: 1000px; margin: 0 auto; }\n")
+            .append("  </style>\n")
+            .append("</head>\n<body><div class=\"container\">\n");
+    }
+
+    private void appendProfileHtmlSummary(StringBuilder html, icarus.report.render.ReportRenderContext ctx) {
+        html.append("<div class=\"summary\" style=\"display: flex; gap: 1rem; margin-bottom: 2rem;\">\n");
+        for (var s : List.of(icarus.core.Severity.CRITICAL, icarus.core.Severity.HIGH, icarus.core.Severity.MEDIUM, icarus.core.Severity.LOW, icarus.core.Severity.INFO)) {
+            long c = ctx.data().getCount(s);
+            String col = ctx.profile().htmlTheme().severityHex().getOrDefault(s, "#888888");
+            html.append("  <div class=\"stat-box\" style=\"background: var(--card-bg); padding: 1rem 1.5rem; border-radius: 6px; border: 1px solid var(--border); text-align: center; flex: 1;\">\n")
+                .append("    <div style=\"font-size: 1.8rem; font-weight: bold; color: ").append(col).append(";\">").append(c).append("</div>\n")
+                .append("    <div style=\"font-size: 0.85rem; color: var(--text);\">").append(s.name()).append("</div>\n")
+                .append("  </div>\n");
+        }
+        html.append("</div>\n");
     }
 
     /** Last-resort export so a render bug never costs the tester their findings data. */

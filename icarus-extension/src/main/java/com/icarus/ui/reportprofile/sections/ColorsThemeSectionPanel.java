@@ -25,7 +25,11 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
         this.accentPanel = createFieldPanel("Primary Accent", colorPrimaryPanel);
         this.secondaryPanel = createFieldPanel("Secondary Accent", colorSecondaryPanel);
         this.fontPanel = createFieldPanel("Font Family", comboFontStack);
-        this.fontSizePanel = createFieldPanel("Font Size", spinFontSize);
+        JPanel fontSizeHold = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        fontSizeHold.setOpaque(false);
+        spinFontSize.setPreferredSize(new Dimension(64, spinFontSize.getPreferredSize().height));
+        fontSizeHold.add(spinFontSize);
+        this.fontSizePanel = createFieldPanel("Font Size", fontSizeHold);
         
         badgesPanel.add(new JLabel("Severity Badge Colors"), BorderLayout.NORTH);
         

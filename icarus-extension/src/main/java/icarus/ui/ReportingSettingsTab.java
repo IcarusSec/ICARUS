@@ -131,7 +131,7 @@ public class ReportingSettingsTab {
 
         // Layout
         layoutPanel = new LayoutSectionPanel();
-        responsiveContainer.registerSection(wrapInCard("Layout", "square", layoutPanel));
+        responsiveContainer.registerSection(wrapInCard("Layout", "menu-2", layoutPanel));
 
         // Sections
         sectionListPanel = new SectionListPanel();

@@ -48,6 +48,8 @@ public class SectionListPanel implements ResponsiveSection {
         list.setTransferHandler(new SectionTransferHandler());
 
         component = new JScrollPane(list);
+        component.setPreferredSize(new Dimension(280, 280));
+        component.setMinimumSize(new Dimension(200, 200));
     }
 
     @Override

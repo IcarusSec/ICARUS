@@ -41,9 +41,9 @@ public record PdfTheme(
             Severity.HIGH, "#D9711F",
             Severity.MEDIUM, "#B38F00",
             Severity.LOW, "#2F7A77",
-            Severity.INFO, "#6E6E6E",
+            Severity.INFO, "#5B7C9D",
             Severity.FIXED, "#2F9E44",
-            Severity.NOT_FIXED, "#CC2E2E"
+            Severity.NOT_FIXED, "#A61E4D"
         );
     }
 

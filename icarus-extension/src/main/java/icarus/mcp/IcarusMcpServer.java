@@ -254,7 +254,7 @@ public final class IcarusMcpServer {
 
             McpServerFeatures.SyncToolSpecification[] tools = {
                     listFindingsTool(), addFindingTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
-                    getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
+                    getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(), clearAllFindingsTool(),
                     getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
@@ -410,6 +410,32 @@ public final class IcarusMcpServer {
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             orchestrator.clearPassiveFindings();
             return McpSchema.CallToolResult.builder().addTextContent("Passive findings cleared.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification clearAllFindingsTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("confirm", Map.of("type", "boolean", "description", "Must be true — this is irreversible.")),
+                List.of("confirm"), false, null, null);
+        var tool = new McpSchema.Tool("clear_all_findings",
+                "Wipe the entire ICARUS findings registry for this project",
+                "Removes EVERY finding — active, passive AND evidence-backed — from this Burp project and overwrites "
+                        + "the persisted project state, so an extension reload or Burp restart starts clean. Captured "
+                        + "evidence screenshots are discarded too; suppression rules are kept. Irreversible — pass "
+                        + "confirm=true. Use when the registry has accumulated stale findings from earlier scans or "
+                        + "sessions (the registry is per-project and survives extension reloads).",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            if (!Boolean.TRUE.equals(request.arguments().get("confirm"))) {
+                return McpSchema.CallToolResult.builder()
+                        .addTextContent("Nothing wiped — call again with confirm=true to proceed.").isError(true).build();
+            }
+            long n = orchestrator.getAllFindingRecords().stream()
+                    .filter(r -> !"DUMMY".equals(r.getFinding().type())).count();
+            orchestrator.clearAllFindings();
+            return McpSchema.CallToolResult.builder()
+                    .addTextContent("Wiped " + n + " findings and all captured evidence from the project registry. Suppression rules kept.").build();
         });
     }
 

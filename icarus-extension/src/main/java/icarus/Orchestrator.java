@@ -305,6 +305,12 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         findings.clearPassiveFindings();
     }
 
+    /** Wipe the whole findings registry + captured evidence for this project (suppression rules kept). */
+    public void clearAllFindings() {
+        findings.clearAllFindings();
+        evidenceCapture.clearAll();
+    }
+
 
     public void shutdown() {
         scanRunner.shutdown();

@@ -118,6 +118,29 @@ public final class FindingRegistry {
     }
 
     /**
+     * Wipe every tracked finding (active, passive, evidence-backed) and overwrite the
+     * persisted {@code icarus_state} blob so an extension reload / Burp restart starts clean.
+     * Suppression rules (stored separately in {@code config}) are kept. The audit log is
+     * cleared apart from this one entry.
+     */
+    public void clearAllFindings() {
+        long removed = activeFindings.values().stream()
+                .filter(r -> !"DUMMY".equals(r.getFinding().type())).count();
+        activeFindings.clear();
+        synchronized (auditLog) { auditLog.clear(); }
+        // Re-seed the suppression placeholders exactly as the constructor does, so a
+        // previously-suppressed hash stays suppressed if it's ever re-detected.
+        for (String hash : config.getStringList("suppressed_hashes")) {
+            FindingRecord fr = new FindingRecord(Finding.builder("System", "DUMMY").build());
+            fr.setSuppressed(true);
+            activeFindings.put(hash, fr);
+        }
+        logAudit("User wiped the findings registry (" + removed + " findings removed; suppression rules kept).");
+        api.persistence().extensionData().setString("icarus_state", serializeState());
+        notifyListenersOfUpdate();
+    }
+
+    /**
      * Records incoming findings: increments the count for duplicates (skipping suppressed
      * ones), or registers new ones (optionally raising a Burp audit issue). Returns the
      * subset that are newly-created or updated-but-actionable, for the caller to decide

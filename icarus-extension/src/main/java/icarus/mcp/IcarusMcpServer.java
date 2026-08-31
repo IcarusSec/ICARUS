@@ -122,6 +122,7 @@ public final class IcarusMcpServer {
             2. **Granular Section Management (`update_report_config`):**
                - **Editing Mandatory Sections:** update the Markdown content of mandatory sections (*Executive Summary*, *Document Control*, *Scope*) via `update_section`. *(Mandatory sections accept content updates but are protected against deletion.)*
                - **Adding Custom Sections:** add sections relevant to the engagement's scope (e.g. *Solution Architecture*, *Specific Methodology*, *UAT Environment Limitations*) via `add_section`, specifying `title`, `content`, and optionally `index`.
+               - **Markdown support in section `content`:** CommonMark — headings, **bold**, `code`, fenced ``` blocks, ordered/unordered lists — plus GFM pipe tables (`| a | b |` / `|---|---|`). Pipe tables render as real tables in the **HTML** report only; the **PDF** renderer drops them to plain text. If the deliverable is a PDF (or you don't know), write tabular data as nested bullet lists, not pipe tables. An *Attack Narrative* / kill-chain section reads best as `### Step N — <title>` headings with bullets under each, not a table.
                - **Removing Optional Sections:** remove sections not applicable to this test via `remove_section`.
 
             3. **Standardizing Vulnerability Templates (`finding_templates`):**
@@ -987,7 +988,9 @@ public final class IcarusMcpServer {
                 "type", "object",
                 "properties", Map.of(
                         "title", Map.of("type", "string"),
-                        "content", Map.of("type", "string", "description", "Markdown content")),
+                        "content", Map.of("type", "string", "description", "Markdown content. Standard CommonMark plus GFM pipe tables "
+                                + "(| col | col | / |---|---|) — tables render in the HTML report only; in the PDF report a pipe table falls through as "
+                                + "plain text, so for PDF-bound reports use bullet lists instead of tables.")),
                 "required", List.of("title", "content"));
 
         Map<String, Object> findingTemplateSchema = Map.of(

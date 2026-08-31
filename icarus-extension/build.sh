@@ -30,6 +30,13 @@ if [ ! -f "libs/commonmark-0.30.0.jar" ]; then
     wget -q -O libs/commonmark-0.30.0.jar "https://repo1.maven.org/maven2/org/commonmark/commonmark/0.30.0/commonmark-0.30.0.jar"
 fi
 
+# 1c-ii. GFM tables extension for commonmark -- lets custom report sections use pipe tables
+# in the HTML report. Same version as core, bundled the same way.
+if [ ! -f "libs/commonmark-ext-gfm-tables-0.30.0.jar" ]; then
+    echo "[*] Downloading commonmark-ext-gfm-tables..."
+    wget -q -O libs/commonmark-ext-gfm-tables-0.30.0.jar "https://repo1.maven.org/maven2/org/commonmark/commonmark-ext-gfm-tables/0.30.0/commonmark-ext-gfm-tables-0.30.0.jar"
+fi
+
 if [ ! -f "libs/commons-csv-1.10.0.jar" ]; then
     echo "[*] Downloading commons-csv..."
     wget -q -O libs/commons-csv-1.10.0.jar "https://repo1.maven.org/maven2/org/apache/commons/commons-csv/1.10.0/commons-csv-1.10.0.jar"
@@ -98,7 +105,7 @@ MCP_CP=$(printf ':libs/%s' "${MCP_LIBS[@]##*/}")
 EXTRA_CP=$(printf ':libs/%s' "${EXTRA_LIBS[@]##*/}")
 COMPILE_ONLY_CP=$(printf ':libs/%s' "${COMPILE_ONLY_LIBS[@]##*/}")
 javac -d build_manual/classes \
-      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}" \
+      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commonmark-ext-gfm-tables-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}" \
       --release 19 \
       @build_manual/sources.txt
 
@@ -115,6 +122,7 @@ echo "[*] Bundling OpenPDF classes..."
 unzip -q -o libs/openpdf-2.0.2.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling commonmark-java classes..."
 unzip -q -o libs/commonmark-0.30.0.jar -d build_manual/classes -x "META-INF/*"
+unzip -q -o libs/commonmark-ext-gfm-tables-0.30.0.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling commons-csv classes..."
 unzip -q -o libs/commons-csv-1.10.0.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling MCP SDK classes..."

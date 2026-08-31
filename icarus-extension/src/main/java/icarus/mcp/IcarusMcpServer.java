@@ -194,10 +194,23 @@ public final class IcarusMcpServer {
                - Attach as many evidence items per finding as the PoC needs — e.g. the auto-rendered traffic shot PLUS a `code` block with the sqlmap run PLUS a browser screenshot. They render in the finding's card in `list_evidence` order (reorder with `reorder_evidence`).
                - `get_evidence` / `list_evidence` show what's already attached; `set_evidence_caption`, `set_evidence_included`, `remove_evidence` manage them.
 
-            2. **Visual Exploitation Highlighting:**
-               - Configure anchor points using selectors (`request_payload`, `response_payload`, `request_header:<name>`).
-               - Add visual annotations: arrows (`ARROW`) and boxes (`BOX`) pointing exactly at the exploited parameter or payload.
-               - Keep irrelevant HTTP headers collapsed to keep the PoC clean and readable.
+            2. **Annotation is mandatory.** Every `capture_evidence` call on an ICARUS-rendered image (i.e. `image_base64` omitted)
+               MUST pass `annotations` with at least one `BOX` on the exact thing that proves the finding. An un-annotated
+               evidence image is not acceptable in the report.
+               - **Target with `anchor`, never guessed x/y.** Pick the tightest anchor that covers the proof:
+                 - injection findings (STRING_SQLI, STRING_XSS, STRING_CMDI, ...): `response_payload`, or `request_payload` for a body parameter.
+                 - single-header findings (VERSION_DISCLOSURE, ...): `response_header:<name>` (lowercase).
+                 - missing-header findings (MISSING_*): `response_headers` (the whole block — the header is absent, nothing to point at).
+                 - server errors (SERVER_ERROR): `response_status_line`.
+                 - rate-limit findings: `rps` and/or `blocked`.
+               - **Pattern:** one `BOX` on the target anchor plus one `ARROW` on the same anchor — the arrow is
+                 auto-pointed at the region's edge, so `[{"kind":"BOX","anchor":"response_payload"},{"kind":"ARROW","anchor":"response_payload"}]`
+                 is the normal case. Use `REDACT` to black out any real secret/token/PII in the shot. Add a `CROP`
+                 (listed LAST) only to trim a large noisy body.
+               - `capture_evidence`'s result echoes the anchor names that actually existed for that render — read it and
+                 re-annotate if you targeted one that wasn't there.
+               - Only fall back to raw x/y for an `image_base64` screenshot you took yourself (no anchors exist for those);
+                 estimate from the pixels you can see.
 
             ---
 
@@ -671,8 +684,10 @@ public final class IcarusMcpServer {
                         "kind", Map.of("type", "string", "description", "BOX, ARROW, REDACT, or CROP. There is no fill/wash kind — a translucent HIGHLIGHT wash reliably read "
                                 + "as a muddy smear rather than a pointer to something specific, so it was removed; use a BOX outline (optionally with an ARROW pointing at "
                                 + "it) instead, which is what an unrecognized kind renders as anyway."),
-                        "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — prefer this whenever "
-                                + "one applies (BOX/REDACT/CROP only, not ARROW). Guessed x/y for text whose position depends on rendered string width (e.g. a badge after a "
+                        "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — always prefer this. "
+                                + "Works for every kind: BOX/REDACT frame the region, CROP trims to it, and ARROW is auto-turned into a pointer whose tip lands on the "
+                                + "region's edge (tail ~160px out where there's room) — so `{\"kind\":\"ARROW\",\"anchor\":\"response_payload\"}` just works. Guessed x/y for text "
+                                + "whose position depends on rendered string width (e.g. a badge after a "
                                 + "variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available on any "
                                 + "server-rendered image (image_base64 omitted), from tightest to loosest — always prefer the tightest one that covers what you're pointing "
                                 + "at: \"request_payload\" / \"response_payload\" circles the finding's own injected/reflected value and nothing else (present whenever the "
@@ -779,7 +794,20 @@ public final class IcarusMcpServer {
                                                 + (anchors.isEmpty() ? " (none — anchors are only available when ICARUS renders the image itself, i.e. image_base64 was omitted)" : "")
                                 ).isError(true).build();
                             }
-                            annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
+                            if ("ARROW".equals(kind)) {
+                                // A box-shaped anchor makes a useless zero-span arrow along its diagonal.
+                                // Synthesise a real pointer: tip on the anchor's near edge, tail ~160px out
+                                // in whichever horizontal direction has room.
+                                int midY = r.y + r.height / 2;
+                                boolean fromLeft = r.x > 176;
+                                int tipX = fromLeft ? r.x : r.x + r.width;
+                                int tailX = fromLeft ? Math.max(8, r.x - 160)
+                                                     : Math.min(image.getWidth() - 8, r.x + r.width + 160);
+                                annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(
+                                        "ARROW", tailX, midY - 36, tipX - tailX, 36));
+                            } else {
+                                annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
+                            }
                         } else {
                             annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(
                                     kind,

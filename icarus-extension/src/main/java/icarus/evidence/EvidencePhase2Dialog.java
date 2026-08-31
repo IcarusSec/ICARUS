@@ -85,20 +85,8 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             }
 
             public void drawAnnotation(Graphics2D g2, Shape s, String kind, Color c) {
-                if ("HIGHLIGHT".equals(kind)) {
-                    g2.setColor(new Color(255, 255, 0, 80));
-                    g2.fill(s);
-                } else if ("REDACT".equals(kind)) {
-                    g2.setColor(Color.BLACK);
-                    g2.fill(s);
-                } else if ("ARROW".equals(kind)) {
-                    g2.setColor(c);
-                    g2.fill(s);
-                    g2.draw(s);
-                } else {
-                    g2.setColor(c);
-                    g2.draw(s);
-                }
+                // Single source of truth — same painter the saved image and the MCP path use.
+                capture.annotator.paintAnnotation(g2, s, kind, c);
             }
         };
         canvas.setBackground(new Color(30, 30, 30));
@@ -465,19 +453,9 @@ public BufferedImage renderFinalImage(BufferedImage snap, List<Shape> shapes, Li
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setStroke(new BasicStroke(3f));
         for (int i = 0; i < shapes.size(); i++) {
-            String kind = kinds.get(i);
-            Shape s = shapes.get(i);
-            if ("REDACT".equals(kind)) {
-                g2.setColor(Color.BLACK);
-                g2.fill(s);
-            } else if ("ARROW".equals(kind)) {
-                g2.setColor(cols.get(i));
-                g2.fill(s);
-                g2.draw(s);
-            } else {
-                g2.setColor(cols.get(i));
-                g2.draw(s);
-            }
+            // Same painter as the live canvas and the MCP path — keeps HIGHLIGHT (and any future
+            // kind) rendering identically in the preview and the saved PNG.
+            capture.annotator.paintAnnotation(g2, shapes.get(i), kinds.get(i), cols.get(i));
         }
         g2.dispose();
         return out;

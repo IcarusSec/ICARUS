@@ -339,54 +339,12 @@ public Color colorForMethod(String method, EvidenceColorScheme cs) {
 
 public String formatBody(byte[] body, String contentType) {
         if (body == null || body.length == 0) return "";
-        
-        boolean isBinary = false;
-        if (contentType != null) {
-            String ct = contentType.toLowerCase();
-            if (ct.contains("image/") || ct.contains("application/octet-stream") || 
-                ct.contains("application/pdf") || ct.contains("application/zip") ||
-                ct.contains("audio/") || ct.contains("video/")) {
-                isBinary = true;
-            }
-        }
-        
-        if (!isBinary) {
-            int unprintable = 0;
-            for (int i = 0; i < Math.min(body.length, 512); i++) {
-                byte b = body[i];
-                if (b == 0 || (b < 32 && b != '\n' && b != '\r' && b != '\t')) {
-                    unprintable++;
-                }
-            }
-            if (unprintable > 2) isBinary = true;
-        }
-
-        if (isBinary) {
-            Object[] options = {"Hex Dump", "Keep Original", "Truncate"};
-            int choice = JOptionPane.showOptionDialog(api.userInterface().swingUtils().suiteFrame(),
-                    "This payload appears to be binary. How should it be formatted?",
-                    "Binary Payload Detected", JOptionPane.DEFAULT_OPTION,
-                    JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
-
-            if (choice == 0) {
-                return "\n--- BINARY PAYLOAD (HEX DUMP) ---\n" + capture.imageRenderer.toHexDump(body);
-            } else if (choice == 1) {
-                String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
-                return "\n" + JsonParser.formatJsonString(text);
-            } else if (choice == 2) {
-                int limit = Math.min(body.length, EvidenceCapture.BINARY_TRUNCATE_BYTES);
-                byte[] truncated = Arrays.copyOf(body, limit);
-                String suffix = limit < body.length
-                        ? "\n... [truncated, showing " + limit + " of " + body.length + " bytes]"
-                        : "";
-                return "\n--- BINARY PAYLOAD (HEX DUMP, TRUNCATED) ---\n" + capture.imageRenderer.toHexDump(truncated) + suffix;
-            }
-            // Dialog dismissed without a choice — same safe default as before (omit).
-            return "\n[Binary Payload Omitted]";
-        } else {
-            String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
-            return "\n" + capLines(JsonParser.formatJsonString(text));
-        }
+        // Render the body verbatim (decoded UTF-8, pretty-printed if it's JSON), capped by
+        // line count. No binary sniffing / "Hex Dump vs Keep Original" prompt — that popped a
+        // modal dialog mid-render (hanging headless/MCP report generation) and its only
+        // sensible outcome was this path anyway. capLines still bounds a pathological body.
+        String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        return "\n" + capLines(JsonParser.formatJsonString(text));
     }
 
     /** formatJsonString pretty-prints one token per line, so a large minified JSON body

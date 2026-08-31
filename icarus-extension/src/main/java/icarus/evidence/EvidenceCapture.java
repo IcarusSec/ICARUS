@@ -43,7 +43,6 @@ public final class EvidenceCapture {
 
     public static final Font MONO_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 16);
     public static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
-    public static final int BINARY_TRUNCATE_BYTES = 2048;
 
     // The bundled icarus_logo.png carries ~7% transparent padding so the circle isn't flush
     // against its bounding box; 48 here lands the visible disc at roughly the intended 44px.

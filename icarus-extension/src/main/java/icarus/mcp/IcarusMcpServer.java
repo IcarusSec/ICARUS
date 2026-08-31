@@ -186,6 +186,12 @@ public final class IcarusMcpServer {
 
             1. **Linking Proof of Concept:**
                - Make sure every valid finding in `get_reportable_findings` has its evidence HTTP requests/responses properly attached.
+               - `capture_evidence` attaches evidence to a finding. It has three input modes, in precedence order:
+                 - `image_base64` — a screenshot you already have (browser screenshot of the exploited page, a rendered dashboard, etc.). Any format ImageIO reads.
+                 - `code` — the VERBATIM output of an external tool you ran to validate the finding (sqlmap, nuclei, ffuf, a curl transcript, a decoded JWT, a snippet of vulnerable source). ICARUS renders it into a monospace evidence image and attaches it like any screenshot. Use `title` to label it. Paste the real output, don't summarise.
+                 - neither — ICARUS auto-renders the evidence image from the finding's own captured request/response (the default, preferred path).
+               - Attach as many evidence items per finding as the PoC needs — e.g. the auto-rendered traffic shot PLUS a `code` block with the sqlmap run PLUS a browser screenshot. They render in the finding's card in `list_evidence` order (reorder with `reorder_evidence`).
+               - `get_evidence` / `list_evidence` show what's already attached; `set_evidence_caption`, `set_evidence_included`, `remove_evidence` manage them.
 
             2. **Visual Exploitation Highlighting:**
                - Configure anchor points using selectors (`request_payload`, `response_payload`, `request_header:<name>`).
@@ -690,37 +696,42 @@ public final class IcarusMcpServer {
                         "height", Map.of("type", "integer", "description", "For ARROW, the end point's y offset from y. Ignored if anchor is set.")),
                 "required", List.of("kind"));
 
-        var inputSchema = new McpSchema.JsonSchema("object",
-                Map.of(
-                        "hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
-                        "image_base64", Map.of("type", "string", "description", "Optional base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence. "
-                                + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
-                                + "no screenshot is required."),
-                        "request_text", Map.of("type", "string", "description", "Leave unset unless redaction is actually required — the default (the finding's real captured "
-                                + "request, with boilerplate headers already collapsed to a truncation marker) is what a report needs. If you must set this, start from "
-                                + "get_finding/get_evidence's request text and change only what's necessary (e.g. blank out a session token's value in place); keep every "
-                                + "line exactly as captured otherwise. Never replace the request with a summary — that destroys the evidentiary value of the capture. Note: "
-                                + "this override text is used exactly as given, with no automatic header collapsing applied to it."),
-                        "response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only, "
-                                + "and note it also skips the automatic header collapsing. Never summarize or shorten the response."),
-                        "title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."),
-                        "description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."),
-                        "severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."),
-                        "force_1080", Map.of("type", "boolean", "description", "Render at 1920x1080 (true, default) or a narrower size (false), when image_base64 is omitted."),
-                        "caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"),
-                        "annotations", Map.of(
-                                "type", "array",
-                                "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
-                                        + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
-                                        + "Without an anchor: BOX/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
-                                        + "truncates the final image to that rectangle and should be listed last.",
-                                "items", annotationItemSchema)),
+        Map<String, Object> captureProps = new LinkedHashMap<>();
+        captureProps.put("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"));
+        captureProps.put("image_base64", Map.of("type", "string", "description", "Optional base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence. "
+                + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
+                + "no screenshot is required."));
+        captureProps.put("code", Map.of("type", "string", "description", "Optional block of free text — the output of an external tool you ran to confirm the finding "
+                + "(sqlmap, nuclei, ffuf, a curl transcript, a decoded token, a snippet of vulnerable source). ICARUS renders it verbatim into a monospace "
+                + "evidence image and attaches it to the finding, so it lands in the report next to the traffic screenshots. Paste the real output; don't "
+                + "summarise it. Ignored if image_base64 is given. Use 'title' to label it (defaults to \"External Tool Output\")."));
+        captureProps.put("request_text", Map.of("type", "string", "description", "Leave unset unless redaction is actually required — the default (the finding's real captured "
+                + "request, with boilerplate headers already collapsed to a truncation marker) is what a report needs. If you must set this, start from "
+                + "get_finding/get_evidence's request text and change only what's necessary (e.g. blank out a session token's value in place); keep every "
+                + "line exactly as captured otherwise. Never replace the request with a summary — that destroys the evidentiary value of the capture. Note: "
+                + "this override text is used exactly as given, with no automatic header collapsing applied to it."));
+        captureProps.put("response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only, "
+                + "and note it also skips the automatic header collapsing. Never summarize or shorten the response."));
+        captureProps.put("title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."));
+        captureProps.put("description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."));
+        captureProps.put("severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."));
+        captureProps.put("force_1080", Map.of("type", "boolean", "description", "Render at 1920x1080 (true, default) or a narrower size (false), when image_base64 is omitted."));
+        captureProps.put("caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"));
+        captureProps.put("annotations", Map.of(
+                "type", "array",
+                "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
+                        + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
+                        + "Without an anchor: BOX/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
+                        + "truncates the final image to that rectangle and should be listed last.",
+                "items", annotationItemSchema));
+        var inputSchema = new McpSchema.JsonSchema("object", captureProps,
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("capture_evidence",
                 "Capture and annotate ICARUS evidence",
                 "Attaches evidence to a finding for the report, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
                         + "the headless equivalent of the Evidence Manager's annotation editor. Pass image_base64 to attach a screenshot you already have, or omit it to "
                         + "have ICARUS render the evidence image itself from the finding's real captured traffic — the normal, preferred path, with no screenshot needed. "
+                        + "Pass 'code' instead to attach the verbatim output of an external validation tool you ran (sqlmap, nuclei, a curl transcript, vulnerable source) as a monospace image. "
                         + "Do not set request_text/response_text unless you specifically need to redact a value; leave them unset otherwise so the report shows the actual "
                         + "capture, headers included. Call get_evidence first to re-annotate an existing screenshot.",
                 inputSchema, null, null, null);
@@ -738,12 +749,16 @@ public final class IcarusMcpServer {
             try {
                 BufferedImage image;
                 Map<String, Rectangle> anchors = new LinkedHashMap<>();
+                String code = request.arguments().get("code") instanceof String s && !s.isBlank() ? s : null;
                 if (imageBase64 != null && !imageBase64.isBlank()) {
                     byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
                     image = ImageIO.read(new ByteArrayInputStream(imageBytes));
                     if (image == null) {
                         return McpSchema.CallToolResult.builder().addTextContent("image_base64 did not decode to a readable image").isError(true).build();
                     }
+                } else if (code != null) {
+                    String title = request.arguments().get("title") instanceof String s ? s : null;
+                    image = orchestrator.getEvidenceCapture().imageRenderer.renderCodeToImage(code, title);
                 } else {
                     image = renderEvidenceImage(finding, request.arguments(), anchors);
                 }

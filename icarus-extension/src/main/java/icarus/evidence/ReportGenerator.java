@@ -428,7 +428,7 @@ public final class ReportGenerator {
                 imgBytes = Files.readAllBytes(Path.of(logoPath));
                 mimeType = logoPath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
             } else {
-                try (var in = ReportGenerator.class.getResourceAsStream("/icarus_logo.png")) {
+                try (var in = ReportGenerator.class.getResourceAsStream("/icarus_banner.png")) {
                     if (in == null) return "";
                     imgBytes = in.readAllBytes();
                     mimeType = "image/png";
@@ -436,7 +436,7 @@ public final class ReportGenerator {
             }
             String base64 = Base64.getEncoder().encodeToString(imgBytes);
             return "<div style=\"text-align: center;\"><img src=\"data:" + mimeType + ";base64," + base64
-                    + "\" style=\"max-width: 200px; margin-bottom: 20px;\"/></div>";
+                    + "\" style=\"max-width: 340px; margin-bottom: 20px;\"/></div>";
         } catch (IOException | RuntimeException e) {
             return "";
         }

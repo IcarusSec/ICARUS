@@ -402,7 +402,7 @@ public final class PdfReportGenerator {
         over.fill();
 
         try {
-            Image clientLogo = loadLogo(rtc.clientLogoPath(), "/client_logo.png");
+            Image clientLogo = loadLogo(rtc.clientLogoPath(), "/icarus_banner.png");
             if (clientLogo != null) {
                 clientLogo.scaleToFit(cardW - 56f, cardH - 44f);
                 clientLogo.setAbsolutePosition(

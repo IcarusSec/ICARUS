@@ -136,12 +136,14 @@ public final class IcarusMcpServer {
 
             2. **Read the actual traffic:**
                - `get_finding` with a hash returns the finding's captured HTTP request AND response (headers + body,
-                 body truncated only if very large) plus its metadata. Read these to understand what was sent, what
-                 came back, and whether the signal is real — don't reason from the one-line description alone.
-               - `validate_finding` / `exploit_finding` also return the freshly-sent request and the fresh response
+                 body capped at ~16KB) plus its metadata. Read these to understand what was sent, what came back,
+                 and whether the signal is real — don't reason from the one-line description alone.
+               - `get_finding_traffic` returns the SAME request/response with NO truncation — call it when
+                 get_finding's output was marked truncated and you need the rest (pass part="request"/"response"
+                 to fetch only one half).
+               - `validate_finding` / `exploit_finding` also return the freshly-sent request and fresh response
                  body, so you can diff old vs new.
-               - If a body was truncated or you need a clean re-capture, `rescan_finding` re-runs the scan against
-                 that endpoint.
+               - `rescan_finding` re-runs the scan against that endpoint for a clean re-capture.
 
             ---
 
@@ -256,7 +258,7 @@ public final class IcarusMcpServer {
                     msg -> api.logging().logToError(msg), jsonMapper, "/mcp");
 
             McpServerFeatures.SyncToolSpecification[] tools = {
-                    listFindingsTool(), addFindingTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
+                    listFindingsTool(), addFindingTool(), getFindingTool(), getFindingTrafficTool(), suppressFindingTool(), unsuppressFindingTool(),
                     getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(), clearAllFindingsTool(),
                     getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
@@ -340,6 +342,44 @@ public final class IcarusMcpServer {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
             }
             return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findingToMap(finding, null, true))).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getFindingTrafficTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
+                       "part", Map.of("type", "string", "description", "\"request\", \"response\", or \"both\" (default). Ask for only what you need.")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("get_finding_traffic",
+                "Get a finding's FULL, untruncated HTTP request/response",
+                "Returns the complete captured request and/or response for a finding — every header and the entire "
+                        + "body, with NO truncation (get_finding caps the body at ~16KB). Use this when get_finding's "
+                        + "output was marked truncated and you actually need the rest — e.g. a large JSON/HTML body "
+                        + "you have to inspect to confirm or rule out the finding. It can be big, so pass part=\"request\" "
+                        + "or part=\"response\" to fetch only the half you need.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = (String) request.arguments().get("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            if (finding.evidence() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("This finding has no captured traffic.").isError(true).build();
+            }
+            String part = request.arguments().get("part") instanceof String s ? s.toLowerCase() : "both";
+            var rr = finding.evidence();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("hash", hash);
+            out.put("type", finding.type());
+            if (!"response".equals(part) && rr.request() != null) {
+                out.put("request", rr.request().toString());
+            }
+            if (!"request".equals(part) && rr.response() != null) {
+                out.put("response", rr.response().toString());
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
         });
     }
 
@@ -1102,7 +1142,7 @@ public final class IcarusMcpServer {
         if (full.length() <= MCP_BODY_CAP + 4096) return full;
         String kept = full.substring(0, MCP_BODY_CAP + 4096);
         return kept + "\n\n... [truncated by ICARUS MCP — " + full.length() + " chars total, body ~" + bodyLen
-                + " bytes; use rescan_finding or a proxy tool for the full message]";
+                + " bytes; call get_finding_traffic with this hash for the full, untruncated message]";
     }
 
 private McpServerFeatures.SyncToolSpecification addFindingTool() {

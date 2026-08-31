@@ -24,6 +24,7 @@ import icarus.core.I18n;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import javax.swing.JCheckBox;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -1005,32 +1006,59 @@ public final class ParamValidatorModule implements IcarusModule {
                 }));
 
         List<Finding> finalFindings = new ArrayList<>();
-        
+        // "always" / "never" once the user ticked "Don't ask again"; "ask" (default) prompts per group.
+        String combinePref = config.getString("pv.combine_findings_pref", "ask");
+
         for (Map.Entry<String, List<Finding>> entry : groupedFindings.entrySet()) {
             List<Finding> group = entry.getValue();
             if (group.size() > 1) {
                 Finding first = group.get(0);
                 String fullPath = first.evidence() != null && first.evidence().request() != null ? first.evidence().request().path() : first.path();
                 String urlPath = fullPath.contains("?") ? fullPath.substring(0, fullPath.indexOf('?')) : fullPath;
-                
-                final int[] choice = new int[1];
-                try {
-                    SwingUtilities.invokeAndWait(() -> {
-                        choice[0] = JOptionPane.showConfirmDialog(
-                            null,
-                            I18n.t("module.pv.ui.combine_findings_msg", group.size(), first.type(), urlPath),
-                            I18n.t("module.pv.ui.combine_findings_title"),
-                            JOptionPane.YES_NO_OPTION
-                        );
-                    });
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    choice[0] = JOptionPane.NO_OPTION;
-                } catch (Exception e) {
-                    choice[0] = JOptionPane.NO_OPTION;
+
+                int choiceValue;
+                if ("always".equals(combinePref)) {
+                    choiceValue = JOptionPane.YES_OPTION;
+                } else if ("never".equals(combinePref)) {
+                    choiceValue = JOptionPane.NO_OPTION;
+                } else {
+                    final int[] choice = { JOptionPane.NO_OPTION };
+                    final boolean[] dontAsk = { false };
+                    final String groupType = first.type();
+                    final int groupSize = group.size();
+                    try {
+                        SwingUtilities.invokeAndWait(() -> {
+                            JCheckBox dontAskBox = new JCheckBox(I18n.t("module.pv.ui.combine_findings_dont_ask"));
+                            Object[] message = {
+                                I18n.t("module.pv.ui.combine_findings_msg", groupSize, groupType, urlPath),
+                                dontAskBox
+                            };
+                            choice[0] = JOptionPane.showConfirmDialog(
+                                null, message,
+                                I18n.t("module.pv.ui.combine_findings_title"),
+                                JOptionPane.YES_NO_OPTION
+                            );
+                            dontAsk[0] = dontAskBox.isSelected();
+                        });
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        choice[0] = JOptionPane.NO_OPTION;
+                    } catch (Exception e) {
+                        choice[0] = JOptionPane.NO_OPTION;
+                    }
+                    choiceValue = choice[0];
+                    if (dontAsk[0] && (choiceValue == JOptionPane.YES_OPTION || choiceValue == JOptionPane.NO_OPTION)) {
+                        combinePref = choiceValue == JOptionPane.YES_OPTION ? "always" : "never";
+                        config.set("pv.combine_findings_pref", combinePref);
+                        try {
+                            api.persistence().extensionData().setString("config", config.serialize());
+                        } catch (Exception ignored) {
+                            // in-memory pref still holds for the rest of the session
+                        }
+                    }
                 }
-                
-                if (choice[0] == JOptionPane.YES_OPTION) {
+
+                if (choiceValue == JOptionPane.YES_OPTION) {
                     StringBuilder combinedDesc = new StringBuilder(I18n.t("module.pv.finding.desc.combined_base", urlPath));
                     Finding mostSevere = group.get(0);
                     for (Finding f : group) {

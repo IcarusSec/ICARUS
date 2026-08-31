@@ -205,10 +205,13 @@ public final class IcarusMcpServer {
                  - rate-limit findings: `rps` and/or `blocked`.
                - **Pattern:** one `BOX` on the target anchor plus one `ARROW` on the same anchor — the arrow is
                  auto-pointed at the region's edge, so `[{"kind":"BOX","anchor":"response_payload"},{"kind":"ARROW","anchor":"response_payload"}]`
-                 is the normal case. Use `REDACT` to black out any real secret/token/PII in the shot. Add a `CROP`
-                 (listed LAST) only to trim a large noisy body.
-               - `capture_evidence`'s result echoes the anchor names that actually existed for that render — read it and
-                 re-annotate if you targeted one that wasn't there.
+                 is the normal case. Add a `CROP` (listed LAST) only to trim a large noisy body.
+               - To hide a secret/token/PII, do NOT paint over it — redact it in the `request_text`/`response_text`
+                 override (replace the value in place, keep every other line verbatim). There is no black-box kind.
+               - `capture_evidence`'s result echoes the anchor names that actually existed for that render — read it.
+                 If the anchor you wanted is absent (e.g. `response_payload` fell outside a long truncated body),
+                 fall back to the next-loosest anchor that IS listed (`response_headers` → `response_column`), or add a
+                 `CROP` around the relevant lines so the payload is on-screen, then re-run with the tighter anchor.
                - Only fall back to raw x/y for an `image_base64` screenshot you took yourself (no anchors exist for those);
                  estimate from the pixels you can see.
 
@@ -681,11 +684,12 @@ public final class IcarusMcpServer {
         Map<String, Object> annotationItemSchema = Map.of(
                 "type", "object",
                 "properties", Map.of(
-                        "kind", Map.of("type", "string", "description", "BOX, ARROW, REDACT, or CROP. There is no fill/wash kind — a translucent HIGHLIGHT wash reliably read "
+                        "kind", Map.of("type", "string", "description", "BOX, ARROW, or CROP. There is no fill/wash kind — a translucent HIGHLIGHT wash reliably read "
                                 + "as a muddy smear rather than a pointer to something specific, so it was removed; use a BOX outline (optionally with an ARROW pointing at "
-                                + "it) instead, which is what an unrecognized kind renders as anyway."),
+                                + "it) instead, which is what an unrecognized kind renders as anyway. There is no REDACT kind either — to hide a secret/token/PII, redact it "
+                                + "in the request_text/response_text override (below); a painted black box leaves the original pixels recoverable underneath."),
                         "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — always prefer this. "
-                                + "Works for every kind: BOX/REDACT frame the region, CROP trims to it, and ARROW is auto-turned into a pointer whose tip lands on the "
+                                + "Works for every kind: BOX frames the region, CROP trims to it, and ARROW is auto-turned into a pointer whose tip lands on the "
                                 + "region's edge (tail ~160px out where there's room) — so `{\"kind\":\"ARROW\",\"anchor\":\"response_payload\"}` just works. Guessed x/y for text "
                                 + "whose position depends on rendered string width (e.g. a badge after a "
                                 + "variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available on any "
@@ -737,14 +741,14 @@ public final class IcarusMcpServer {
                 "type", "array",
                 "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
                         + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
-                        + "Without an anchor: BOX/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
+                        + "Without an anchor: BOX is a rectangle at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
                         + "truncates the final image to that rectangle and should be listed last.",
                 "items", annotationItemSchema));
         var inputSchema = new McpSchema.JsonSchema("object", captureProps,
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("capture_evidence",
                 "Capture and annotate ICARUS evidence",
-                "Attaches evidence to a finding for the report, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
+                "Attaches evidence to a finding for the report, optionally drawing boxes/arrows and cropping it first — "
                         + "the headless equivalent of the Evidence Manager's annotation editor. Pass image_base64 to attach a screenshot you already have, or omit it to "
                         + "have ICARUS render the evidence image itself from the finding's real captured traffic — the normal, preferred path, with no screenshot needed. "
                         + "Pass 'code' instead to attach the verbatim output of an external validation tool you ran (sqlmap, nuclei, a curl transcript, vulnerable source) as a monospace image. "

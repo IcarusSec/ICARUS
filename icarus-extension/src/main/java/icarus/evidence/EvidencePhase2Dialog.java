@@ -53,7 +53,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         List<String> kinds = new ArrayList<>();
 
         Color[] curCol = { Color.RED };
-        String[] mode = { "PAN" }; // PAN, BOX, ARROW, HIGHLIGHT, REDACT
+        String[] mode = { "PAN" }; // PAN, BOX, ARROW, HIGHLIGHT
         Point[] dragStart = { null };
         Shape[] preview = { null };
         int[] panOffset = { 0, 0 }; // x, y offset for panning
@@ -179,12 +179,11 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         JToggleButton boxBtn = new JToggleButton(I18n.t("evidence.phase2.btn.box"), createIcon("square"));
         JToggleButton arrowBtn = new JToggleButton(I18n.t("evidence.phase2.btn.arrow"), createIcon("arrow-up-right"));
         JToggleButton hiBtn = new JToggleButton(I18n.t("evidence.phase2.btn.highlight"), createIcon("pencil"));
-        JToggleButton redactBtn = new JToggleButton(I18n.t("evidence.phase2.btn.redact"), createIcon("eye-off"));
 
         ButtonGroup grp = new ButtonGroup();
-        grp.add(panBtn); grp.add(boxBtn); grp.add(arrowBtn); grp.add(hiBtn); grp.add(redactBtn);
+        grp.add(panBtn); grp.add(boxBtn); grp.add(arrowBtn); grp.add(hiBtn);
 
-        for (var b : List.of(panBtn, boxBtn, arrowBtn, hiBtn, redactBtn)) {
+        for (var b : List.of(panBtn, boxBtn, arrowBtn, hiBtn)) {
             b.setFont(b.getFont().deriveFont(Font.BOLD, 13f));
             b.setFocusable(false);
             b.setHorizontalAlignment(SwingConstants.LEFT);
@@ -205,13 +204,11 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
                 if (a.getSource() == boxBtn) mode[0] = "BOX";
                 else if (a.getSource() == arrowBtn) mode[0] = "ARROW";
                 else if (a.getSource() == hiBtn) mode[0] = "HIGHLIGHT";
-                else if (a.getSource() == redactBtn) mode[0] = "REDACT";
                 canvas.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
             }
         };
         panBtn.addActionListener(modeSel); boxBtn.addActionListener(modeSel);
         arrowBtn.addActionListener(modeSel); hiBtn.addActionListener(modeSel);
-        redactBtn.addActionListener(modeSel);
 
         JButton colourBtn = capture.uiHelpers.createModernButton(I18n.t("evidence.phase2.btn.colour"), curCol[0]);
         colourBtn.setIcon(createIcon("aperture"));
@@ -356,7 +353,6 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         bar.add(boxBtn, gbc); gbc.gridy++;
         bar.add(arrowBtn, gbc); gbc.gridy++;
         bar.add(hiBtn, gbc); gbc.gridy++;
-        bar.add(redactBtn, gbc); gbc.gridy++;
         bar.add(colourBtn, gbc); gbc.gridy++;
         bar.add(undoBtn, gbc); gbc.gridy++;
         bar.add(new JSeparator(), gbc); gbc.gridy++;
@@ -405,11 +401,6 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             public void actionPerformed(ActionEvent e) { hiBtn.doClick(); }
         });
 
-        shortcutMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_R, 0), "icarus.modeRedact");
-        shortcutActions.put("icarus.modeRedact", new AbstractAction() {
-            public void actionPerformed(ActionEvent e) { redactBtn.doClick(); }
-        });
-
         // Spacebar hold-to-pan: switch to Pan on press, restore the previous tool on
         // release. The mode[0] guard makes repeated KEY_PRESSED events from OS key-repeat
         // (fired continuously while held) a no-op after the first one.
@@ -432,7 +423,6 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
                     if ("BOX".equals(prevMode[0])) boxBtn.doClick();
                     else if ("ARROW".equals(prevMode[0])) arrowBtn.doClick();
                     else if ("HIGHLIGHT".equals(prevMode[0])) hiBtn.doClick();
-                    else if ("REDACT".equals(prevMode[0])) redactBtn.doClick();
                     prevMode[0] = null;
                 }
             }

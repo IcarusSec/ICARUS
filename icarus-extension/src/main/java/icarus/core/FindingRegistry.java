@@ -250,6 +250,15 @@ public final class FindingRegistry {
             if (f.evidence() != null && f.evidence().request() != null) {
                 Map<String, Object> evidenceJson = new java.util.LinkedHashMap<>();
                 evidenceJson.put("request", java.util.Base64.getEncoder().encodeToString(f.evidence().request().toByteArray().getBytes()));
+                // Persist the target binding — toByteArray() drops it, and without it a
+                // reloaded finding's request has a null HttpService (breaks validate_finding
+                // / rescan_finding resends). See also ProjectStateCodec.
+                var svc = f.evidence().request().httpService();
+                if (svc != null) {
+                    evidenceJson.put("host", svc.host());
+                    evidenceJson.put("port", svc.port());
+                    evidenceJson.put("secure", svc.secure());
+                }
                 if (f.evidence().response() != null) {
                     evidenceJson.put("response", java.util.Base64.getEncoder().encodeToString(f.evidence().response().toByteArray().getBytes()));
                 }
@@ -304,7 +313,14 @@ public final class FindingRegistry {
                         if (evidenceRaw instanceof Map<?, ?> evidenceMap) {
                             Object reqB64 = evidenceMap.get("request");
                             if (reqB64 != null) {
-                                burp.api.montoya.http.message.requests.HttpRequest request = burp.api.montoya.http.message.requests.HttpRequest.httpRequest(burp.api.montoya.core.ByteArray.byteArray(java.util.Base64.getDecoder().decode(String.valueOf(reqB64))));
+                                burp.api.montoya.core.ByteArray reqBytes = burp.api.montoya.core.ByteArray.byteArray(java.util.Base64.getDecoder().decode(String.valueOf(reqB64)));
+                                Object evHost = evidenceMap.get("host");
+                                Object evPort = evidenceMap.get("port");
+                                burp.api.montoya.http.message.requests.HttpRequest request = (evHost != null && evPort instanceof Number)
+                                        ? burp.api.montoya.http.message.requests.HttpRequest.httpRequest(
+                                            burp.api.montoya.http.HttpService.httpService(String.valueOf(evHost), ((Number) evPort).intValue(), Boolean.TRUE.equals(evidenceMap.get("secure"))),
+                                            reqBytes)
+                                        : burp.api.montoya.http.message.requests.HttpRequest.httpRequest(reqBytes);
                                 burp.api.montoya.http.message.responses.HttpResponse response = null;
                                 Object resB64 = evidenceMap.get("response");
                                 if (resB64 != null) {

@@ -88,7 +88,7 @@ public final class IcarusMcpServer {
 
             - Adopt a strictly technical, formal, analytical, business-risk-oriented tone.
             - Follow the sequential flow of steps 1 through 7 rigorously.
-            - Actively use the ICARUS MCP toolset (`icarus.mcp`) and ColorStrike (`mcp-colorstrike`) for inspection, manipulation, and configuration.
+            - Actively use the ICARUS MCP toolset (`icarus.mcp`) for inspection, manipulation, and configuration.
             - Sanitize strings and metadata containing special characters to avoid breaking the PDF/HTML renderer.
 
             ---
@@ -129,16 +129,19 @@ public final class IcarusMcpServer {
 
             ---
 
-            ### 3. Cross-Analysis & High-Precision Traffic Inspection (ColorStrike)
+            ### 3. Cross-Analysis & Traffic Inspection
 
             1. **Initial Findings Mapping:**
-               - Run `list_findings` in ICARUS to extract every alert and vulnerability initially detected in the project.
+               - Run `list_findings` to enumerate every finding in the project (metadata only — type, severity, path, hash).
 
-            2. **Detailed Inspection with ColorStrike (`mcp-colorstrike`):**
-               - When you need to dissect complex flows (e.g. JWT tokens, WebSocket sessions, serialized payloads, GraphQL APIs):
-                 - Use `get_requests_by_color` or `get_proxy_http_history` to isolate flows the operator highlighted.
-                 - Use `get_request_by_index` to inspect complete requests and responses (authorization headers, cookies, and raw body, untruncated).
-                 - Use `send_request` or `create_repeater_tab` to replay and modify requests in Burp Suite.
+            2. **Read the actual traffic:**
+               - `get_finding` with a hash returns the finding's captured HTTP request AND response (headers + body,
+                 body truncated only if very large) plus its metadata. Read these to understand what was sent, what
+                 came back, and whether the signal is real — don't reason from the one-line description alone.
+               - `validate_finding` / `exploit_finding` also return the freshly-sent request and the fresh response
+                 body, so you can diff old vs new.
+               - If a body was truncated or you need a clean re-capture, `rescan_finding` re-runs the scan against
+                 that endpoint.
 
             ---
 
@@ -325,7 +328,9 @@ public final class IcarusMcpServer {
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("get_finding",
                 "Get ICARUS finding detail",
-                "Looks up one ICARUS finding by its similarityHash, returning its full detail.",
+                "Looks up one ICARUS finding by its similarityHash. Returns its full detail INCLUDING the "
+                        + "captured HTTP request and response (headers + body, body truncated if very large) and "
+                        + "the finding's metadata, so you can read the actual traffic and understand what happened.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
@@ -334,7 +339,7 @@ public final class IcarusMcpServer {
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
             }
-            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findingToMap(finding, null))).build();
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findingToMap(finding, null, true))).build();
         });
     }
 
@@ -1058,6 +1063,14 @@ public final class IcarusMcpServer {
     }
 
     private static Map<String, Object> findingToMap(Finding finding, FindingRecord record) {
+        return findingToMap(finding, record, false);
+    }
+
+    /** Max body bytes rendered per HTTP message in MCP output — enough to reason over,
+     *  bounded so a huge JS/HTML body can't blow the agent's context. */
+    private static final int MCP_BODY_CAP = 12_288;
+
+    private static Map<String, Object> findingToMap(Finding finding, FindingRecord record, boolean includeTraffic) {
         Map<String, Object> f = new LinkedHashMap<>();
         f.put("module", finding.module());
         f.put("type", finding.type());
@@ -1067,11 +1080,29 @@ public final class IcarusMcpServer {
         f.put("path", finding.path());
         f.put("similarityHash", finding.similarityHash());
         f.put("cweIds", finding.cweIds());
+        if (!finding.metadata().isEmpty()) f.put("metadata", finding.metadata());
         if (record != null) {
             f.put("count", record.getCount());
             f.put("suppressed", record.isSuppressed());
         }
+        if (includeTraffic && finding.evidence() != null) {
+            var rr = finding.evidence();
+            if (rr.request() != null) f.put("request", renderMessage(
+                    rr.request().toString(), rr.request().body() == null ? 0 : rr.request().body().length()));
+            if (rr.response() != null) f.put("response", renderMessage(
+                    rr.response().toString(), rr.response().body() == null ? 0 : rr.response().body().length()));
+        }
         return f;
+    }
+
+    /** Full HTTP message text (headers + body), body truncated to {@link #MCP_BODY_CAP} with a
+     *  marker. Montoya's {@code toString()} already gives the raw request/response text. */
+    private static String renderMessage(String full, int bodyLen) {
+        if (full == null) return "";
+        if (full.length() <= MCP_BODY_CAP + 4096) return full;
+        String kept = full.substring(0, MCP_BODY_CAP + 4096);
+        return kept + "\n\n... [truncated by ICARUS MCP — " + full.length() + " chars total, body ~" + bodyLen
+                + " bytes; use rescan_finding or a proxy tool for the full message]";
     }
 
 private McpServerFeatures.SyncToolSpecification addFindingTool() {
@@ -1447,6 +1478,12 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
             if (result.fresh() != null && result.fresh().response() != null) {
                 out.put("freshStatus", result.fresh().response().statusCode());
                 out.put("freshLength", result.fresh().response().body().length());
+                out.put("freshResponse", renderMessage(result.fresh().response().toString(),
+                        result.fresh().response().body().length()));
+                if (result.fresh().request() != null) {
+                    out.put("sentRequest", renderMessage(result.fresh().request().toString(),
+                            result.fresh().request().body() == null ? 0 : result.fresh().request().body().length()));
+                }
             }
             return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
         });

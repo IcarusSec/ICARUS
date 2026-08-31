@@ -194,9 +194,9 @@ public final class IcarusMcpServer {
                - Attach as many evidence items per finding as the PoC needs — e.g. the auto-rendered traffic shot PLUS a `code` block with the sqlmap run PLUS a browser screenshot. They render in the finding's card in `list_evidence` order (reorder with `reorder_evidence`).
                - `get_evidence` / `list_evidence` show what's already attached; `set_evidence_caption`, `set_evidence_included`, `remove_evidence` manage them.
 
-            2. **Annotation is mandatory.** Every `capture_evidence` call on an ICARUS-rendered image (i.e. `image_base64` omitted)
-               MUST pass `annotations` with at least one `BOX` on the exact thing that proves the finding. An un-annotated
-               evidence image is not acceptable in the report.
+            2. **Annotation (optional but recommended).** On an ICARUS-rendered image (`image_base64` omitted) you can pass
+               `annotations` with a `BOX` on the exact thing that proves the finding. It's not required — an auto-rendered
+               image already gets one sensible default box — but an explicit box/arrow makes the PoC clearer. When you do annotate:
                - **Target with `anchor`, never guessed x/y.** Pick the tightest anchor that covers the proof:
                  - injection findings (STRING_SQLI, STRING_XSS, STRING_CMDI, ...): `response_payload`, or `request_payload` for a body parameter.
                  - single-header findings (VERSION_DISCLOSURE, ...): `response_header:<name>` (lowercase).

@@ -431,7 +431,9 @@ public final class ParamValidatorModule implements IcarusModule {
                             api.logging().logToError("AST serialization failed: " + e.getMessage());
                         }
                     } else {
-                        Object clonedRoot = JsonParser.parse(originalBody);
+                        // Deep-copy the once-parsed tree instead of re-parsing originalBody per
+                        // mutation: O(tree) vs O(mutations x body).
+                        Object clonedRoot = JsonParser.deepCopy(originalRoot);
                         boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
                         if (applied) {
                             mutations.add(new Mutation(

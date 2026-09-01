@@ -576,17 +576,21 @@ public final class ParamValidatorModule implements IcarusModule {
                         if (!promptedThrottle) {
                             promptedThrottle = true;
                             int[] choiceHolder = { 0 };
+                            Runnable wafPrompt = () -> {
+                                String[] options = { "Delay (2s)", "Try Evasion Payloads", "Ignore" };
+                                choiceHolder[0] = javax.swing.JOptionPane.showOptionDialog(
+                                    api.userInterface().swingUtils().suiteFrame(),
+                                    "WAF detected via blocked payloads (streak of 403s).\nDo you want to delay or skip to testing the evasion payloads?",
+                                    I18n.t("module.pv.ui.waf_throttle_title"),
+                                    javax.swing.JOptionPane.YES_NO_CANCEL_OPTION,
+                                    javax.swing.JOptionPane.WARNING_MESSAGE,
+                                    null, options, options[0]);
+                            };
                             try {
-                                javax.swing.SwingUtilities.invokeAndWait(() -> {
-                                    String[] options = { "Delay (2s)", "Try Evasion Payloads", "Ignore" };
-                                    choiceHolder[0] = javax.swing.JOptionPane.showOptionDialog(
-                                        api.userInterface().swingUtils().suiteFrame(),
-                                        "WAF detected via blocked payloads (streak of 403s).\nDo you want to delay or skip to testing the evasion payloads?",
-                                        I18n.t("module.pv.ui.waf_throttle_title"),
-                                        javax.swing.JOptionPane.YES_NO_CANCEL_OPTION,
-                                        javax.swing.JOptionPane.WARNING_MESSAGE,
-                                        null, options, options[0]);
-                                });
+                                // Called from the scan worker thread normally, but guard against an
+                                // EDT caller: invokeAndWait throws "cannot call from event dispatch thread".
+                                if (javax.swing.SwingUtilities.isEventDispatchThread()) wafPrompt.run();
+                                else javax.swing.SwingUtilities.invokeAndWait(wafPrompt);
                             } catch (InterruptedException ex) {
                                 Thread.currentThread().interrupt();
                             } catch (Exception ex) {

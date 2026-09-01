@@ -109,6 +109,8 @@ public class SettingsPanel {
 
         CardPanel cardAuto = new CardPanel(I18n.t("settings.section.autoauth"), "key");
         addSpinnerToForm(cardAuto, "autoauth.refresh_minutes", I18n.t("settings.field.autoauth.refresh_minutes"), 10, 1, 1440, 1);
+        cardAuto.addFormRow(mutedLabel(I18n.t("settings.help.autoauth.persistence",
+                "⚠ Token-source requests are saved in the Burp project file (unencrypted), including any auth headers they carry.")));
         JLabel autoAuthStatus = new JLabel(autoAuth.statusSummary());
         autoAuthStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
         cardAuto.addFormRow(autoAuthStatus);

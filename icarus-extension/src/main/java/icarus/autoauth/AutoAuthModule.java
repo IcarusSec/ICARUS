@@ -493,6 +493,12 @@ public final class AutoAuthModule {
         config.set(K_SOURCE_COUNT, sources.size());
         for (int i = 0; i < sources.size(); i++) {
             Source s = sources.get(i);
+            // SECURITY: the token-refresh request is persisted verbatim, including any
+            // Authorization / Cookie / client_secret it carries, into Burp's project file
+            // (which is NOT encrypted). Redacting those headers here would break refresh
+            // after a restart, since the refresh call often needs them to authenticate.
+            // The exposure is surfaced to the user in the AutoAuth settings card instead.
+            // See HANDOFF-security.md 3.7.
             config.set(sourceKey(i, "raw"), s.sourceRequest.toString());
             HttpService service = s.sourceRequest.httpService();
             config.set(sourceKey(i, "host"), service != null ? service.host() : "");

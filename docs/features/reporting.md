@@ -3,8 +3,16 @@
 ICARUS 1.0 features a completely reimagined reporting engine. Instead of a rigid, hardcoded output, you now have total control over what your report looks like, how it's structured, and what content it includes.
 
 ## 🗂 Report Profiles
-ICARUS uses a **Report Profiles** architecture. This means you aren't stuck constantly changing settings for different clients. 
-You can create, save, and seamlessly swap between different configurations (e.g., "Internal Dev Team", "Client A Executive", "Client B Detailed"). Every change you make in the Reporting Settings tab is automatically saved to the active profile.
+ICARUS uses a **Report Profiles** architecture. This means you aren't stuck constantly changing settings for different clients.
+You can create, save, and seamlessly swap between different configurations (e.g., "Internal Dev Team", "Client A Executive", "Client B Detailed"). Built-in profiles like *Executive Modern* can be cloned and edited. Every change you make in the Reporting tab is saved to the active profile.
+
+<p align="center">
+  <img src="../assets/reporting-profile-editor.png" alt="Report profile editor: layout and sections flow" width="900">
+</p>
+
+## 🎚 Layout
+- **Cover Page:** *Gradient Hero*, *Header Band*, or *None*.
+- **Finding Card Layout:** *Elevated Card* (spacious, one card per finding) or *Tabular Grid* (dense).
 
 ## 🧩 Sections Flow UI
 The Sections Flow UI is where you structure your report's document flow. 
@@ -23,6 +31,11 @@ ICARUS reports shouldn't look like generic automated dumps.
 - **Logo File Pickers:** Easily attach your company logo or the client's logo to the report.
 - **Built-in Themes:** Out of the box, ICARUS includes gorgeous modern themes including *Catppuccin, Dracula, Nord, Gruvbox*, and *Burp Proxy Night*, as well as a clean *Light* theme for traditional PDFs.
 - **Auto-Cloning Themes:** Want to tweak a built-in theme? Just edit any color. ICARUS will automatically clone the read-only built-in theme into a custom, editable copy so you can adjust primary/secondary accents without losing the original.
+- **Fine-grained colors:** primary/secondary accents, font family and size, per-severity badge colors, and the green/red Retest status colors are all editable. The **Branding & Metadata** section sets the document title, classification, and author/reviewer/approver fields.
+
+<p align="center">
+  <img src="../assets/reporting-theme-branding.png" alt="Reporting colors, theme, and branding settings" width="900">
+</p>
 
 ## 🔄 Retest Mode
 If you are performing a retest, simply toggle the **Retest Mode** in the Evidence Manager.
@@ -31,4 +44,14 @@ Findings marked as "Fixed" will have their evidence images automatically stamped
 ## 📤 Export Formats
 Reports can be exported in two formats directly from the Evidence Manager:
 1. **Interactive HTML:** A single-file, highly responsive HTML document containing embedded Base64 images and interactive tables. Great for sharing via email or Slack.
+
+<p align="center">
+  <img src="../assets/report-html-finding.png" alt="HTML report finding with embedded evidence" width="820">
+</p>
+
 2. **Professional PDF:** A strictly formatted, paginated PDF generated natively offline via OpenPDF. It features a Table of Contents, page-break-safe finding cards, and vector-crisp text.
+
+<p align="center">
+  <img src="../assets/report-pdf-cover.png" alt="PDF report cover" width="360">
+  <img src="../assets/report-pdf-finding.png" alt="PDF finding detail" width="360">
+</p>

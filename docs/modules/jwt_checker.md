@@ -23,4 +23,28 @@ Parses the payload claims and aggressively mutates them:
 - Re-signs the tampered token if a weak secret is known, or sends it unsigned to test for validation failures.
 
 ### Time-based Bypass
-Detects the absence of `exp` (Expiration Time) or `iat` (Issued At) claims, reporting tokens that essentially live forever.
+Detects the absence of `exp` (Expiration Time) or `iat` (Issued At) claims, reporting tokens that essentially live forever, and re-sends already-expired tokens to check whether `exp` is actually enforced.
+
+## Example Findings
+
+**Privilege escalation** — payload `role` changed to `admin` *without re-signing*;
+`/api/protected/admin` returns `HTTP 200` and the admin secret:
+
+<p align="center">
+  <img src="../assets/evidence-jwt-privesc.png" alt="JWT privilege-escalation evidence" width="900">
+</p>
+
+**Expired token accepted** — a JWT whose `exp` predates its `iat` still returns the profile:
+
+<p align="center">
+  <img src="../assets/evidence-jwt-expired-exp.png" alt="Expired JWT accepted" width="900">
+</p>
+
+**`aud` tampering** — an injected `aud` claim with an unchanged signature is still accepted:
+
+<p align="center">
+  <img src="../assets/evidence-jwt-tamper-aud.png" alt="JWT aud tampering accepted" width="900">
+</p>
+
+> The **Settings → Passive Scanners → JWT / Bearer Token Checker** option redacts sensitive
+> claim values in findings, logs, and reports (showing the claim key only).

@@ -8,19 +8,26 @@ Every security testing engine in ICARUS implements the `IcarusModule` interface.
 
 ```java
 public interface IcarusModule {
-    String getName();
-    String getDescription();
-    Category getCategory();
-    
-    // The core execution loop
-    void run(HttpRequestResponse baseRequest, ModuleConfig config, FindingRegistry registry);
+    String name();
+
+    // The core execution loop — returns the findings it detected (empty if none).
+    // `logger` is a sink for SQLMap-style verbose progress lines shown live to the user.
+    List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger);
+
+    // Skip this module during "Run All Modules" (utility modules like Postman Export).
+    default boolean includeInBulkScan() { return true; }
+
+    // Does this module send active/mutated payloads? Drives the WAF Safe-Mode prompt.
+    default boolean sendsActivePayloads() { return false; }
 }
 ```
 
 By enforcing this contract:
 1. The `ScanRunner` can treat all modules uniformly.
 2. The UI can dynamically generate settings panels for newly added modules.
-3. Thread safety is guaranteed because the module maintains no internal mutable state.
+3. Thread safety is guaranteed because the module maintains no internal mutable state — the
+   target request/response and config are passed in, and findings are returned rather than
+   mutated in place.
 
 ## `ModuleConfig`
 
@@ -33,20 +40,12 @@ It contains data like:
 
 ## `Finding` and `FindingRegistry`
 
-When an `IcarusModule` detects a vulnerability, it instantiates a `Finding` object.
+When an `IcarusModule` detects a vulnerability, it instantiates a `Finding` object
+(title, description, severity, and the `HttpRequestResponse` evidence) and includes it in
+the list returned from `run()`.
 
-```java
-public class Finding {
-    private final String title;
-    private final String description;
-    private final Severity severity;
-    private final HttpRequestResponse evidence;
-    // ...
-}
-```
-
-The module then pushes this to the `FindingRegistry`. 
-The `FindingRegistry` operates on an Observer pattern. When a new finding is added:
+The `ScanRunner` collects each module's returned findings and hands them to the
+`FindingRegistry`, which operates on an Observer pattern. When a new finding is added:
 1. It persists the finding to memory.
 2. It fires an event to the `IcarusTab` (UI) to update the Results table.
 3. It triggers a `ToastNotification` to alert the user.

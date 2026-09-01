@@ -10,21 +10,43 @@ ICARUS capabilities are accessible from virtually anywhere in Burp Suite (Repeat
 2. Navigate to the **Extensions > ICARUS** sub-menu.
 3. You will see context-aware options:
    - **Run All Modules**: Dispatches the request to all active scanning engines concurrently.
-   - **Run [Module Name]**: E.g., `Run JWT Checker`. Launches a specific test in isolation.
-   - **Send to Reporter Creation**: Captures the request/response pair for the Evidence Manager.
-   - **Set as Auth Token Source**: Begins an AutoAuth workflow (see AutoAuth docs).
+   - **Modules > [Module Name]**: E.g., `JWT Checker`. Launches a specific test in isolation.
+   - **Evidence & Reporting**: Captures the request/response pair into the Evidence Manager.
+   - **AutoAuth**: Set a highlighted value as an auth-token source or destination (see the AutoAuth docs).
+
+<p align="center">
+  <img src="assets/context-menu-modules.png" alt="ICARUS context menu in Burp" width="900">
+</p>
 
 ## Managing Active Scans
 
-When a scan is launched:
-1. Navigate to the **ICARUS Tab**.
-2. Switch to the **Active Tasks** view.
-3. You will see a real-time table of executing modules, their progress, and success/failure states.
-4. Because modules are highly concurrent and stateless, you can launch dozens of scans simultaneously without UI freezing.
+Modules are highly concurrent and stateless, so you can launch dozens of scans at once
+without freezing the UI. Two places track what's happening:
+
+- The **Results** tab fills in with findings as modules complete.
+- The **Audit Log** tab streams a timestamped line for every scan action, new finding, and
+  duplicate hit — useful when you want to see exactly what a scan touched.
+
+<p align="center">
+  <img src="assets/audit-log.png" alt="ICARUS Audit Log tab" width="900">
+</p>
 
 ## Reviewing Findings
 
 If a module discovers a vulnerability:
 1. A **Toast Notification** (bottom right of the UI) will briefly appear to alert you.
-2. The finding will be logged in the **Results** tab within ICARUS.
-3. Double-clicking a finding will display the request/response payload that triggered it, alongside a detailed description and remediation advice.
+2. The finding is logged in the **Results** tab within ICARUS, grouped by count / severity / module / type.
+3. Selecting a finding shows the request/response pair that triggered it, alongside its
+   description and remediation advice.
+
+<p align="center">
+  <img src="assets/results-tab.png" alt="ICARUS Results tab" width="900">
+</p>
+
+Descriptions, impact, recommendations, CWE, and CVSS-4 probability for each finding type
+come from the bundled, fully offline **Knowledge Base** tab, which you can edit or extend
+with your own vulnerability entries.
+
+<p align="center">
+  <img src="assets/knowledge-base.png" alt="ICARUS Knowledge Base tab" width="900">
+</p>

@@ -6,9 +6,21 @@ The `HttpVerbModule` automates the process of HTTP method tampering to uncover m
 When triggered, this module takes a baseline HTTP request and rapidly mutates it across all standard HTTP methods:
 - `GET`, `HEAD`, `POST`, `PUT`, `DELETE`, `OPTIONS`, `TRACE`, `PATCH`
 
+Which methods to test, whether to send state-changing verbs (`POST`/`PUT`/`DELETE`/`PATCH`),
+and the body strategy are configured under **Settings → Active Scanners → HTTP Verb Tester**.
+
 ## Advanced Behaviors
 
 - **Body Adjustments:** If the module mutates a `POST` request into a `GET`, it intelligently strips the body and attempts to migrate payload parameters into the URL query string.
 - **OPTIONS & Allow Headers:** Deeply inspects `OPTIONS` responses, parsing the `Allow` and `Access-Control-Allow-Methods` headers to map the true attack surface of the endpoint.
 - **TRACE Reflection:** Specifically targets the `TRACE` method. If the server reflects the request body or headers back in the response, ICARUS automatically flags this as a Cross-Site Tracing (XST) vulnerability.
 - **Access Control Bypass:** Often, developers apply strict authorization checks to `POST` routes but neglect `PUT` or `PATCH` on the same URL path. This module attempts to exploit those exact discrepancies.
+
+## Example Finding
+
+`ACCEPTED_METHOD` — `OPTIONS /api/items` returns `HTTP 200` instead of being rejected,
+confirming the method is enabled on the endpoint:
+
+<p align="center">
+  <img src="../assets/evidence-accepted-method.png" alt="ACCEPTED_METHOD evidence" width="900">
+</p>

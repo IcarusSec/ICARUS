@@ -12,15 +12,37 @@ You can capture evidence from anywhere in Burp (Proxy, Logger, Repeater).
 
 ## The Evidence Manager Interface
 
-Navigate to the **ICARUS Tab > Evidence Manager** to curate your captured findings.
+Navigate to the **ICARUS Tab > Evidence** to curate your captured findings. Pick a finding
+on the left; its title, severity, CWEs, and evidence cards (with per-card captions and an
+*Include in report* toggle) are on the right.
 
-- **Drag-and-Drop Reordering:** Drag rows to reorder how findings will appear in the final report.
-- **Offline CWE Tagging:** Click the CWE column on a finding. A typeahead search will query the bundled, offline CWE dataset. Simply type "SQL" or "Cross Site" and select the appropriate CWE taxonomy tag.
-- **Toggling Visibility:** You can mark findings to be excluded from the *next* report export without permanently deleting their underlying evidence images.
-- **Annotations:** If a finding needs markup, right-click it and open the annotation editor to add boxes, highlights, redactions, or arrows directly to the HTTP payload screenshot.
+<p align="center">
+  <img src="../assets/evidence-manager.png" alt="Evidence Manager interface" width="900">
+</p>
+
+- **Drag-and-Drop Reordering:** Drag findings — and evidence cards within a finding — to set the order they appear in the report.
+- **Offline CWE Tagging:** Type into the CWEs field (e.g. "SQL" or "Cross Site"); a typeahead search queries the bundled, offline CWE dataset.
+- **Toggling Visibility:** Un-check *Include in report* to drop a card from the *next* export without deleting its underlying image.
+- **Annotations:** Open the annotation editor on a card to add boxes, highlights, redactions, or arrows directly onto the HTTP payload screenshot.
+
+<p align="center">
+  <img src="../assets/evidence-jwt-privesc.png" alt="Annotated evidence card" width="820">
+</p>
+
+The **Report Details** sub-tab holds the Document Control and Assessment Scope fields
+(project name, dates, author, target, environment) that populate the report header.
+
+<p align="center">
+  <img src="../assets/report-details.png" alt="Report Details sub-tab" width="900">
+</p>
 
 ## Exporting Reports
 
-ICARUS generates stunning, self-contained reports entirely offline.
-1. Click **Preview Report** to render the HTML report directly within an embedded browser in Burp Suite.
-2. If satisfied, click **Export to PDF**. ICARUS utilizes OpenPDF to render a highly polished, professional PDF deliverable containing all tagged CWEs, evidence screenshots, and executive summaries.
+ICARUS generates self-contained reports entirely offline (see the
+[Dynamic Report Engine](reporting.md) for structure, themes, and profiles).
+1. Click **Preview HTML** to render the report in an embedded browser inside Burp, or **Preview PDF**.
+2. **Generate HTML** writes a single-file HTML report with embedded Base64 images; **Export PDF** renders a paginated PDF via OpenPDF with a table of contents and page-break-safe finding cards.
+
+<p align="center">
+  <img src="../assets/report-html-cover.png" alt="Generated HTML report" width="800">
+</p>

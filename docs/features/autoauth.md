@@ -15,6 +15,13 @@ AutoAuth operates on a simple Source-Destination mapping model.
    - Highlight the location in an HTTP request where the token should be injected (e.g., `Authorization: Bearer [highlight here]`).
    - Right-click and select **Extensions > ICARUS > AutoAuth: Add Auth Token Destination**.
 
+The refresh cadence and a warning about where token-source requests are stored live under
+**Settings → General & Integrations → AutoAuth**.
+
+<p align="center">
+  <img src="../assets/settings-mcp-autoauth.png" alt="AutoAuth and MCP server settings" width="900">
+</p>
+
 ## Silent Background Refresh
 
 Once mapped, AutoAuth silently monitors your outgoing traffic for that specific host. 
@@ -25,4 +32,4 @@ Once mapped, AutoAuth silently monitors your outgoing traffic for that specific 
 ## Security Constraints
 
 - **Host-Scoped:** AutoAuth enforces strict host matching. A token captured from `api.example.com` will *never* be inadvertently injected into a request bound for `api.malicious.com`, preventing accidental token leakage.
-- **Persistent Storage:** Your mappings survive Burp restarts, allowing you to resume testing a complex application days later without re-configuring authentication macros.
+- **Persistent Storage:** Your mappings survive Burp restarts, allowing you to resume testing a complex application days later without re-configuring authentication macros. Note that token-source requests are saved in the Burp project file unencrypted, including any auth headers they carry.

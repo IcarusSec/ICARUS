@@ -1,6 +1,15 @@
-# ICARUS - Enterprise API Security Assessment Framework
+# ICARUS Documentation
 
-Welcome to the official documentation for **ICARUS**, a next-generation security testing extension for Burp Suite. 
+Welcome to the official documentation for **ICARUS**, an AI-native offensive security
+testing extension for Burp Suite. ICARUS runs the whole API assessment pipeline —
+automated scanning, technical validation, visual evidence capture, and client-ready
+reporting — inside a single Burp tab.
+
+<p align="center">
+  <img src="assets/results-tab.png" alt="ICARUS Results tab" width="900">
+</p>
+
+New here? Read the **[ICARUS 1.0 launch notes](launch-1.0.md)** for a tour of what shipped.
 
 ## Documentation Structure
 
@@ -12,7 +21,8 @@ Our documentation is broken down into modular sections to help you navigate and 
 
 ### Core Features
 1. **[AutoAuth Engine](features/autoauth.md)** - Advanced, host-scoped token management.
-2. **[Evidence Manager](features/evidence_manager.md)** - Capturing, tagging, and exporting polished reports.
+2. **[Evidence Manager](features/evidence_manager.md)** - Capturing, tagging, and organizing findings.
+3. **[Dynamic Reporting Engine](features/reporting.md)** - Customizing, profiling, and exporting polished HTML/PDF reports.
 
 ### Security Modules (Engines)
 1. **[JSON Parameter Validator](modules/param_validator.md)**

@@ -3,25 +3,31 @@
 This guide will walk you through compiling the ICARUS codebase and installing it within Burp Suite.
 
 ## Prerequisites
-- **Java 21** or higher.
-- **Burp Suite Professional or Community Edition**.
-- Build tools (Gradle wrapper is included).
+- A **JDK** on your `PATH` (the build targets `--release 19`; a newer JDK is fine).
+- **Burp Suite Professional or Community Edition** (Java 17+ runtime).
 
 ## 1. Compile the Extension
 
-ICARUS uses Gradle for dependency management and building. A script is provided to streamline the process.
+The build is a self-contained script — no Gradle or Maven. It downloads the Montoya API,
+OpenPDF, the MCP SDK, and commonmark-java, compiles the sources with `javac`, and packages
+everything into one fat JAR.
 
+### Linux / macOS
 ```bash
 cd icarus-extension/
 ./build.sh
 ```
 
-This script will automatically:
-1. Download the required Montoya API dependencies.
-2. Compile the Java source code.
-3. Package the output into a standalone JAR file.
+### Windows (PowerShell)
+```powershell
+cd icarus-extension\
+powershell -ExecutionPolicy Bypass -File build.ps1
+```
 
 *The generated `.jar` will be saved to:* `icarus-extension/build_manual/libs/icarus-<version>.jar`
+
+> Prefer not to compile? Grab the pre-built fat JAR from the
+> [Releases page](https://github.com/IcarusSec/ICARUS/releases/latest).
 
 ## 2. Load into Burp Suite
 
@@ -32,9 +38,20 @@ This script will automatically:
 5. Select the `icarus-<version>.jar` file generated in the previous step.
 6. Verify that ICARUS loads without errors. The **ICARUS** tab will appear in the main navigation bar.
 
+<p align="center">
+  <img src="assets/results-tab.png" alt="ICARUS Results tab in Burp Suite" width="900">
+</p>
+
 ## 3. Initial Configuration
 
-Before running scans, verify your configuration:
-- Navigate to the **ICARUS** tab.
-- Click on **Settings** to adjust global scan thresholds, reporting metadata, and UI preferences.
-- Review the specific module parameters (e.g., Request Burst Size for Rate Limiting).
+Before running scans, open the **ICARUS → Settings** tab. It has three sub-tabs:
+
+- **General & Integrations** — enable/disable modules, WAF-evasion Safe Mode, the AutoAuth
+  refresh interval, the embedded MCP server, and evidence-capture defaults.
+- **Active Scanners** — per-module tuning: ParamValidator scan depth and mutation
+  categories, HTTP Verb method list, Rate Limit burst size / concurrency / bypass attempts.
+- **Passive Scanners** — Sensitive Header detection categories and claim/PII redaction.
+
+<p align="center">
+  <img src="assets/settings-general.png" alt="ICARUS General & Integrations settings" width="900">
+</p>

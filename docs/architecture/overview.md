@@ -2,7 +2,8 @@
 
 This section is dedicated to developers and contributors looking to understand, debug, or extend the ICARUS extension.
 
-ICARUS is built primarily on Java 21 utilizing the modern **Burp Suite Montoya API**.
+ICARUS is a Java extension built on the modern **Burp Suite Montoya API**. The build
+targets `--release 19`, so it runs on any Burp with a Java 17+ runtime.
 
 ## High-Level System Design
 

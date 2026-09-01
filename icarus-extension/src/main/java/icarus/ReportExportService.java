@@ -64,7 +64,8 @@ public class ReportExportService {
             Finding f = ce.finding();
             if (!seen.add(f)) continue;
             var record = findings.getRecordByHash(f.similarityHash());
-            if (record == null || record.isSuppressed() || record.getFinding() != f) continue;
+            if (record == null || record.isSuppressed()
+                    || !record.getFinding().similarityHash().equals(f.similarityHash())) continue;
             result.add(f);
         }
         return result;

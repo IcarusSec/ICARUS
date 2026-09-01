@@ -813,12 +813,12 @@ public final class IcarusMcpServer {
                                 annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
                             }
                         } else {
+                            int x = m.get("x") instanceof Number n ? n.intValue() : 0;
+                            int y = m.get("y") instanceof Number n ? n.intValue() : 0;
+                            int width = m.get("width") instanceof Number n ? n.intValue() : 0;
+                            int height = m.get("height") instanceof Number n ? n.intValue() : 0;
                             annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(
-                                    kind,
-                                    ((Number) m.get("x")).intValue(),
-                                    ((Number) m.get("y")).intValue(),
-                                    ((Number) m.get("width")).intValue(),
-                                    ((Number) m.get("height")).intValue()));
+                                    kind, x, y, width, height));
                         }
                     }
                     image = orchestrator.getEvidenceCapture().annotator.applyAnnotations(image, annotations);

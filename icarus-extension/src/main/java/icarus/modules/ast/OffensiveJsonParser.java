@@ -158,7 +158,10 @@ public class OffensiveJsonParser {
         while (p[0] < s.length() && "-+.eE0123456789".indexOf(s.charAt(p[0])) >= 0) {
             p[0]++;
         }
-        
+        if (p[0] == startOffset) {
+            if (p[0] < s.length()) p[0]++;
+            return null;
+        }
         String numStr = s.substring(startOffset, p[0]);
         return new AstLeaf(startOffset, p[0], numStr, false);
     }

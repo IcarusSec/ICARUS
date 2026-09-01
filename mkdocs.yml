@@ -28,6 +28,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - "ICARUS 1.0 Launch": launch-1.0.md
   - Getting Started: getting_started.md
   - Workflows: workflows.md
   - Features:

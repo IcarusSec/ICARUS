@@ -1,11 +1,11 @@
 <p align="center">
   <img src="./.images/banner.png" alt="ICARUS Banner">
 </p>
-<h1 align="center">ICARUS v1.5.0</h1>
+<h1 align="center">ICARUS 1.0</h1>
 
 <p align="center">
   <a href="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml"><img src="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml/badge.svg" alt="Build"></a>
-  <a href="https://github.com/IcarusSec/ICARUS/releases/latest"><img src="https://img.shields.io/github/v/release/IcarusSec/ICARUS?display_name=tag&sort=semver" alt="Latest release"></a>
+  <a href="https://github.com/IcarusSec/ICARUS/releases/latest"><img src="https://img.shields.io/github/v/release/IcarusSec/ICARUS?display_name=tag" alt="Latest release"></a>
   <a href="https://github.com/IcarusSec/ICARUS/blob/main/LICENSE"><img src="https://img.shields.io/github/license/IcarusSec/ICARUS" alt="License"></a>
 </p>
 

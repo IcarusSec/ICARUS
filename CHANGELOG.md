@@ -10,11 +10,16 @@ Full release notes (with complete detail) live on the
 
 _Nothing yet._
 
-## [1.5.0] - 2026-08-31
+## [1.0.0] - 2026-09-01 — Official Launch
 
-Report Profiles architecture, an AST-based mutation engine, behavioral WAF
-detection and evasion, a much larger MCP tool surface, a Windows build, and a
-long run of stability fixes.
+The first public release of ICARUS. What began as a handful of Bambda scripts
+is now a complete, AI-native offensive pipeline for Burp Suite: aggressive
+parameter testing with behavioral WAF evasion, an embedded MCP server for AI
+agents, a master-detail Evidence Manager, and a dynamic report engine.
+
+This entry captures the state at launch. Versions `0.1.x`–`0.4.0` below are
+pre-1.0 internal development builds, retained for history — they were never
+publicly released.
 
 ### Added
 
@@ -60,7 +65,7 @@ long run of stability fixes.
 - MCP server advertises server-level instructions grounded in what is actually
   implemented, and logs its registered tool list on start.
 - FlatLaf core is bundled into the jar (not just `flatlaf-extras`).
-- Version pinned to `1.5.0` in `Icarus.java`.
+- Version set to `1.0.0` in `Icarus.java` for the public launch.
 
 ### Fixed
 
@@ -104,7 +109,14 @@ long run of stability fixes.
   boolean-based SQLi (`STRING_SQLI`), get real validate/exploit rechecks
   instead of a trusted stored result.
 
-## [1.4.0] - 2026-08-18
+---
+
+## Pre-1.0 internal builds
+
+The releases below predate the public 1.0 launch. They were tagged during
+development and are kept here for historical context only.
+
+### [0.4.0] - 2026-08-18
 
 This major release completely rebuilds the Evidence Manager, ships an embedded Model Context Protocol (MCP) server for AI integration, and vastly upgrades the extension's Evidence Capture UI and HTML/PDF Reporting features.
 
@@ -137,56 +149,56 @@ This major release completely rebuilds the Evidence Manager, ships an embedded M
 - Fixed HotKey registration failures blocking the extension boot sequence.
 - Resolved minor bugs regarding right-click context tracking, auto-updating, and export file paths.
 
-## [1.3.0] - 2026-08-06 — Mnemosyne
+### [0.3.0] - 2026-08-06 — Mnemosyne
 
 A full reporting overhaul, named for the Titaness of Memory: ICARUS now remembers, curates, and formats your evidence instead of just capturing it. Evidence Capture gets a one-click Apply that auto-renders a screenshot and registers the finding straight into the report — fixing a real bug where captured screenshots never actually attached to a generated report once you edited anything — plus offline CWE tagging with typeahead, and a Proxy History import for building evidence without running a scan. New Evidence Manager window (right-click → "Send to Reporter Creation", or the Results tab) previews and edits captured screenshots, drag-and-drop reorders them, and lets you include/exclude a finding from the next report without deleting its evidence. Reports gain a Preview-in-browser step before export, an optional executive summary section, and — new — PDF export via OpenPDF alongside HTML, both sharing one consistent light theme. Also fixes stray passive findings (header checks, error disclosures) silently landing in generated reports despite never being sent to Evidence Capture, and a PDF page-break bug that separated finding descriptions from their own screenshots.
 
-## [1.2.0] - 2026-07-31 — Hecate
+### [0.2.0] - 2026-07-31 — Hecate
 
 AutoAuth: highlight-and-click token capture/injection that replaces Burp Macros — silent background refresh, host-scoped injection targets, persists across restarts. New Passive Error Detector flags HTTP 500+ and verbose error leaks in the background; Smart Evidence Capture pre-fills evidence from detected issues; toast notifications for background findings. Evidence capture QOL: a real working Ctrl+P hotkey (Command Palette-visible), smarter binary payload handling (Hex Dump/Keep Original/Truncate), Copy to Clipboard, more annotation shortcuts. Rate Limit Tester gets a real global Max RPS throttle and audit log export. Also fixes a ParamValidator false-positive on 4xx responses and a Spacebar-hold-to-pan focus-stealing bug, and bumps the vendored montoya-api dependency to 2026.7.
 
-## [1.1.7] - 2026-07-30 — Daedalus: Argos Panoptes — Cloak & Dagger
+### [0.1.7] - 2026-07-30 — Daedalus: Argos Panoptes — Cloak & Dagger
 
 WAF evasion and false-positive elimination for ParamValidator: 401/403 WAF block pages no longer trigger false-positive injection findings, with an EDT-safe throttle prompt on repeated blocks. Intelligent finding synthesis (worst-first rollup per parameter), injection severity tiering, and distinct injection tagging by mutation type. Broadened Akamai CDN detection and expanded SQLite error detection across PHP/Python/raw error codes.
 
-## [1.1.6b] - 2026-07-29 — Daedalus: Argos Panoptes
+### [0.1.6b] - 2026-07-29 — Daedalus: Argos Panoptes
 
 Architectural simplification pass, CWE-200/CWE-209 sensitive-data-leak detection, deep rate-limiting engine improvements, and SQLMap-style real-time verbose logging across all modules.
 
-## [1.1.6a] - 2026-07-29 — Daedalus: Message from Hermes
+### [0.1.6a] - 2026-07-29 — Daedalus: Message from Hermes
 
 Live Logging Architecture: the `IcarusModule` contract now carries a live logger into every module's `run()`, wired through `ScanRunner` to both the Live Log popup and Burp's Output tab. JWT Checker and ParamValidator narrate their active tests step-by-step as they fire. New Verbose Mode toggle (Settings → General, on by default).
 
-## [1.1.6] - 2026-07-29 — Daedalus
+### [0.1.6] - 2026-07-29 — Daedalus
 
 Series opener for the Daedalus line of releases.
 
-## [1.1.5b] - 2026-07-28
+### [0.1.5b] - 2026-07-28
 
 Flameshot-style hotkeys in the evidence image editor, dynamic RPS metrics for rate-limit testing, and substantial UI/rendering fixes for evidence screenshots.
 
-## [1.1.5a] - 2026-07-28 — The First Ascension: Even Bugs Fly
+### [0.1.5a] - 2026-07-28 — The First Ascension: Even Bugs Fly
 
 Evidence-capture bug fixes.
 
-## [1.1.5] - 2026-07-27 — The First Ascension: Flap of Wings
+### [0.1.5] - 2026-07-27 — The First Ascension: Flap of Wings
 
 Fixed a config-persistence bug that could corrupt suppression rules/custom payload lists after restart. JWT Checker now confirms before sending active tampering requests, with an optional claim-redaction toggle. Fixed Swing threading issues in the scan progress UI. "Run All Modules" no longer fires Postman Export automatically; Postman Export now actually saves to a chosen file with overwrite confirmation; HTML report generation prompts for a save location instead of silently reusing the evidence folder.
 
-## [1.1.4] - 2026-07-27 — The First Ascension
+### [0.1.4] - 2026-07-27 — The First Ascension
 
 Initial unified Burp Suite interface for ICARUS modules: smart evidence capture with full payload logging and manual evidence popups, the Rate Limit Tester, and automated scanning from the extension UI.
 
-[Unreleased]: https://github.com/IcarusSec/ICARUS/compare/v1.5.0...HEAD
-[1.5.0]: https://github.com/IcarusSec/ICARUS/compare/v1.4.0...v1.5.0
-[1.4.0]: https://github.com/IcarusSec/ICARUS/compare/v1.3...v1.4.0
-[1.3.0]: https://github.com/IcarusSec/ICARUS/compare/v1.2...v1.3
-[1.2.0]: https://github.com/IcarusSec/ICARUS/compare/v1.1.7...v1.2
-[1.1.7]: https://github.com/IcarusSec/ICARUS/compare/v1.1.6b...v1.1.7
-[1.1.6b]: https://github.com/IcarusSec/ICARUS/compare/v1.1.6a...v1.1.6b
-[1.1.6a]: https://github.com/IcarusSec/ICARUS/compare/v1.1.6...v1.1.6a
-[1.1.6]: https://github.com/IcarusSec/ICARUS/compare/v1.1.5b...v1.1.6
-[1.1.5b]: https://github.com/IcarusSec/ICARUS/releases/tag/v1.1.5b
-[1.1.5a]: https://github.com/IcarusSec/ICARUS/releases
-[1.1.5]: https://github.com/IcarusSec/ICARUS/releases
-[1.1.4]: https://github.com/IcarusSec/ICARUS/releases
+[Unreleased]: https://github.com/IcarusSec/ICARUS/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/IcarusSec/ICARUS/releases/tag/v1.0.0
+[0.4.0]: https://github.com/IcarusSec/ICARUS/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/IcarusSec/ICARUS/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/IcarusSec/ICARUS/compare/v0.1.7...v0.2.0
+[0.1.7]: https://github.com/IcarusSec/ICARUS/compare/v0.1.6b...v0.1.7
+[0.1.6b]: https://github.com/IcarusSec/ICARUS/compare/v0.1.6a...v0.1.6b
+[0.1.6a]: https://github.com/IcarusSec/ICARUS/compare/v0.1.6...v0.1.6a
+[0.1.6]: https://github.com/IcarusSec/ICARUS/compare/v0.1.5b...v0.1.6
+[0.1.5b]: https://github.com/IcarusSec/ICARUS/releases/tag/v0.1.5b
+[0.1.5a]: https://github.com/IcarusSec/ICARUS/releases/tag/v0.1.5a
+[0.1.5]: https://github.com/IcarusSec/ICARUS/releases/tag/v0.1.5
+[0.1.4]: https://github.com/IcarusSec/ICARUS/releases/tag/v0.1.4

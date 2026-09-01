@@ -81,7 +81,7 @@ public class VerboseErrorDetector {
         Pattern.compile("(?i)SyntaxError:.*"),
         Pattern.compile("(?i)UnhandledPromiseRejection"),
         Pattern.compile("(?i)Caused by:"),
-        Pattern.compile("(?i)at .* \\((?:.*/)*.*:\\d+:\\d+\\)"), // V8 stacktrace
+        Pattern.compile("(?i)at [^()]*\\([^()]*:\\d+:\\d+\\)"), // V8 stacktrace (linear: no nested quantifier — see java/redos)
 
         // C# / ASP.NET
         Pattern.compile("(?i)System\\.\\w+Exception"),
@@ -111,5 +111,22 @@ public class VerboseErrorDetector {
             if (m.find()) return "Framework/Language Error: " + m.group();
         }
         return null;
+    }
+
+    /** `java -cp build_manual/libs/icarus-<version>.jar icarus.core.VerboseErrorDetector` — match + ReDoS self-check. */
+    public static void main(String[] args) {
+        assert getVerboseErrorMatch("at fn (/srv/app/index.js:10:5)") != null : "valid V8 frame must still match";
+        assert getVerboseErrorMatch("ORA-00933: something") != null;
+        assert getVerboseErrorMatch("<html>ok</html>") == null;
+
+        // The V8 pattern must be linear: a crafted body that never completes the frame must
+        // not backtrack exponentially. Was: (?:.*/)*.* — catastrophic on 'at  (' + many '/'.
+        String evil = "at  (" + "/".repeat(60_000);
+        long start = System.nanoTime();
+        getVerboseErrorMatch(evil);
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        assert ms < 1_000 : "V8 stacktrace regex backtracked for " + ms + "ms on adversarial input (ReDoS)";
+
+        System.out.println("VerboseErrorDetector self-check passed (run with -ea to enforce).");
     }
 }

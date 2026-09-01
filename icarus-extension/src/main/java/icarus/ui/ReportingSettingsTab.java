@@ -9,9 +9,9 @@ import icarus.report.DefaultReportProfileManager;
 import icarus.report.PreviewService;
 import icarus.report.ReportProfileManager;
 import icarus.report.model.*;
-import com.icarus.ui.reportprofile.layout.*;
-import com.icarus.ui.reportprofile.sections.*;
-import com.icarus.ui.reportprofile.components.*;
+import icarus.ui.reportprofile.layout.*;
+import icarus.ui.reportprofile.sections.*;
+import icarus.ui.reportprofile.components.*;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;

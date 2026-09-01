@@ -1,0 +1,7 @@
+# Default owner for everything in the repo.
+*                                               @IcarusSec
+
+# Security-sensitive areas — require an explicit review.
+/icarus-extension/src/main/java/icarus/mcp/**   @IcarusSec
+/.github/workflows/**                            @IcarusSec
+/SECURITY.md                                     @IcarusSec

@@ -604,15 +604,6 @@ public class EvidenceManagerTab {
 
             @Override
             public void mouseReleased(MouseEvent e) {
-                if (e.getButton() == MouseEvent.BUTTON1 && !isDragStarted[0] && dragStartPoint[0] != null) {
-                    double dist = e.getPoint().distance(dragStartPoint[0]);
-                    if (dist <= 5) {
-                        EvidenceCapture.CapturedEvidence ce = ceRef[0];
-                        if (ce != null && ce.image() != null) {
-                            SwingUtilities.invokeLater(() -> showExpandedImageModal(ce.image(), ce.finding().type()));
-                        }
-                    }
-                }
                 dragStartPoint[0] = null;
             }
         });

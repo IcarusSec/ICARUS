@@ -3,28 +3,38 @@ package icarus.modules.ast;
 import java.nio.charset.StandardCharsets;
 
 public class OffensiveJsonParser {
-    
+
+    /**
+     * Hard cap on object/array nesting — see {@link icarus.core.JsonParser#MAX_DEPTH}. This
+     * recursive-descent parser runs on attacker-influenced HTTP bodies; without the bound,
+     * deeply nested input ({@code [[[[…]]]]}) is a StackOverflowError instead of a parse failure.
+     */
+    static final int MAX_DEPTH = 512;
+
     public static OffensiveAstRoot parse(byte[] payload) {
         String text = new String(payload, StandardCharsets.UTF_8);
         int[] pos = {0};
         skipWhitespace(text, pos);
-        AstNode root = parseValue(text, pos);
+        AstNode root = parseValue(text, pos, 0);
         return new OffensiveAstRoot(root, payload);
     }
-    
+
     private static void skipWhitespace(String s, int[] p) {
         while (p[0] < s.length() && Character.isWhitespace(s.charAt(p[0]))) {
             p[0]++;
         }
     }
-    
-    private static AstNode parseValue(String s, int[] p) {
+
+    private static AstNode parseValue(String s, int[] p, int depth) {
+        if (depth > MAX_DEPTH) {
+            throw new IllegalArgumentException("JSON nesting too deep (> " + MAX_DEPTH + ")");
+        }
         skipWhitespace(s, p);
         if (p[0] >= s.length()) return null;
-        
+
         char c = s.charAt(p[0]);
-        if (c == '{') return parseObject(s, p);
-        if (c == '[') return parseArray(s, p);
+        if (c == '{') return parseObject(s, p, depth);
+        if (c == '[') return parseArray(s, p, depth);
         if (c == '"') return parseString(s, p);
         if (s.startsWith("true", p[0])) { 
             int start = p[0];
@@ -44,7 +54,7 @@ public class OffensiveJsonParser {
         return parseNumber(s, p);
     }
     
-    private static AstObject parseObject(String s, int[] p) {
+    private static AstObject parseObject(String s, int[] p, int depth) {
         int startOffset = p[0];
         AstObject obj = new AstObject(startOffset, -1);
         p[0]++; // '{'
@@ -66,8 +76,8 @@ public class OffensiveJsonParser {
             skipWhitespace(s, p);
             if (p[0] < s.length() && s.charAt(p[0]) == ':') p[0]++;
             
-            AstNode value = parseValue(s, p);
-            
+            AstNode value = parseValue(s, p, depth + 1);
+
             AstProperty prop = new AstProperty(propStart, value != null ? value.getEndOffset() : p[0], key, value);
             obj.getProperties().add(prop);
             
@@ -83,7 +93,7 @@ public class OffensiveJsonParser {
         return obj;
     }
     
-    private static AstArray parseArray(String s, int[] p) {
+    private static AstArray parseArray(String s, int[] p, int depth) {
         int startOffset = p[0];
         AstArray arr = new AstArray(startOffset, -1);
         p[0]++; // '['
@@ -96,7 +106,7 @@ public class OffensiveJsonParser {
         }
         
         while (p[0] < s.length()) {
-            AstNode value = parseValue(s, p);
+            AstNode value = parseValue(s, p, depth + 1);
             if (value != null) {
                 arr.getElements().add(value);
             }
@@ -164,5 +174,22 @@ public class OffensiveJsonParser {
         }
         String numStr = s.substring(startOffset, p[0]);
         return new AstLeaf(startOffset, p[0], numStr, false);
+    }
+
+    /** `java -cp build_manual/libs/icarus-<version>.jar icarus.modules.ast.OffensiveJsonParser`
+     *  — parse a small object and prove deeply nested input fails cleanly. */
+    public static void main(String[] args) {
+        java.nio.charset.Charset u8 = StandardCharsets.UTF_8;
+        assert parse("{\"a\":[1,2,{\"b\":\"c\"}]}".getBytes(u8)).getRootNode() != null
+                : "basic object must parse to a non-null root";
+
+        String deep = "[".repeat(MAX_DEPTH + 50) + "]".repeat(MAX_DEPTH + 50);
+        boolean threw = false;
+        try { parse(deep.getBytes(u8)); }
+        catch (IllegalArgumentException e) { threw = true; }
+        catch (StackOverflowError e) { threw = false; }
+        assert threw : "deeply nested JSON must throw IllegalArgumentException, not overflow the stack";
+
+        System.out.println("OffensiveJsonParser self-check passed (run with -ea to enforce).");
     }
 }

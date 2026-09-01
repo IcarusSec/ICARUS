@@ -341,6 +341,24 @@ public final class IcarusMcpServer {
         authToken = null;
     }
 
+    // ── Tool-argument guards ────────────────────────────────────────────────
+    // The schema validator is a permissive stub (see IcarusJsonSchemaValidator), so tool
+    // handlers must not trust arg shapes: a missing or wrong-typed arg would otherwise be a
+    // ClassCastException/NPE surfaced as an opaque 500. These return a clean isError result.
+
+    /** A required string arg, or {@code null} if missing / blank / not a string. */
+    private static String reqStr(McpSchema.CallToolRequest request, String key) {
+        return request.arguments() != null
+                && request.arguments().get(key) instanceof String s && !s.isBlank() ? s : null;
+    }
+
+    /** Standard "bad or missing argument" tool error. */
+    private static McpSchema.CallToolResult badArg(String key) {
+        return McpSchema.CallToolResult.builder()
+                .addTextContent("Missing or invalid required argument: " + key)
+                .isError(true).build();
+    }
+
     private McpServerFeatures.SyncToolSpecification listFindingsTool() {
         var inputSchema = new McpSchema.JsonSchema("object",
                 Map.of("severity_filter", Map.of(
@@ -379,7 +397,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -403,7 +422,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -438,8 +458,10 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
-            String reason = (String) request.arguments().get("reason");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
+            String reason = reqStr(request, "reason");
+            if (reason == null) return badArg("reason");
             orchestrator.suppressFinding(hash, reason);
             return McpSchema.CallToolResult.builder().addTextContent("Suppressed " + hash).build();
         });
@@ -455,7 +477,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             orchestrator.unsuppressFinding(hash);
             return McpSchema.CallToolResult.builder().addTextContent("Unsuppressed " + hash).build();
         });
@@ -554,7 +577,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String url = (String) request.arguments().get("url");
+            String url = reqStr(request, "url");
+            if (url == null) return badArg("url");
             HttpRequestResponse result;
             try {
                 result = api.http().sendRequest(HttpRequest.httpRequestFromUrl(url));
@@ -581,7 +605,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -677,7 +702,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             List<Object> evidence = new ArrayList<>();
             try {
                 for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
@@ -777,12 +803,13 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
             }
-            String imageBase64 = (String) request.arguments().get("image_base64");
+            String imageBase64 = reqStr(request, "image_base64");
             Object rawCaption = request.arguments().get("caption");
             String caption = rawCaption instanceof String s ? s : "";
 
@@ -903,7 +930,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
             String caption = (String) request.arguments().get("caption");
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
@@ -924,7 +952,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
             boolean included = Boolean.TRUE.equals(request.arguments().get("included"));
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
@@ -945,8 +974,10 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
-            String targetHash = (String) request.arguments().get("target_hash");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
+            String targetHash = reqStr(request, "target_hash");
+            if (targetHash == null) return badArg("target_hash");
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
             Finding target = orchestrator.getFindingByHash(targetHash);
@@ -968,7 +999,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
             orchestrator.getEvidenceCapture().removeCaptured(ce);
@@ -1529,7 +1561,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String name = (String) request.arguments().get("name");
+            String name = reqStr(request, "name");
+            if (name == null) return badArg("name");
             icarus.core.KnowledgeBaseEntry entry = orchestrator.getKnowledgeBaseEntry(name);
 
             if (entry == null) {
@@ -1569,7 +1602,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -1615,7 +1649,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -1754,7 +1789,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String chainId = (String) request.arguments().get("chain_id");
+            String chainId = reqStr(request, "chain_id");
+            if (chainId == null) return badArg("chain_id");
             int sep = chainId.indexOf("::");
             if (sep < 0) {
                 return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::path').").isError(true).build();

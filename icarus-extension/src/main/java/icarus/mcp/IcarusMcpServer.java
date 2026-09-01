@@ -48,9 +48,10 @@ import java.util.Map;
  * build has no dependency resolver.
  *
  * <p>Off by default (config key {@code mcp.enabled}, toggled in Settings). Bound to 127.0.0.1
- * only AND gated by a per-start SecureRandom bearer token ({@link #authToken()}) plus an
- * {@code Origin} allowlist — loopback binding alone is not a boundary on a multi-user or
- * otherwise shared host. The token is shown in the Settings → MCP card and Burp's output log.
+ * only AND gated by a persistent SecureRandom bearer token ({@link #authToken()}, rotatable via
+ * {@link #regenerateToken()}) plus an {@code Origin} allowlist — loopback binding alone is not a
+ * boundary on a multi-user or otherwise shared host. The token is shown in the Settings → MCP
+ * card and Burp's output log.
  *
  * <p>JSON mapping uses the SDK's own {@link JacksonMcpJsonMapper} (correct record&lt;-&gt;JSON
  * round-tripping) rather than hand-rolling one against this repo's {@link JsonParser} — but
@@ -71,11 +72,15 @@ public final class IcarusMcpServer {
     private McpSyncServer server;
     private int port = -1;
 
+    /** Extension-data key under which the persistent bearer token is stored. */
+    private static final String TOKEN_KEY = "mcp.authToken";
+
     /**
-     * Bearer token required on every MCP request. Regenerated on each {@link #start(int)} with a
-     * 32-byte SecureRandom value; surfaced in the Settings → MCP card and in Burp's output log so
-     * the analyst can paste it into their MCP client config. Loopback binding alone is not a
-     * boundary — any other local process (or local user on a shared host) can reach the port.
+     * Bearer token required on every MCP request. Generated once (32-byte SecureRandom), stored in
+     * extension data under {@link #TOKEN_KEY} and reused across restarts so the analyst pastes it
+     * into their MCP client config only once; rotate with {@link #regenerateToken()}. Surfaced in
+     * the Settings → MCP card and Burp's output log. Loopback binding alone is not a boundary —
+     * any other local process (or local user on a shared host) can reach the port.
      */
     private volatile String authToken;
 
@@ -278,6 +283,26 @@ public final class IcarusMcpServer {
         return authToken;
     }
 
+    /**
+     * Rotates the persistent bearer token. Clients must update their config with the new value.
+     * If the server is running it is restarted so the new token takes effect. Returns the new token.
+     */
+    public synchronized String regenerateToken() {
+        byte[] b = new byte[32];
+        new java.security.SecureRandom().nextBytes(b);
+        String fresh = java.util.HexFormat.of().formatHex(b);
+        api.persistence().extensionData().setString(TOKEN_KEY, fresh);
+        api.logging().logToOutput("ICARUS MCP auth token regenerated: " + fresh);
+        if (isRunning()) {
+            int p = port;
+            stop();
+            start(p);
+        } else {
+            authToken = fresh;
+        }
+        return authToken;
+    }
+
     /** Starts on an ephemeral port (0 = OS-assigned), same as historical behavior. */
     public synchronized void start() {
         start(0);
@@ -291,9 +316,15 @@ public final class IcarusMcpServer {
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
-            byte[] tokenBytes = new byte[32];
-            new java.security.SecureRandom().nextBytes(tokenBytes);
-            authToken = java.util.HexFormat.of().formatHex(tokenBytes);
+            // Persistent token: generated once, kept in extension data, reused across restarts
+            // so a client only pastes it into its config once. Rotate with regenerateToken().
+            authToken = api.persistence().extensionData().getString(TOKEN_KEY);
+            if (authToken == null || authToken.isBlank()) {
+                byte[] tokenBytes = new byte[32];
+                new java.security.SecureRandom().nextBytes(tokenBytes);
+                authToken = java.util.HexFormat.of().formatHex(tokenBytes);
+                api.persistence().extensionData().setString(TOKEN_KEY, authToken);
+            }
 
             transportProvider = new IcarusMcpTransportProvider(
                     msg -> api.logging().logToError(msg), jsonMapper, "/mcp", authToken);

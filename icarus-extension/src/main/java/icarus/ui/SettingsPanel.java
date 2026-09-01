@@ -136,14 +136,25 @@ public class SettingsPanel {
         cardMcp.addFormRow(headerPanel);
 
         // Bearer token: MCP clients must send `Authorization: Bearer <token>`. Read-only,
-        // selectable so it can be copied; regenerated every time the server starts.
+        // selectable so it can be copied. Persistent across restarts — paste it into the client
+        // config once; use "Regenerate" to rotate it (clients then need the new value).
         JTextField mcpTokenField = new JTextField(mcpServer.authToken() == null ? "" : mcpServer.authToken());
         mcpTokenField.setEditable(false);
         mcpTokenField.setColumns(40);
+        JButton btnRegenToken = new JButton(I18n.t("settings.button.regen_mcp_token", "Regenerate"));
+        btnRegenToken.addActionListener(e -> {
+            if (JOptionPane.showConfirmDialog(rootPanel,
+                    I18n.t("settings.mcp.regen_confirm", "Rotate the MCP auth token? Every MCP client config must be updated with the new token."),
+                    I18n.t("settings.button.regen_mcp_token", "Regenerate"), JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                mcpTokenField.setText(mcpServer.regenerateToken());
+            }
+        });
         JPanel mcpTokenPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         mcpTokenPanel.setOpaque(false);
         mcpTokenPanel.add(new JLabel(I18n.t("settings.label.mcp_token", "Auth token (Authorization: Bearer …):") + " "));
         mcpTokenPanel.add(mcpTokenField);
+        mcpTokenPanel.add(Box.createRigidArea(new Dimension(8, 0)));
+        mcpTokenPanel.add(btnRegenToken);
         cardMcp.addFormRow(mcpTokenPanel);
 
         JSpinner spinMcpPort = new JSpinner(new SpinnerNumberModel(config.getInt("mcp.port", 61337), 1024, 65535, 1));

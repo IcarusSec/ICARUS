@@ -3,7 +3,10 @@ package icarus.mcp;
 import burp.api.montoya.MontoyaApi;
 
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import java.awt.Dimension;
 import java.lang.reflect.InvocationTargetException;
 
 /**
@@ -17,15 +20,34 @@ public final class HumanApprovalGate {
 
     private HumanApprovalGate() {}
 
+    /** Hard cap on the detail text shown in the dialog — a huge/crafted string could otherwise
+     *  push the Approve/Deny buttons off-screen or bury what is actually being approved. */
+    private static final int MAX_DETAILS_CHARS = 4000;
+
     /** @return true if the analyst clicked Approve; false on Deny, or if the dialog couldn't be shown. */
     public static boolean requestApproval(MontoyaApi api, String title, String details) {
+        String shown = details == null ? "" : details;
+        if (shown.length() > MAX_DETAILS_CHARS) {
+            shown = shown.substring(0, MAX_DETAILS_CHARS) + "\n… [truncated " + (shown.length() - MAX_DETAILS_CHARS) + " chars]";
+        }
+        final String body = shown;
+
         boolean[] approved = {false};
-        Runnable show = () -> approved[0] = JOptionPane.showConfirmDialog(
-                api.userInterface().swingUtils().suiteFrame(),
-                details,
-                "ICARUS — Approval Required: " + title,
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+        Runnable show = () -> {
+            JTextArea area = new JTextArea(body);
+            area.setEditable(false);
+            area.setLineWrap(true);
+            area.setWrapStyleWord(true);
+            area.setCaretPosition(0);
+            JScrollPane pane = new JScrollPane(area);
+            pane.setPreferredSize(new Dimension(560, 320));
+            approved[0] = JOptionPane.showConfirmDialog(
+                    api.userInterface().swingUtils().suiteFrame(),
+                    pane,
+                    "ICARUS — Approval Required: " + title,
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.WARNING_MESSAGE) == JOptionPane.YES_OPTION;
+        };
 
         if (SwingUtilities.isEventDispatchThread()) {
             show.run();

@@ -41,14 +41,35 @@ libs/
 # Compiled class files (never tracked; build output goes to build_manual/)
 *.class
 
+# Secrets / keys — never commit
+.env
+.env.*
+*.pem
+*.key
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pkcs12
+id_rsa
+id_ed25519
+*.token
+credentials*.json
+secrets.*
+
+# Graphify knowledge-graph caches & dated snapshots (ephemeral, regenerated on scan)
+graphify-out/cache/
+graphify-out/202*/
+
 # Agent working notes / scratch
 HANDOFF*.md
 /Main*.java
 
 # Anthropic Claude
 .claude/
-CLAUDE.md
 PLAN.md
+# NOTE: CLAUDE.md is intentionally tracked — it is project instructions checked
+# into the repo, not local scratch. Do not add it back here.
 # Added by code-review-graph
 .code-review-graph/
 

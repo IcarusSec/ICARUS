@@ -76,3 +76,13 @@ PLAN.md
 
 # Debug build (local only)
 icarus-extension/build_debug.sh
+
+# graphify caches and dated snapshots — regenerable, keep only the current graph
+graphify-out/cache/
+graphify-out/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+graphify-out/.graphify_analysis.json
+graphify-out/.graphify_ast.json
+graphify-out/.graphify_chunk_*.json
+graphify-out/.graphify_detect.json
+graphify-out/.graphify_extract.json
+graphify-out/.graphify_semantic.json

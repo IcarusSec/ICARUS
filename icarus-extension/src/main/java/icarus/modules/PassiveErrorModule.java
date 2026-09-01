@@ -68,7 +68,12 @@ public final class PassiveErrorModule implements IcarusModule {
                     .build());
         }
 
-        String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(response.bodyToString());
+        // Pre-filter before the full body-string copy + ~35-regex pass: a 500+ always warrants
+        // the check; otherwise only if the raw bytes carry a cheap error sentinel. Short-circuits
+        // the common 200-OK-no-error response, which is the bulk of proxied traffic.
+        String verboseMatch = (status >= 500 || VerboseErrorDetector.mightContainVerboseError(response.body()))
+                ? VerboseErrorDetector.getVerboseErrorMatch(response.bodyToString())
+                : null;
         if (verboseMatch != null) {
             findings.add(Finding.builder(name(), "VERBOSE_ERROR_LEAK")
                     .description("Verbose error leak detected on `" + path + "`:\n\n" + verboseMatch)

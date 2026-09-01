@@ -148,6 +148,71 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
         return img;
     }
 
+    /** Renders a block of free text (e.g. sqlmap / nuclei / curl output the agent ran to confirm a
+     *  finding) into a single-column evidence image, styled like {@link #renderTextToImage} so it
+     *  sits next to the auto-rendered traffic shots without looking foreign. Monospace, no syntax
+     *  colouring, overflow clipped with the same "··· more lines truncated ···" marker. */
+    public BufferedImage renderCodeToImage(String code, String title) {
+        int imgWidth = 1600;
+        String[] lines = (code == null ? "" : code).replace("\t", "    ").split("\n", -1);
+
+        int cardY = 85;
+        int padding = 20;
+        int calculatedHeight = cardY + 54 + lines.length * LINE_HEIGHT + padding;
+        int imgHeight = Math.min(MAX_IMAGE_HEIGHT, Math.max(300, calculatedHeight));
+
+        EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Catppuccin"));
+
+        BufferedImage img = new BufferedImage(imgWidth, imgHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_LCD_HRGB);
+
+        g.setColor(cs.background());
+        g.fillRect(0, 0, imgWidth, imgHeight);
+
+        g.setColor(cs.headerBg());
+        g.fillRect(0, 0, imgWidth, 70);
+        g.setColor(cs.divider());
+        g.drawLine(0, 70, imgWidth, 70);
+
+        int titleX = drawHeaderLogo(g, 70);
+        g.setColor(cs.titleText());
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
+        g.drawString("ICARUS  ·  " + (title == null || title.isBlank() ? "External Tool Output" : title)
+                + projectNameSuffix(), titleX, 42);
+
+        int cardWidth = imgWidth - padding * 2;
+        int cardHeight = imgHeight - cardY - padding;
+        Color cardColor = new Color(
+                Math.min(255, cs.background().getRed() + 8),
+                Math.min(255, cs.background().getGreen() + 10),
+                Math.min(255, cs.background().getBlue() + 12));
+        g.setColor(cardColor);
+        g.fillRoundRect(padding, cardY, cardWidth, cardHeight, 12, 12);
+        g.setColor(cs.divider());
+        g.drawRoundRect(padding, cardY, cardWidth, cardHeight, 12, 12);
+
+        Shape originalClip = g.getClip();
+        g.setClip(padding, cardY, cardWidth, cardHeight);
+        g.setFont(EvidenceCapture.MONO_FONT);
+        int maxLines = (cardHeight - 54) / LINE_HEIGHT;
+        int toDraw = Math.min(lines.length, Math.max(0, maxLines));
+        int curY = cardY + 54;
+        for (int i = 0; i < toDraw; i++) {
+            g.setColor(cs.text());
+            g.drawString(lines[i], padding + 24, curY);
+            curY += LINE_HEIGHT;
+        }
+        if (toDraw < lines.length) {
+            g.setColor(cs.dim());
+            g.drawString("··· (" + (lines.length - toDraw) + " more lines truncated) ···", padding + 24, curY);
+        }
+        g.setClip(originalClip);
+        g.dispose();
+        return img;
+    }
+
     /** Pixel height of one drawn line — shared with {@link EvidenceAutoRenderer} so it can compute
      *  tight per-line annotation anchors (a specific header, the status line) that land exactly
      *  where drawColumnLines actually put the text, instead of a caller guessing. */
@@ -339,54 +404,12 @@ public Color colorForMethod(String method, EvidenceColorScheme cs) {
 
 public String formatBody(byte[] body, String contentType) {
         if (body == null || body.length == 0) return "";
-        
-        boolean isBinary = false;
-        if (contentType != null) {
-            String ct = contentType.toLowerCase();
-            if (ct.contains("image/") || ct.contains("application/octet-stream") || 
-                ct.contains("application/pdf") || ct.contains("application/zip") ||
-                ct.contains("audio/") || ct.contains("video/")) {
-                isBinary = true;
-            }
-        }
-        
-        if (!isBinary) {
-            int unprintable = 0;
-            for (int i = 0; i < Math.min(body.length, 512); i++) {
-                byte b = body[i];
-                if (b == 0 || (b < 32 && b != '\n' && b != '\r' && b != '\t')) {
-                    unprintable++;
-                }
-            }
-            if (unprintable > 2) isBinary = true;
-        }
-
-        if (isBinary) {
-            Object[] options = {"Hex Dump", "Keep Original", "Truncate"};
-            int choice = JOptionPane.showOptionDialog(api.userInterface().swingUtils().suiteFrame(),
-                    "This payload appears to be binary. How should it be formatted?",
-                    "Binary Payload Detected", JOptionPane.DEFAULT_OPTION,
-                    JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
-
-            if (choice == 0) {
-                return "\n--- BINARY PAYLOAD (HEX DUMP) ---\n" + capture.imageRenderer.toHexDump(body);
-            } else if (choice == 1) {
-                String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
-                return "\n" + JsonParser.formatJsonString(text);
-            } else if (choice == 2) {
-                int limit = Math.min(body.length, EvidenceCapture.BINARY_TRUNCATE_BYTES);
-                byte[] truncated = Arrays.copyOf(body, limit);
-                String suffix = limit < body.length
-                        ? "\n... [truncated, showing " + limit + " of " + body.length + " bytes]"
-                        : "";
-                return "\n--- BINARY PAYLOAD (HEX DUMP, TRUNCATED) ---\n" + capture.imageRenderer.toHexDump(truncated) + suffix;
-            }
-            // Dialog dismissed without a choice — same safe default as before (omit).
-            return "\n[Binary Payload Omitted]";
-        } else {
-            String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
-            return "\n" + capLines(JsonParser.formatJsonString(text));
-        }
+        // Render the body verbatim (decoded UTF-8, pretty-printed if it's JSON), capped by
+        // line count. No binary sniffing / "Hex Dump vs Keep Original" prompt — that popped a
+        // modal dialog mid-render (hanging headless/MCP report generation) and its only
+        // sensible outcome was this path anyway. capLines still bounds a pathological body.
+        String text = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        return "\n" + capLines(JsonParser.formatJsonString(text));
     }
 
     /** formatJsonString pretty-prints one token per line, so a large minified JSON body

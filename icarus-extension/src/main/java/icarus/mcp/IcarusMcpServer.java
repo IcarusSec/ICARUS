@@ -48,8 +48,10 @@ import java.util.Map;
  * build has no dependency resolver.
  *
  * <p>Off by default (config key {@code mcp.enabled}, toggled in Settings). Bound to 127.0.0.1
- * only, unauthenticated — loopback binding is the security boundary, so any local process can
- * already reach it and a bearer token would add nothing but friction to an AI agent's config.
+ * only AND gated by a persistent SecureRandom bearer token ({@link #authToken()}, rotatable via
+ * {@link #regenerateToken()}) plus an {@code Origin} allowlist — loopback binding alone is not a
+ * boundary on a multi-user or otherwise shared host. The token is shown in the Settings → MCP
+ * card and Burp's output log.
  *
  * <p>JSON mapping uses the SDK's own {@link JacksonMcpJsonMapper} (correct record&lt;-&gt;JSON
  * round-tripping) rather than hand-rolling one against this repo's {@link JsonParser} — but
@@ -70,6 +72,18 @@ public final class IcarusMcpServer {
     private McpSyncServer server;
     private int port = -1;
 
+    /** Extension-data key under which the persistent bearer token is stored. */
+    private static final String TOKEN_KEY = "mcp.authToken";
+
+    /**
+     * Bearer token required on every MCP request. Generated once (32-byte SecureRandom), stored in
+     * extension data under {@link #TOKEN_KEY} and reused across restarts so the analyst pastes it
+     * into their MCP client config only once; rotate with {@link #regenerateToken()}. Surfaced in
+     * the Settings → MCP card and Burp's output log. Loopback binding alone is not a boundary —
+     * any other local process (or local user on a shared host) can reach the port.
+     */
+    private volatile String authToken;
+
     /**
      * Server-level guidance sent to every connected client — grounded in exactly what's
      * implemented below, not aspirational. Written to stop the two failure modes actually
@@ -88,7 +102,7 @@ public final class IcarusMcpServer {
 
             - Adopt a strictly technical, formal, analytical, business-risk-oriented tone.
             - Follow the sequential flow of steps 1 through 7 rigorously.
-            - Actively use the ICARUS MCP toolset (`icarus.mcp`) and ColorStrike (`mcp-colorstrike`) for inspection, manipulation, and configuration.
+            - Actively use the ICARUS MCP toolset (`icarus.mcp`) for inspection, manipulation, and configuration.
             - Sanitize strings and metadata containing special characters to avoid breaking the PDF/HTML renderer.
 
             ---
@@ -122,6 +136,7 @@ public final class IcarusMcpServer {
             2. **Granular Section Management (`update_report_config`):**
                - **Editing Mandatory Sections:** update the Markdown content of mandatory sections (*Executive Summary*, *Document Control*, *Scope*) via `update_section`. *(Mandatory sections accept content updates but are protected against deletion.)*
                - **Adding Custom Sections:** add sections relevant to the engagement's scope (e.g. *Solution Architecture*, *Specific Methodology*, *UAT Environment Limitations*) via `add_section`, specifying `title`, `content`, and optionally `index`.
+               - **Markdown support in section `content`:** CommonMark — headings, **bold**, `code`, fenced ``` blocks, ordered/unordered lists — plus GFM pipe tables (`| a | b |` / `|---|---|`). Pipe tables render as real tables in the **HTML** report only; the **PDF** renderer drops them to plain text. If the deliverable is a PDF (or you don't know), write tabular data as nested bullet lists, not pipe tables. An *Attack Narrative* / kill-chain section reads best as `### Step N — <title>` headings with bullets under each, not a table.
                - **Removing Optional Sections:** remove sections not applicable to this test via `remove_section`.
 
             3. **Standardizing Vulnerability Templates (`finding_templates`):**
@@ -129,20 +144,32 @@ public final class IcarusMcpServer {
 
             ---
 
-            ### 3. Cross-Analysis & High-Precision Traffic Inspection (ColorStrike)
+            ### 3. Cross-Analysis & Traffic Inspection
 
             1. **Initial Findings Mapping:**
-               - Run `list_findings` in ICARUS to extract every alert and vulnerability initially detected in the project.
+               - Run `list_findings` to enumerate every finding in the project (metadata only — type, severity, path, hash).
 
-            2. **Detailed Inspection with ColorStrike (`mcp-colorstrike`):**
-               - When you need to dissect complex flows (e.g. JWT tokens, WebSocket sessions, serialized payloads, GraphQL APIs):
-                 - Use `get_requests_by_color` or `get_proxy_http_history` to isolate flows the operator highlighted.
-                 - Use `get_request_by_index` to inspect complete requests and responses (authorization headers, cookies, and raw body, untruncated).
-                 - Use `send_request` or `create_repeater_tab` to replay and modify requests in Burp Suite.
+            2. **Read the actual traffic:**
+               - `get_finding` with a hash returns the finding's captured HTTP request AND response (headers + body,
+                 body capped at ~16KB) plus its metadata. Read these to understand what was sent, what came back,
+                 and whether the signal is real — don't reason from the one-line description alone.
+               - `get_finding_traffic` returns the SAME request/response with NO truncation — call it when
+                 get_finding's output was marked truncated and you need the rest (pass part="request"/"response"
+                 to fetch only one half).
+               - `validate_finding` / `exploit_finding` also return the freshly-sent request and fresh response
+                 body, so you can diff old vs new.
+               - `rescan_finding` re-runs the scan against that endpoint for a clean re-capture.
 
             ---
 
             ### 4. Active Validation & Impact Escalation (PoC)
+
+            0. **Rebind stale findings first:** `validate_finding` / `exploit_finding` resend a finding's captured
+               request, which needs a live HTTP service. Findings restored from an older project file, or whose
+               target was down at save time, come back service-less and fail. Before triaging those, call
+               `rescan_finding` with the hash — it resends the finding's own request (right method/body/host) and
+               re-runs the active scan, producing fresh findings bound to a live service. It's also the only way to
+               re-confirm a `STRING_SSRF` (one-time Collaborator payload — not directly replayable).
 
             1. **Practical Escalation Protocol:**
                - Prove the maximum real impact of the flaw (don't report purely theoretically):
@@ -174,11 +201,33 @@ public final class IcarusMcpServer {
 
             1. **Linking Proof of Concept:**
                - Make sure every valid finding in `get_reportable_findings` has its evidence HTTP requests/responses properly attached.
+               - `capture_evidence` attaches evidence to a finding. It has three input modes, in precedence order:
+                 - `image_base64` — a screenshot you already have (browser screenshot of the exploited page, a rendered dashboard, etc.). Any format ImageIO reads.
+                 - `code` — the VERBATIM output of an external tool you ran to validate the finding (sqlmap, nuclei, ffuf, a curl transcript, a decoded JWT, a snippet of vulnerable source). ICARUS renders it into a monospace evidence image and attaches it like any screenshot. Use `title` to label it. Paste the real output, don't summarise.
+                 - neither — ICARUS auto-renders the evidence image from the finding's own captured request/response (the default, preferred path).
+               - Attach as many evidence items per finding as the PoC needs — e.g. the auto-rendered traffic shot PLUS a `code` block with the sqlmap run PLUS a browser screenshot. They render in the finding's card in `list_evidence` order (reorder with `reorder_evidence`).
+               - `get_evidence` / `list_evidence` show what's already attached; `set_evidence_caption`, `set_evidence_included`, `remove_evidence` manage them.
 
-            2. **Visual Exploitation Highlighting:**
-               - Configure anchor points using selectors (`request_payload`, `response_payload`, `request_header:<name>`).
-               - Add visual annotations: arrows (`ARROW`) and boxes (`BOX`) pointing exactly at the exploited parameter or payload.
-               - Keep irrelevant HTTP headers collapsed to keep the PoC clean and readable.
+            2. **Annotation (optional).** ICARUS-rendered evidence images ship clean by default. If a box/arrow genuinely
+               helps a reader find the proof (a payload buried in a busy response, say), pass `annotations` — otherwise
+               skip it; a clean traffic shot is fine. When you do annotate:
+               - **Target with `anchor`, never guessed x/y.** Pick the tightest anchor that covers the proof:
+                 - injection findings (STRING_SQLI, STRING_XSS, STRING_CMDI, ...): `response_payload`, or `request_payload` for a body parameter.
+                 - single-header findings (VERSION_DISCLOSURE, ...): `response_header:<name>` (lowercase).
+                 - missing-header findings (MISSING_*): `response_headers` (the whole block — the header is absent, nothing to point at).
+                 - server errors (SERVER_ERROR): `response_status_line`.
+                 - rate-limit findings: `rps` and/or `blocked`.
+               - **Pattern:** one `BOX` on the target anchor plus one `ARROW` on the same anchor — the arrow is
+                 auto-pointed at the region's edge, so `[{"kind":"BOX","anchor":"response_payload"},{"kind":"ARROW","anchor":"response_payload"}]`
+                 is the normal case. Add a `CROP` (listed LAST) only to trim a large noisy body.
+               - To hide a secret/token/PII, do NOT paint over it — redact it in the `request_text`/`response_text`
+                 override (replace the value in place, keep every other line verbatim). There is no black-box kind.
+               - `capture_evidence`'s result echoes the anchor names that actually existed for that render — read it.
+                 If the anchor you wanted is absent (e.g. `response_payload` fell outside a long truncated body),
+                 fall back to the next-loosest anchor that IS listed (`response_headers` → `response_column`), or add a
+                 `CROP` around the relevant lines so the payload is on-screen, then re-run with the tighter anchor.
+               - Only fall back to raw x/y for an `image_base64` screenshot you took yourself (no anchors exist for those);
+                 estimate from the pixels you can see.
 
             ---
 
@@ -229,6 +278,31 @@ public final class IcarusMcpServer {
         return isRunning() ? "Running on http://127.0.0.1:" + port + "/mcp" : "Stopped";
     }
 
+    /** The bearer token clients must send ({@code Authorization: Bearer <token>}); null while stopped. */
+    public synchronized String authToken() {
+        return authToken;
+    }
+
+    /**
+     * Rotates the persistent bearer token. Clients must update their config with the new value.
+     * If the server is running it is restarted so the new token takes effect. Returns the new token.
+     */
+    public synchronized String regenerateToken() {
+        byte[] b = new byte[32];
+        new java.security.SecureRandom().nextBytes(b);
+        String fresh = java.util.HexFormat.of().formatHex(b);
+        api.persistence().extensionData().setString(TOKEN_KEY, fresh);
+        api.logging().logToOutput("ICARUS MCP auth token regenerated: " + fresh);
+        if (isRunning()) {
+            int p = port;
+            stop();
+            start(p);
+        } else {
+            authToken = fresh;
+        }
+        return authToken;
+    }
+
     /** Starts on an ephemeral port (0 = OS-assigned), same as historical behavior. */
     public synchronized void start() {
         start(0);
@@ -242,13 +316,23 @@ public final class IcarusMcpServer {
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
+            // Persistent token: generated once, kept in extension data, reused across restarts
+            // so a client only pastes it into its config once. Rotate with regenerateToken().
+            authToken = api.persistence().extensionData().getString(TOKEN_KEY);
+            if (authToken == null || authToken.isBlank()) {
+                byte[] tokenBytes = new byte[32];
+                new java.security.SecureRandom().nextBytes(tokenBytes);
+                authToken = java.util.HexFormat.of().formatHex(tokenBytes);
+                api.persistence().extensionData().setString(TOKEN_KEY, authToken);
+            }
+
             transportProvider = new IcarusMcpTransportProvider(
-                    msg -> api.logging().logToError(msg), jsonMapper, "/mcp");
+                    msg -> api.logging().logToError(msg), jsonMapper, "/mcp", authToken);
 
             McpServerFeatures.SyncToolSpecification[] tools = {
-                    listFindingsTool(), addFindingTool(), getFindingTool(), suppressFindingTool(), unsuppressFindingTool(),
-                    getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(),
-                    getReportableFindingsTool(), triggerScanTool(), generateReportTool(),
+                    listFindingsTool(), addFindingTool(), getFindingTool(), getFindingTrafficTool(), suppressFindingTool(), unsuppressFindingTool(),
+                    getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(), clearAllFindingsTool(),
+                    getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
@@ -268,6 +352,7 @@ public final class IcarusMcpServer {
 
             port = transportProvider.start(requestedPort);
             api.logging().logToOutput("ICARUS MCP server listening on http://127.0.0.1:" + port + "/mcp");
+            api.logging().logToOutput("ICARUS MCP auth token (send as 'Authorization: Bearer <token>'): " + authToken);
             api.logging().logToOutput("ICARUS MCP tools (" + tools.length + "): " + java.util.Arrays.stream(tools)
                     .map(t -> t.tool().name())
                     .collect(java.util.stream.Collectors.joining(", ")));
@@ -284,6 +369,25 @@ public final class IcarusMcpServer {
         transportProvider.stop();
         server = null;
         transportProvider = null;
+        authToken = null;
+    }
+
+    // ── Tool-argument guards ────────────────────────────────────────────────
+    // The schema validator is a permissive stub (see IcarusJsonSchemaValidator), so tool
+    // handlers must not trust arg shapes: a missing or wrong-typed arg would otherwise be a
+    // ClassCastException/NPE surfaced as an opaque 500. These return a clean isError result.
+
+    /** A required string arg, or {@code null} if missing / blank / not a string. */
+    private static String reqStr(McpSchema.CallToolRequest request, String key) {
+        return request.arguments() != null
+                && request.arguments().get(key) instanceof String s && !s.isBlank() ? s : null;
+    }
+
+    /** Standard "bad or missing argument" tool error. */
+    private static McpSchema.CallToolResult badArg(String key) {
+        return McpSchema.CallToolResult.builder()
+                .addTextContent("Missing or invalid required argument: " + key)
+                .isError(true).build();
     }
 
     private McpServerFeatures.SyncToolSpecification listFindingsTool() {
@@ -318,16 +422,58 @@ public final class IcarusMcpServer {
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("get_finding",
                 "Get ICARUS finding detail",
-                "Looks up one ICARUS finding by its similarityHash, returning its full detail.",
+                "Looks up one ICARUS finding by its similarityHash. Returns its full detail INCLUDING the "
+                        + "captured HTTP request and response (headers + body, body truncated if very large) and "
+                        + "the finding's metadata, so you can read the actual traffic and understand what happened.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
             }
-            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findingToMap(finding, null))).build();
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(findingToMap(finding, null, true))).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getFindingTrafficTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
+                       "part", Map.of("type", "string", "description", "\"request\", \"response\", or \"both\" (default). Ask for only what you need.")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("get_finding_traffic",
+                "Get a finding's FULL, untruncated HTTP request/response",
+                "Returns the complete captured request and/or response for a finding — every header and the entire "
+                        + "body, with NO truncation (get_finding caps the body at ~16KB). Use this when get_finding's "
+                        + "output was marked truncated and you actually need the rest — e.g. a large JSON/HTML body "
+                        + "you have to inspect to confirm or rule out the finding. It can be big, so pass part=\"request\" "
+                        + "or part=\"response\" to fetch only the half you need.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            if (finding.evidence() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("This finding has no captured traffic.").isError(true).build();
+            }
+            String part = request.arguments().get("part") instanceof String s ? s.toLowerCase() : "both";
+            var rr = finding.evidence();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("hash", hash);
+            out.put("type", finding.type());
+            if (!"response".equals(part) && rr.request() != null) {
+                out.put("request", rr.request().toString());
+            }
+            if (!"request".equals(part) && rr.response() != null) {
+                out.put("response", rr.response().toString());
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
         });
     }
 
@@ -343,8 +489,10 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
-            String reason = (String) request.arguments().get("reason");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
+            String reason = reqStr(request, "reason");
+            if (reason == null) return badArg("reason");
             orchestrator.suppressFinding(hash, reason);
             return McpSchema.CallToolResult.builder().addTextContent("Suppressed " + hash).build();
         });
@@ -360,7 +508,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             orchestrator.unsuppressFinding(hash);
             return McpSchema.CallToolResult.builder().addTextContent("Unsuppressed " + hash).build();
         });
@@ -406,6 +555,32 @@ public final class IcarusMcpServer {
         });
     }
 
+    private McpServerFeatures.SyncToolSpecification clearAllFindingsTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("confirm", Map.of("type", "boolean", "description", "Must be true — this is irreversible.")),
+                List.of("confirm"), false, null, null);
+        var tool = new McpSchema.Tool("clear_all_findings",
+                "Wipe the entire ICARUS findings registry for this project",
+                "Removes EVERY finding — active, passive AND evidence-backed — from this Burp project and overwrites "
+                        + "the persisted project state, so an extension reload or Burp restart starts clean. Captured "
+                        + "evidence screenshots are discarded too; suppression rules are kept. Irreversible — pass "
+                        + "confirm=true. Use when the registry has accumulated stale findings from earlier scans or "
+                        + "sessions (the registry is per-project and survives extension reloads).",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            if (!Boolean.TRUE.equals(request.arguments().get("confirm"))) {
+                return McpSchema.CallToolResult.builder()
+                        .addTextContent("Nothing wiped — call again with confirm=true to proceed.").isError(true).build();
+            }
+            long n = orchestrator.getAllFindingRecords().stream()
+                    .filter(r -> !"DUMMY".equals(r.getFinding().type())).count();
+            orchestrator.clearAllFindings();
+            return McpSchema.CallToolResult.builder()
+                    .addTextContent("Wiped " + n + " findings and all captured evidence from the project registry. Suppression rules kept.").build();
+        });
+    }
+
     private McpServerFeatures.SyncToolSpecification getReportableFindingsTool() {
         var inputSchema = new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null);
         var tool = new McpSchema.Tool("get_reportable_findings",
@@ -433,7 +608,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String url = (String) request.arguments().get("url");
+            String url = reqStr(request, "url");
+            if (url == null) return badArg("url");
             HttpRequestResponse result;
             try {
                 result = api.http().sendRequest(HttpRequest.httpRequestFromUrl(url));
@@ -442,6 +618,52 @@ public final class IcarusMcpServer {
             }
             orchestrator.runScan(result, true);
             return McpSchema.CallToolResult.builder().addTextContent("Scan triggered for " + url).build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification rescanFindingTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings")),
+                List.of("hash"), false, null, null);
+        var tool = new McpSchema.Tool("rescan_finding",
+                "Re-run ICARUS's active scan against the endpoint a finding came from",
+                "Resends the finding's OWN captured request live — correct method, body, headers and target — then runs the full active scan on the "
+                        + "response. Use this to rebind stale injection/SSRF findings to a live HTTP service (so validate_finding/exploit_finding work "
+                        + "afterwards) and to get a fresh Burp Collaborator confirmation for STRING_SSRF, which can't be replayed directly. Unlike "
+                        + "trigger_scan it needs no URL — the target is taken from the finding — but note the captured request still carries the "
+                        + "original payload in one field; the scan mutates every field independently so this is a weird baseline, not a blocker. "
+                        + "Runs asynchronously; poll list_findings for the newly bound results.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
+            Finding finding = orchestrator.getFindingByHash(hash);
+            if (finding == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
+            }
+            if (finding.evidence() == null || finding.evidence().request() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("This finding has no captured request to rescan from.").isError(true).build();
+            }
+            HttpRequest req = withRebuiltService(finding.evidence().request());
+            if (req == null) {
+                return McpSchema.CallToolResult.builder().addTextContent(
+                        "This finding has no target binding and no Host header to rebuild one — use trigger_scan with an explicit URL instead.").isError(true).build();
+            }
+            HttpRequestResponse result;
+            try {
+                result = api.http().sendRequest(req);
+            } catch (Exception e) {
+                return McpSchema.CallToolResult.builder().addTextContent("Resend failed: " + e.getMessage()).isError(true).build();
+            }
+            if (result == null || result.response() == null) {
+                return McpSchema.CallToolResult.builder().addTextContent(
+                        "No response from " + req.httpService().host() + ":" + req.httpService().port() + " — target may be down.").isError(true).build();
+            }
+            orchestrator.runScan(result, true);
+            return McpSchema.CallToolResult.builder().addTextContent(
+                    "Rescan triggered against " + req.method() + " " + req.httpService().host() + ":" + req.httpService().port()
+                            + req.path() + " (from finding " + finding.type() + "). Poll list_findings.").build();
         });
     }
 
@@ -484,7 +706,9 @@ public final class IcarusMcpServer {
                 Path written = orchestrator.generateReport(format, templateVariables);
                 if (written == null) {
                     return McpSchema.CallToolResult.builder()
-                            .addTextContent("No report was written — there are no unsuppressed findings to include.")
+                            .addTextContent("No report was written — the reportable set is empty. The report renders the Evidence "
+                                    + "Manager's included findings (see get_reportable_findings), not the whole findings registry. "
+                                    + "Run capture_evidence for the findings you want in the deliverable first.")
                             .isError(true)
                             .build();
                 }
@@ -509,7 +733,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             List<Object> evidence = new ArrayList<>();
             try {
                 for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
@@ -536,11 +761,14 @@ public final class IcarusMcpServer {
         Map<String, Object> annotationItemSchema = Map.of(
                 "type", "object",
                 "properties", Map.of(
-                        "kind", Map.of("type", "string", "description", "BOX, ARROW, REDACT, or CROP. There is no fill/wash kind — a translucent HIGHLIGHT wash reliably read "
+                        "kind", Map.of("type", "string", "description", "BOX, ARROW, or CROP. There is no fill/wash kind — a translucent HIGHLIGHT wash reliably read "
                                 + "as a muddy smear rather than a pointer to something specific, so it was removed; use a BOX outline (optionally with an ARROW pointing at "
-                                + "it) instead, which is what an unrecognized kind renders as anyway."),
-                        "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — prefer this whenever "
-                                + "one applies (BOX/REDACT/CROP only, not ARROW). Guessed x/y for text whose position depends on rendered string width (e.g. a badge after a "
+                                + "it) instead, which is what an unrecognized kind renders as anyway. There is no REDACT kind either — to hide a secret/token/PII, redact it "
+                                + "in the request_text/response_text override (below); a painted black box leaves the original pixels recoverable underneath."),
+                        "anchor", Map.of("type", "string", "description", "Targets a named region ICARUS actually drew, instead of guessing pixel coordinates — always prefer this. "
+                                + "Works for every kind: BOX frames the region, CROP trims to it, and ARROW is auto-turned into a pointer whose tip lands on the "
+                                + "region's edge (tail ~160px out where there's room) — so `{\"kind\":\"ARROW\",\"anchor\":\"response_payload\"}` just works. Guessed x/y for text "
+                                + "whose position depends on rendered string width (e.g. a badge after a "
                                 + "variable-length label) routinely lands on empty space, since that width isn't knowable from outside the renderer. Available on any "
                                 + "server-rendered image (image_base64 omitted), from tightest to loosest — always prefer the tightest one that covers what you're pointing "
                                 + "at: \"request_payload\" / \"response_payload\" circles the finding's own injected/reflected value and nothing else (present whenever the "
@@ -565,60 +793,70 @@ public final class IcarusMcpServer {
                         "height", Map.of("type", "integer", "description", "For ARROW, the end point's y offset from y. Ignored if anchor is set.")),
                 "required", List.of("kind"));
 
-        var inputSchema = new McpSchema.JsonSchema("object",
-                Map.of(
-                        "hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"),
-                        "image_base64", Map.of("type", "string", "description", "Optional base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence. "
-                                + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
-                                + "no screenshot is required."),
-                        "request_text", Map.of("type", "string", "description", "Leave unset unless redaction is actually required — the default (the finding's real captured "
-                                + "request, with boilerplate headers already collapsed to a truncation marker) is what a report needs. If you must set this, start from "
-                                + "get_finding/get_evidence's request text and change only what's necessary (e.g. blank out a session token's value in place); keep every "
-                                + "line exactly as captured otherwise. Never replace the request with a summary — that destroys the evidentiary value of the capture. Note: "
-                                + "this override text is used exactly as given, with no automatic header collapsing applied to it."),
-                        "response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only, "
-                                + "and note it also skips the automatic header collapsing. Never summarize or shorten the response."),
-                        "title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."),
-                        "description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."),
-                        "severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."),
-                        "force_1080", Map.of("type", "boolean", "description", "Render at 1920x1080 (true, default) or a narrower size (false), when image_base64 is omitted."),
-                        "caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"),
-                        "annotations", Map.of(
-                                "type", "array",
-                                "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
-                                        + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
-                                        + "Without an anchor: BOX/REDACT are rectangles at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
-                                        + "truncates the final image to that rectangle and should be listed last.",
-                                "items", annotationItemSchema)),
+        Map<String, Object> captureProps = new LinkedHashMap<>();
+        captureProps.put("hash", Map.of("type", "string", "description", "The finding's similarityHash, as returned by list_findings"));
+        captureProps.put("image_base64", Map.of("type", "string", "description", "Optional base64-encoded screenshot (any format ImageIO reads, e.g. PNG/JPEG) to attach as evidence. "
+                + "If omitted, ICARUS renders the evidence image itself from the finding's captured HTTP traffic (or request_text/response_text if given) — "
+                + "no screenshot is required."));
+        captureProps.put("code", Map.of("type", "string", "description", "Optional block of free text — the output of an external tool you ran to confirm the finding "
+                + "(sqlmap, nuclei, ffuf, a curl transcript, a decoded token, a snippet of vulnerable source). ICARUS renders it verbatim into a monospace "
+                + "evidence image and attaches it to the finding, so it lands in the report next to the traffic screenshots. Paste the real output; don't "
+                + "summarise it. Ignored if image_base64 is given. Use 'title' to label it (defaults to \"External Tool Output\")."));
+        captureProps.put("request_text", Map.of("type", "string", "description", "Leave unset unless redaction is actually required — the default (the finding's real captured "
+                + "request, with boilerplate headers already collapsed to a truncation marker) is what a report needs. If you must set this, start from "
+                + "get_finding/get_evidence's request text and change only what's necessary (e.g. blank out a session token's value in place); keep every "
+                + "line exactly as captured otherwise. Never replace the request with a summary — that destroys the evidentiary value of the capture. Note: "
+                + "this override text is used exactly as given, with no automatic header collapsing applied to it."));
+        captureProps.put("response_text", Map.of("type", "string", "description", "Same rule as request_text: leave unset by default. If set, redact specific values in place only, "
+                + "and note it also skips the automatic header collapsing. Never summarize or shorten the response."));
+        captureProps.put("title", Map.of("type", "string", "description", "Overrides the rendered evidence banner title (image_base64 omitted). Defaults to the finding's type."));
+        captureProps.put("description", Map.of("type", "string", "description", "Overrides the rendered evidence banner description (image_base64 omitted). Defaults to the finding's description."));
+        captureProps.put("severity", Map.of("type", "string", "description", "Overrides the rendered evidence banner severity (image_base64 omitted). Defaults to the finding's severity."));
+        captureProps.put("force_1080", Map.of("type", "boolean", "description", "Render at 1920x1080 (true, default) or a narrower size (false), when image_base64 is omitted."));
+        captureProps.put("caption", Map.of("type", "string", "description", "Evidence caption shown under the image in reports"));
+        captureProps.put("annotations", Map.of(
+                "type", "array",
+                "description", "Optional shapes to draw before saving. Prefer targeting a named \"anchor\" (see capture_evidence's response for the available "
+                        + "names) over guessing pixel coordinates — ICARUS knows exactly where it drew the RPS badge or blocked-request marker; you don't. "
+                        + "Without an anchor: BOX is a rectangle at (x,y) sized width x height; ARROW runs from (x,y) to (x+width,y+height); CROP "
+                        + "truncates the final image to that rectangle and should be listed last.",
+                "items", annotationItemSchema));
+        var inputSchema = new McpSchema.JsonSchema("object", captureProps,
                 List.of("hash"), false, null, null);
         var tool = new McpSchema.Tool("capture_evidence",
                 "Capture and annotate ICARUS evidence",
-                "Attaches evidence to a finding for the report, optionally drawing boxes/arrows/highlights/redactions and cropping it first — "
+                "Attaches evidence to a finding for the report, optionally drawing boxes/arrows and cropping it first — "
                         + "the headless equivalent of the Evidence Manager's annotation editor. Pass image_base64 to attach a screenshot you already have, or omit it to "
                         + "have ICARUS render the evidence image itself from the finding's real captured traffic — the normal, preferred path, with no screenshot needed. "
+                        + "Pass 'code' instead to attach the verbatim output of an external validation tool you ran (sqlmap, nuclei, a curl transcript, vulnerable source) as a monospace image. "
                         + "Do not set request_text/response_text unless you specifically need to redact a value; leave them unset otherwise so the report shows the actual "
                         + "capture, headers included. Call get_evidence first to re-annotate an existing screenshot.",
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
             }
-            String imageBase64 = (String) request.arguments().get("image_base64");
+            String imageBase64 = reqStr(request, "image_base64");
             Object rawCaption = request.arguments().get("caption");
             String caption = rawCaption instanceof String s ? s : "";
 
             try {
                 BufferedImage image;
                 Map<String, Rectangle> anchors = new LinkedHashMap<>();
+                String code = request.arguments().get("code") instanceof String s && !s.isBlank() ? s : null;
                 if (imageBase64 != null && !imageBase64.isBlank()) {
                     byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
                     image = ImageIO.read(new ByteArrayInputStream(imageBytes));
                     if (image == null) {
                         return McpSchema.CallToolResult.builder().addTextContent("image_base64 did not decode to a readable image").isError(true).build();
                     }
+                } else if (code != null) {
+                    String title = request.arguments().get("title") instanceof String s ? s : null;
+                    image = orchestrator.getEvidenceCapture().imageRenderer.renderCodeToImage(code, title);
                 } else {
                     image = renderEvidenceImage(finding, request.arguments(), anchors);
                 }
@@ -638,14 +876,27 @@ public final class IcarusMcpServer {
                                                 + (anchors.isEmpty() ? " (none — anchors are only available when ICARUS renders the image itself, i.e. image_base64 was omitted)" : "")
                                 ).isError(true).build();
                             }
-                            annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
+                            if ("ARROW".equals(kind)) {
+                                // A box-shaped anchor makes a useless zero-span arrow along its diagonal.
+                                // Synthesise a real pointer: tip on the anchor's near edge, tail ~160px out
+                                // in whichever horizontal direction has room.
+                                int midY = r.y + r.height / 2;
+                                boolean fromLeft = r.x > 176;
+                                int tipX = fromLeft ? r.x : r.x + r.width;
+                                int tailX = fromLeft ? Math.max(8, r.x - 160)
+                                                     : Math.min(image.getWidth() - 8, r.x + r.width + 160);
+                                annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(
+                                        "ARROW", tailX, midY - 36, tipX - tailX, 36));
+                            } else {
+                                annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height));
+                            }
                         } else {
+                            int x = m.get("x") instanceof Number n ? n.intValue() : 0;
+                            int y = m.get("y") instanceof Number n ? n.intValue() : 0;
+                            int width = m.get("width") instanceof Number n ? n.intValue() : 0;
+                            int height = m.get("height") instanceof Number n ? n.intValue() : 0;
                             annotations.add(new icarus.evidence.EvidenceAnnotator.Annotation(
-                                    kind,
-                                    ((Number) m.get("x")).intValue(),
-                                    ((Number) m.get("y")).intValue(),
-                                    ((Number) m.get("width")).intValue(),
-                                    ((Number) m.get("height")).intValue()));
+                                    kind, x, y, width, height));
                         }
                     }
                     image = orchestrator.getEvidenceCapture().annotator.applyAnnotations(image, annotations);
@@ -710,7 +961,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
             String caption = (String) request.arguments().get("caption");
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
@@ -731,7 +983,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
             boolean included = Boolean.TRUE.equals(request.arguments().get("included"));
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
@@ -752,8 +1005,10 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
-            String targetHash = (String) request.arguments().get("target_hash");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
+            String targetHash = reqStr(request, "target_hash");
+            if (targetHash == null) return badArg("target_hash");
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
             Finding target = orchestrator.getFindingByHash(targetHash);
@@ -775,7 +1030,8 @@ public final class IcarusMcpServer {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String imagePath = (String) request.arguments().get("image_path");
+            String imagePath = reqStr(request, "image_path");
+            if (imagePath == null) return badArg("image_path");
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
             orchestrator.getEvidenceCapture().removeCaptured(ce);
@@ -847,7 +1103,9 @@ public final class IcarusMcpServer {
                 "type", "object",
                 "properties", Map.of(
                         "title", Map.of("type", "string"),
-                        "content", Map.of("type", "string", "description", "Markdown content")),
+                        "content", Map.of("type", "string", "description", "Markdown content. Standard CommonMark plus GFM pipe tables "
+                                + "(| col | col | / |---|---|) — tables render in the HTML report only; in the PDF report a pipe table falls through as "
+                                + "plain text, so for PDF-bound reports use bullet lists instead of tables.")),
                 "required", List.of("title", "content"));
 
         Map<String, Object> findingTemplateSchema = Map.of(
@@ -978,6 +1236,14 @@ public final class IcarusMcpServer {
     }
 
     private static Map<String, Object> findingToMap(Finding finding, FindingRecord record) {
+        return findingToMap(finding, record, false);
+    }
+
+    /** Max body bytes rendered per HTTP message in MCP output — enough to reason over,
+     *  bounded so a huge JS/HTML body can't blow the agent's context. */
+    private static final int MCP_BODY_CAP = 12_288;
+
+    private static Map<String, Object> findingToMap(Finding finding, FindingRecord record, boolean includeTraffic) {
         Map<String, Object> f = new LinkedHashMap<>();
         f.put("module", finding.module());
         f.put("type", finding.type());
@@ -987,11 +1253,29 @@ public final class IcarusMcpServer {
         f.put("path", finding.path());
         f.put("similarityHash", finding.similarityHash());
         f.put("cweIds", finding.cweIds());
+        if (!finding.metadata().isEmpty()) f.put("metadata", finding.metadata());
         if (record != null) {
             f.put("count", record.getCount());
             f.put("suppressed", record.isSuppressed());
         }
+        if (includeTraffic && finding.evidence() != null) {
+            var rr = finding.evidence();
+            if (rr.request() != null) f.put("request", renderMessage(
+                    rr.request().toString(), rr.request().body() == null ? 0 : rr.request().body().length()));
+            if (rr.response() != null) f.put("response", renderMessage(
+                    rr.response().toString(), rr.response().body() == null ? 0 : rr.response().body().length()));
+        }
         return f;
+    }
+
+    /** Full HTTP message text (headers + body), body truncated to {@link #MCP_BODY_CAP} with a
+     *  marker. Montoya's {@code toString()} already gives the raw request/response text. */
+    private static String renderMessage(String full, int bodyLen) {
+        if (full == null) return "";
+        if (full.length() <= MCP_BODY_CAP + 4096) return full;
+        String kept = full.substring(0, MCP_BODY_CAP + 4096);
+        return kept + "\n\n... [truncated by ICARUS MCP — " + full.length() + " chars total, body ~" + bodyLen
+                + " bytes; call get_finding_traffic with this hash for the full, untruncated message]";
     }
 
 private McpServerFeatures.SyncToolSpecification addFindingTool() {
@@ -1077,6 +1361,24 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
      * original). {@code reproduced} is {@code null} whenever there's no reliable way to answer
      * true/false rather than guessing.
      */
+    /**
+     * Ensure a captured request has an {@link burp.api.montoya.http.HttpService} so it can be
+     * resent. Live requests already carry one; findings saved before the codec persisted
+     * host/port come back service-less — rebuild it from the Host header (host:port, secure
+     * iff port 443). Returns null when there's nothing to rebuild from.
+     */
+    private HttpRequest withRebuiltService(HttpRequest req) {
+        if (req.httpService() != null) return req;
+        String hostHeader = req.headerValue("Host");
+        if (hostHeader == null || hostHeader.isBlank()) return null;
+        String h = hostHeader.trim();
+        int colon = h.lastIndexOf(':');
+        String host = colon > 0 ? h.substring(0, colon) : h;
+        int port = 80;
+        try { if (colon > 0) port = Integer.parseInt(h.substring(colon + 1)); } catch (NumberFormatException ignored) {}
+        return req.withService(burp.api.montoya.http.HttpService.httpService(host, port, port == 443));
+    }
+
     private RecheckResult recheckFinding(Finding finding) {
         if (finding.evidence() == null) {
             return new RecheckResult(null, "This finding has no captured request to resend.", null);
@@ -1084,7 +1386,11 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
         long start = System.currentTimeMillis();
         HttpRequestResponse fresh;
         try {
-            fresh = api.http().sendRequest(finding.evidence().request());
+            HttpRequest req = withRebuiltService(finding.evidence().request());
+            if (req == null) {
+                return new RecheckResult(null, "This finding has no target binding (saved by an older ICARUS) and no Host header to rebuild one — re-run the scan to refresh it.", null);
+            }
+            fresh = api.http().sendRequest(req);
         } catch (Exception e) {
             return new RecheckResult(null, "Resend failed: " + e.getMessage(), null);
         }
@@ -1286,7 +1592,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String name = (String) request.arguments().get("name");
+            String name = reqStr(request, "name");
+            if (name == null) return badArg("name");
             icarus.core.KnowledgeBaseEntry entry = orchestrator.getKnowledgeBaseEntry(name);
 
             if (entry == null) {
@@ -1326,7 +1633,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -1345,6 +1653,12 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
             if (result.fresh() != null && result.fresh().response() != null) {
                 out.put("freshStatus", result.fresh().response().statusCode());
                 out.put("freshLength", result.fresh().response().body().length());
+                out.put("freshResponse", renderMessage(result.fresh().response().toString(),
+                        result.fresh().response().body().length()));
+                if (result.fresh().request() != null) {
+                    out.put("sentRequest", renderMessage(result.fresh().request().toString(),
+                            result.fresh().request().body() == null ? 0 : result.fresh().request().body().length()));
+                }
             }
             return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
         });
@@ -1366,7 +1680,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String hash = (String) request.arguments().get("hash");
+            String hash = reqStr(request, "hash");
+            if (hash == null) return badArg("hash");
             Finding finding = orchestrator.getFindingByHash(hash);
             if (finding == null) {
                 return McpSchema.CallToolResult.builder().addTextContent("No finding found for hash: " + hash).isError(true).build();
@@ -1505,7 +1820,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String chainId = (String) request.arguments().get("chain_id");
+            String chainId = reqStr(request, "chain_id");
+            if (chainId == null) return badArg("chain_id");
             int sep = chainId.indexOf("::");
             if (sep < 0) {
                 return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::path').").isError(true).build();

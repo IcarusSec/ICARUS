@@ -20,12 +20,20 @@ public final class JsonParser {
 
     private JsonParser() {}
 
+    /**
+     * Hard cap on object/array nesting. A recursive-descent parser turns deeply nested input
+     * ({@code [[[[…]]]]}) into a StackOverflowError; this converts that into an ordinary
+     * parse failure well before the stack is exhausted. These parsers see attacker-influenced
+     * data (scanned HTTP response bodies, MCP tool payloads), so the bound matters.
+     */
+    static final int MAX_DEPTH = 512;
+
     // ── Parse ───────────────────────────────────────────────────
 
     public static Object parse(String text) {
         int[] pos = {0};
         skipWhitespace(text, pos);
-        return parseValue(text, pos);
+        return parseValue(text, pos, 0);
     }
 
     private static void skipWhitespace(String s, int[] p) {
@@ -34,11 +42,14 @@ public final class JsonParser {
         }
     }
 
-    private static Object parseValue(String s, int[] p) {
+    private static Object parseValue(String s, int[] p, int depth) {
+        if (depth > MAX_DEPTH) {
+            throw new IllegalArgumentException("JSON nesting too deep (> " + MAX_DEPTH + ")");
+        }
         skipWhitespace(s, p);
         char c = s.charAt(p[0]);
-        if (c == '{')  return parseObject(s, p);
-        if (c == '[')  return parseArray(s, p);
+        if (c == '{')  return parseObject(s, p, depth);
+        if (c == '[')  return parseArray(s, p, depth);
         if (c == '"')  return parseString(s, p);
         if (s.startsWith("true", p[0]))  { p[0] += 4; return Boolean.TRUE; }
         if (s.startsWith("false", p[0])) { p[0] += 5; return Boolean.FALSE; }
@@ -46,7 +57,7 @@ public final class JsonParser {
         return parseNumber(s, p);
     }
 
-    private static LinkedHashMap<String, Object> parseObject(String s, int[] p) {
+    private static LinkedHashMap<String, Object> parseObject(String s, int[] p, int depth) {
         var map = new LinkedHashMap<String, Object>();
         p[0]++;
         skipWhitespace(s, p);
@@ -56,7 +67,7 @@ public final class JsonParser {
             String key = parseString(s, p);
             skipWhitespace(s, p);
             p[0]++; // ':'
-            Object value = parseValue(s, p);
+            Object value = parseValue(s, p, depth + 1);
             map.put(key, value);
             skipWhitespace(s, p);
             char c = s.charAt(p[0]);
@@ -66,13 +77,13 @@ public final class JsonParser {
         return map;
     }
 
-    private static ArrayList<Object> parseArray(String s, int[] p) {
+    private static ArrayList<Object> parseArray(String s, int[] p, int depth) {
         var list = new ArrayList<Object>();
         p[0]++;
         skipWhitespace(s, p);
         if (s.charAt(p[0]) == ']') { p[0]++; return list; }
         while (true) {
-            Object value = parseValue(s, p);
+            Object value = parseValue(s, p, depth + 1);
             list.add(value);
             skipWhitespace(s, p);
             char c = s.charAt(p[0]);
@@ -258,6 +269,13 @@ public final class JsonParser {
         assert write(parse("{\"a\":2e2,\"b\":[1,2.5]}")).equals("{\"a\":2e2,\"b\":[1,2.5]}");
         assert formatJsonString("<html><body>x</body></html>").equals("<html><body>x</body></html>")
                 : "non-JSON body must fall back to raw text, not silently become empty";
+
+        // Deeply nested input must fail cleanly (IllegalArgumentException), never StackOverflowError.
+        String deep = "[".repeat(MAX_DEPTH + 50) + "]".repeat(MAX_DEPTH + 50);
+        boolean threw = false;
+        try { parse(deep); } catch (IllegalArgumentException e) { threw = true; } catch (StackOverflowError e) { threw = false; }
+        assert threw : "deeply nested JSON must throw IllegalArgumentException, not overflow the stack";
+
         System.out.println("JsonParser self-check passed (run with -ea to enforce).");
     }
 }

@@ -60,12 +60,10 @@ public final class EvidenceAutoRenderer {
 
         // Mirrors EvidenceImageRenderer.renderTextToImage's card layout metrics exactly, so these
         // anchors point at the actual request/response cards ICARUS drew rather than a guess.
-        // Computed unconditionally (not just when the caller wants outAnchors) — used below to
-        // pick a default annotation baked into every auto-rendered image, not only ones a caller
-        // explicitly annotates. ReportGenerator/PdfReportGenerator call this via the 4-arg
-        // overload (outAnchors=null) to silently fill in evidence for any reportable finding
-        // nobody ran capture_evidence on — that path used to render completely unannotated raw
-        // traffic, which is what kept showing up as "still not annotating anything" in reports.
+        // Handed back via outAnchors so a caller (the MCP capture_evidence tool) can target an
+        // annotation by name; the image itself is returned unannotated. ReportGenerator/
+        // PdfReportGenerator call the 4-arg overload (outAnchors=null) purely to fill in a clean
+        // traffic image for any reportable finding nobody ran capture_evidence on.
         int imgHeight = force1080 ? 1080 : 800;
         int padding = 20;
         int cardY = 85;
@@ -106,49 +104,10 @@ public final class EvidenceAutoRenderer {
 
         if (outAnchors != null) outAnchors.putAll(anchors);
 
-        BufferedImage rendered = capture.imageRenderer.renderTextToImage(reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
-        EvidenceAnnotator.Annotation defaultAnnotation = pickDefaultAnnotation(finding, anchors);
-        return defaultAnnotation == null ? rendered : capture.annotator.applyAnnotations(rendered, java.util.List.of(defaultAnnotation));
-    }
-
-    /**
-     * Chooses one sensible default annotation so every auto-rendered image points at something
-     * specific, even when nobody called capture_evidence to annotate it by hand — the report's
-     * own silent auto-fill (ReportGenerator/PdfReportGenerator, for any reportable finding with
-     * no manually-captured evidence) goes through this same render() and used to come out with
-     * zero annotation at all. Priority: the finding's own payload (almost every injection type)
-     * &gt; the specific header it's about (VERSION_DISCLOSURE and similar single-header findings,
-     * parsed from "&lt;Header&gt; header ..." in the description) &gt; the header block as a whole
-     * (MISSING_* — there's no single line to point at since the header is absent) &gt; the response
-     * status line (SERVER_ERROR, to point at the 500 itself). Returns null when none apply (e.g.
-     * a finding with no captured traffic at all), leaving the image unannotated rather than
-     * boxing something arbitrary.
-     */
-    private static EvidenceAnnotator.Annotation pickDefaultAnnotation(Finding finding, Map<String, Rectangle> anchors) {
-        Rectangle payloadRect = anchors.getOrDefault("response_payload", anchors.get("request_payload"));
-        if (payloadRect != null) return toAnnotation("BOX", payloadRect);
-
-        String headerName = headerNameFromDescription(finding.description());
-        if (headerName != null) {
-            Rectangle headerRect = anchors.getOrDefault("response_header:" + headerName, anchors.get("request_header:" + headerName));
-            if (headerRect != null) return toAnnotation("BOX", headerRect);
-        }
-
-        if (finding.type() != null && finding.type().startsWith("MISSING_")) {
-            Rectangle block = anchors.get("response_headers");
-            if (block != null) return toAnnotation("BOX", block);
-        }
-
-        if ("SERVER_ERROR".equals(finding.type())) {
-            Rectangle statusLine = anchors.get("response_status_line");
-            if (statusLine != null) return toAnnotation("BOX", statusLine);
-        }
-
-        return null;
-    }
-
-    private static EvidenceAnnotator.Annotation toAnnotation(String kind, Rectangle r) {
-        return new EvidenceAnnotator.Annotation(kind, r.x, r.y, r.width, r.height);
+        // Return the clean render. Anchors are computed and handed back (outAnchors) for a caller
+        // that wants to annotate deliberately — we no longer bake in a guessed default box, which
+        // routinely landed on the wrong line or boxed a whole column and just cluttered the report.
+        return capture.imageRenderer.renderTextToImage(reqText, resText, finalTitle, finalDescription, finalSeverity, force1080);
     }
 
     /** Pulls the header name out of a description shaped like "Server header contains version: ..."

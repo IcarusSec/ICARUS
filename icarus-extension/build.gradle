@@ -36,7 +36,7 @@ dependencies {
         exclude group: 'com.networknt', module: 'json-schema-validator'
     }
     
-    implementation 'org.jsoup:jsoup:1.17.2'
+    implementation 'org.jsoup:jsoup:1.23.1'
 }
 
 shadowJar {

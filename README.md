@@ -1,7 +1,13 @@
 <p align="center">
   <img src="./.images/banner.png" alt="ICARUS Banner">
 </p>
-<h1 align="center">ICARUS</h1>
+<h1 align="center">ICARUS v1.5.0</h1>
+
+<p align="center">
+  <a href="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml"><img src="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+  <a href="https://github.com/IcarusSec/ICARUS/releases/latest"><img src="https://img.shields.io/github/v/release/IcarusSec/ICARUS?display_name=tag&sort=semver" alt="Latest release"></a>
+  <a href="https://github.com/IcarusSec/ICARUS/blob/main/LICENSE"><img src="https://img.shields.io/github/license/IcarusSec/ICARUS" alt="License"></a>
+</p>
 
 <p align="center">
   <a href="https://portswigger.net/burp/extender"><img src="https://img.shields.io/badge/BurpSuite-Extension-orange?style=for-the-badge&logo=burpsuite" alt="Burp Suite"></a>
@@ -12,31 +18,22 @@
 
 ---
 
-## 📖 Table of Contents
-- [Overview](#-overview)
-- [Core Features](#-core-features)
-- [Extension Modules](#-extension-modules)
-- [Installation & Compilation](#-installation--compilation)
-- [Usage Guidelines](#-usage-guidelines)
-- [Changelog](CHANGELOG.md)
-- [Disclaimer](#-disclaimer)
-- [License](#-license)
-
----
-
 ## 🎯 Overview
 
-**ICARUS** is a comprehensive, enterprise-grade security testing extension for Burp Suite. Designed to automate and streamline API security assessments, it brings powerful vulnerability detection, intelligent fuzzing, and smart evidence capture directly into your Burp workflow. By centralizing operations within a unified interface, ICARUS accelerates security workflows from discovery to reporting.
+**ICARUS** is a comprehensive, AI-native offensive security testing extension for Burp Suite. Designed to automate and streamline API security assessments, it brings powerful vulnerability detection, intelligent fuzzing, WAF evasion, and a master-detail evidence reporting engine directly into your Burp workflow. 
+
+ICARUS centralizes your offensive operations, accelerating workflows from discovery to the final client report.
 
 ---
 
 ## ✨ Core Features
 
-- **Unified Command Interface:** A centralized control panel (`ICARUS` tab) for configuring all modules, tracking active tasks, and managing vulnerability findings in real-time.
-- **AutoAuth:** Replaces clunky Burp Macros with a highlight-and-click workflow — mark a token in a response as the source, mark where it needs to go in a request, and ICARUS silently keeps it fresh and injected in the background from then on.
-- **Evidence Manager & Reporting:** One-click Apply renders a screenshot and registers the finding straight into the report — no save dialog. Offline CWE tagging with typeahead, a drag-and-drop Evidence Manager to curate and reorder findings, and a browser preview step before exporting a polished HTML or PDF report.
-- **Passive Threat Detection:** Background monitoring that flags server errors and verbose error/stack-trace leaks as they cross the proxy, with a lightweight toast notification so you know to check the Results tab.
-- **Automated Rapid Scanning:** Execute comprehensive security checks against selected HTTP requests with a single click directly from the Burp context menu.
+- **Advanced ParamValidator & WAF Evasion:** Deeply tests JSON bodies, URL parameters, and Form-Urlencoded data. Features behavioral WAF detection that actively triggers an evasion payload jump (utilizing a CRS 4-tuned payload list and advanced GLOB/NOTNULL SQLi bypasses).
+- **Embedded AI Integration (MCP):** ICARUS hosts its own Model Context Protocol (MCP) server over Streamable HTTP. AI agents can directly connect to read traffic, trigger `validate_finding` attacks, and automatically capture visual evidence.
+- **Master-Detail Evidence Manager:** A dedicated UI tab featuring a two-phase visual annotation workflow. Rename, drag-and-drop, and curate your findings. Includes a Retest Mode that visually stamps `FIXED` or `NOT FIXED` banners on evidence.
+- **Dynamic Report Engine:** A flexible Report Profiles architecture. Build your own flow using drag-and-drop sections, write custom Master-Detail Markdown, and export to fully themed HTML or offline OpenPDF reports.
+- **AutoAuth:** Replaces clunky Burp Macros. Highlight-and-click to map tokens, and ICARUS silently refreshes and injects them in the background so your sessions never expire.
+- **Unified Command Interface:** A centralized control panel for configuring all modules, tracking active tasks, and managing vulnerability findings in real-time.
 
 ---
 
@@ -45,124 +42,90 @@
 ICARUS integrates multiple specialized security testing engines into a single cohesive extension. Click to expand each module's technical capabilities:
 
 <details>
-<summary><b>1. JSON Input Validation (ParamValidator)</b></summary>
+<summary><b>1. JSON & URL ParamValidator (with WAF Evasion)</b></summary>
 <br>
-Focuses on rigorous testing of JSON request parameter validation to determine if the backend API processes malformed or malicious inputs that violate the expected schema contract.
-<br>
-<br>
+Focuses on rigorous testing of JSON request parameters, URL query strings, and Form-Urlencoded data to determine if the backend API processes malformed or malicious inputs.
+<br><br>
 
 <p align="center">
-  <img src="./.images/paramval.gif" alt="Json Param Validator Demo" width="900">
+  <img src="./.images/paramval.gif" alt="Param Validator Demo" width="900">
 </p>
 <br>
 
-- **Structural Validation**: Identifies missing enforcement of null values, removed fields, and empty objects/arrays.
-- **Type Confusion**: Tests for unsafe type casting (e.g., passing strings as booleans/integers).
-- **Boundary Testing**: Validates enforcement of limits using empty strings, excessive lengths, and negative boundaries.
-- **Injection Payloads**: Automates the discovery of SQLi, XSS, NoSQL injection, and Path Traversal vulnerabilities.
+- **WAF Evasion Engine:** Behaviorally detects WAF blocks and executes evasion payload jumps using CRS 4-tuned payloads to bypass filters like `libinjection`.
+- **Smart Baseline Diffing:** Accurately detects boolean-based SQLi and subtle state transitions by diffing against non-2xx baselines.
+- **Structural & Boundary Validation**: Identifies missing enforcement of null values, type confusion, and boundary limits.
 </details>
 
 <details>
-<summary><b>2. HTTP Verb Tester (HttpVerbModule)</b></summary>
+<summary><b>2. HTTP Verb Tester</b></summary>
 <br>
-Performs exhaustive HTTP verb validation for API security testing, automatically mutating standard requests using alternate methods (`GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to uncover endpoint misconfigurations.
-<br>
-<br>
+Performs exhaustive HTTP verb validation, automatically mutating requests using alternate methods (`GET`, `HEAD`, `POST`, `OPTIONS`, `TRACE`, etc.) to uncover endpoint misconfigurations.
+<br><br>
 
 <p align="center">
   <img src="./.images/httverb.gif" alt="HTTP Verb Tester Demo" width="900">
 </p>
-<br>
-
-- Automatically adjusts request body content based on the injected HTTP method.
-- Provides deep `OPTIONS` and `Allow` header validation.
-- Detects unsafe `TRACE` reflection vulnerabilities.
 </details>
 
 <details>
-<summary><b>3. JWT / Bearer Token Checker (JwtCheckerModule)</b></summary>
+<summary><b>3. Rate Limit Tester</b></summary>
 <br>
-A robust engine for detecting, parsing, and exploiting JSON Web Tokens (JWTs) and Bearer tokens for critical security flaws.
-
-- **Automated Discovery**: Hunts for JWTs across all standard HTTP headers and cookies.
-- **Algorithm Analysis**: Detects weak configurations (e.g., `alg=none` bypasses) and flags unsafe embedded claims (`jwk`, `jku`, `kid`).
-- **Payload Tampering**: Attempts automatic privilege escalation by manipulating common claims (`admin`, `role`, `scope`).
-- **Signature Attacks**: Tests endpoint resilience against improper signature validation and signature stripping.
-- **Time-based Attacks**: Detects missing `exp`/`iat` claims to prevent token expiration bypasses.
+Executes high-velocity requests to accurately detect, characterize, and attempt bypasses on API rate limiting implementations. Features a heavily concurrent blast engine with smart 429/backoff throttling.
 </details>
 
 <details>
-<summary><b>4. Rate Limit Tester (RateLimitModule)</b></summary>
+<summary><b>4. JWT / Bearer Token Checker</b></summary>
 <br>
-Executes high-velocity requests to accurately detect, characterize, and attempt bypasses on API rate limiting implementations.
-
-- **Burst Detection**: Determines active throttling behaviors and block thresholds.
-- **Highly Configurable**: Granular control over request counts, concurrency, and timing delays.
-- **Advanced Evidence**: Captures precise Requests Per Second (RPS) metrics and timestamps for accurate reporting.
+A robust engine for detecting, parsing, and exploiting JSON Web Tokens (JWTs) and Bearer tokens for critical security flaws (e.g., `alg=none`, signature stripping, missing `exp` claims).
 </details>
 
 <details>
-<summary><b>5. Sensitive Header Scanner (SensitiveHeaderModule)</b></summary>
+<summary><b>5. AutoAuth Module</b></summary>
 <br>
-Passively and actively inspects HTTP responses for sensitive header disclosures or caching misconfigurations that could lead to critical data leakage.
+Replaces Burp's Macros with a highlight-and-click workflow for managing authentication tokens, keeping your sessions alive across multiple sources silently in the background.
 </details>
 
 <details>
-<summary><b>6. Export to Postman (PostmanExportModule)</b></summary>
+<summary><b>6. Passive Error Detector</b></summary>
+<br>
+Runs quietly in the background, flagging HTTP 500+ responses and verbose error/stack-trace leaks (SQL errors, framework tracebacks) as they cross the proxy.
+</details>
+
+<details>
+<summary><b>7. Export to Postman</b></summary>
 <br>
 Streamlines cross-team collaboration by exporting complex, active HTTP requests directly into a standard Postman Collection JSON format.
-
-- Accurately extracts the HTTP method, headers, and intricate URL structures.
-- Secures complex body payloads with proper JSON escaping.
 </details>
 
-<details>
-<summary><b>7. AutoAuth (AutoAuthModule)</b></summary>
-<br>
-Replaces Burp's Macros with a highlight-and-click workflow for managing authentication tokens, so expired sessions never interrupt a testing flow again.
+---
 
-- **Highlight & Click Setup**: Right-click a token value in a response → "Set as Auth Token Source". Right-click a header or JSON field in a request → "Add Auth Token Destination".
-- **Silent Background Refresh**: Detects an expired cached token, quietly re-fetches it from the source request, and injects it into every matching outgoing request.
-- **Host-Scoped Injection**: A token captured from one site can never leak into another site's requests.
-- **Persistent**: Your source/destination mapping survives extension reloads and Burp restarts.
-</details>
+## ⚡ Quick Start (Pre-built JAR)
 
-<details>
-<summary><b>8. Passive Error Detector (PassiveErrorModule)</b></summary>
-<br>
-Runs quietly in the background, flagging HTTP 500+ responses and verbose error/stack-trace leaks (SQL errors, framework tracebacks, etc.) as they cross the proxy — no manual scan required.
-</details>
-
-<details>
-<summary><b>9. Evidence Manager & Reporting</b></summary>
-<br>
-Turns raw HTTP traffic into a client-ready report with minimal manual effort — from capture to a polished HTML or PDF deliverable.
-<br>
-<br>
-
-<p align="center">
-  <img src="./.images/evidence.gif" alt="Smart Evidence Capture Demo" width="900">
-</p>
-<br>
-
-- **Send to Reporter Creation:** right-click any request/response — Repeater, Proxy, Logger, anywhere Burp shows one — or hit Ctrl+P. Automatic detection of verbose error disclosures and unencoded reflections pre-populates the title, description, and severity.
-- **One-Click Apply:** renders the evidence screenshot, saves it, and registers the finding straight into the report — no save dialog, no separate step. A secondary "Annotate First…" option still offers the full image editor (box, arrow, highlight, redact, copy-to-clipboard) for findings that need manual markup.
-- **Offline CWE Tagging:** instant typeahead against a bundled CWE dataset, zero network calls, rendered as a tagged row in the final report.
-- **Import from Proxy History:** pull any past request into the evidence flow without needing to run a scan on it first.
-- **Evidence Manager window** (right-click → "Manage Report Evidence", or the Results tab): live preview of every captured screenshot, drag-and-drop reordering, an include/exclude toggle to leave a finding out of the *next* report without deleting its evidence, and an optional executive summary field.
-- **Preview & Export:** preview the actual rendered report in your browser before committing to a save location, then export as HTML or PDF (via OpenPDF, fully offline) — both share one consistent, readable theme.
-</details>
+Don't want to compile? Grab the latest fat JAR straight from the
+[**Releases page**](https://github.com/IcarusSec/ICARUS/releases/latest) —
+download `icarus-<version>.jar`, then in Burp Suite go to
+**Extensions → Add → extension type: Java** and select the file.
 
 ---
 
 ## 🚀 Installation & Compilation
 
 1. **Compile the Extension**  
-   Run the build script from the `icarus-extension/` directory. This script automatically downloads the required Montoya API dependency, compiles the Java source, and packages the JAR.
+   Run the build script from the `icarus-extension/` directory. This script automatically downloads the required Montoya API dependency, OpenPDF, MCP SDK, and other libraries, packaging them into a single fat JAR.
+
+   ### Linux / macOS
    ```bash
    cd icarus-extension/
    ./build.sh
    ```
+
+   ### Windows (PowerShell)
+   ```powershell
+   cd icarus-extension\
+   powershell -ExecutionPolicy Bypass -File build.ps1
+   ```
+
    *Output will be located at:* `icarus-extension/build_manual/libs/icarus-<version>.jar`
 
 2. **Load into Burp Suite**  
@@ -173,9 +136,22 @@ Turns raw HTTP traffic into a client-ready report with minimal manual effort —
 
 ---
 
+## 📖 Documentation
+
+For a deep dive into ICARUS's capabilities, check out our official documentation:
+- **[Getting Started](docs/getting_started.md)**
+- **[Testing Workflows](docs/workflows.md)**
+- **[Dynamic Reporting Engine](docs/features/reporting.md)**
+- **[Evidence Manager](docs/features/evidence_manager.md)**
+- **[AutoAuth](docs/features/autoauth.md)**
+
+*(See the `docs/` folder for complete technical architecture and module guides).*
+
+---
+
 ## 🛠 Usage Guidelines
 
-- **Configuration:** Navigate to the dedicated **ICARUS** tab in the main Burp Suite interface to configure specific module settings, manage your active tasks, and review detailed findings.
+- **Configuration:** Navigate to the dedicated **ICARUS** tabs (Settings, Evidence Manager, Reporting) in the main Burp Suite interface to configure specific profiles and manage findings.
 - **Execution:** Right-click any HTTP request in the **Repeater**, **Proxy history**, or **Target** scope, navigate to **Extensions → ICARUS**, and select an individual module or choose **Run All Modules** for a full assessment.
 
 ---

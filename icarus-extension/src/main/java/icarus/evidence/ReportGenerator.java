@@ -8,6 +8,7 @@ import icarus.core.ReportTemplateConfig;
 import icarus.core.Severity;
 import icarus.evidence.EvidenceCapture.CapturedEvidence;
 
+import org.commonmark.ext.gfm.tables.TablesExtension;
 import org.commonmark.parser.Parser;
 import org.commonmark.renderer.html.HtmlRenderer;
 
@@ -30,8 +31,11 @@ public final class ReportGenerator {
 
     private final MontoyaApi api;
     private final CweRepository cweRepository = new CweRepository();
-    private final Parser markdownParser = Parser.builder().build();
-    private final HtmlRenderer markdownRenderer = HtmlRenderer.builder().build();
+    // GFM pipe tables in custom report sections — HTML output only (the PDF's MarkdownPdfRenderer
+    // has no table visitor, so tables there still fall through as text).
+    private static final List<org.commonmark.Extension> MARKDOWN_EXTENSIONS = List.of(TablesExtension.create());
+    private final Parser markdownParser = Parser.builder().extensions(MARKDOWN_EXTENSIONS).build();
+    private final HtmlRenderer markdownRenderer = HtmlRenderer.builder().extensions(MARKDOWN_EXTENSIONS).build();
 
     public ReportGenerator(MontoyaApi api) {
         this.api = api;
@@ -372,6 +376,25 @@ public final class ReportGenerator {
                         text-align: left;
                     }
                     .meta-table th { color: var(--text-muted); width: 120px; font-weight: normal; }
+                    /* GFM pipe tables from custom report sections */
+                    .section table, .exec-summary table {
+                        border-collapse: collapse;
+                        margin: 1rem 0;
+                        font-size: 0.92rem;
+                        width: auto;
+                        max-width: 100%%;
+                    }
+                    .section th, .section td, .exec-summary th, .exec-summary td {
+                        padding: 0.45rem 0.7rem;
+                        border: 1px solid var(--border);
+                        text-align: left;
+                        vertical-align: top;
+                    }
+                    .section thead th, .exec-summary thead th {
+                        background-color: var(--card-bg);
+                        color: var(--text);
+                        font-weight: 600;
+                    }
                     .evidence-block { margin-top: 2rem; }
                     .evidence-img {
                         max-width: 100%%;
@@ -428,7 +451,7 @@ public final class ReportGenerator {
                 imgBytes = Files.readAllBytes(Path.of(logoPath));
                 mimeType = logoPath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
             } else {
-                try (var in = ReportGenerator.class.getResourceAsStream("/icarus_logo.png")) {
+                try (var in = ReportGenerator.class.getResourceAsStream("/icarus_banner.png")) {
                     if (in == null) return "";
                     imgBytes = in.readAllBytes();
                     mimeType = "image/png";
@@ -436,7 +459,7 @@ public final class ReportGenerator {
             }
             String base64 = Base64.getEncoder().encodeToString(imgBytes);
             return "<div style=\"text-align: center;\"><img src=\"data:" + mimeType + ";base64," + base64
-                    + "\" style=\"max-width: 200px; margin-bottom: 20px;\"/></div>";
+                    + "\" style=\"max-width: 340px; margin-bottom: 20px;\"/></div>";
         } catch (IOException | RuntimeException e) {
             return "";
         }

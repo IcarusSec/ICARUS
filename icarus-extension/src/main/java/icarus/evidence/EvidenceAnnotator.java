@@ -29,13 +29,17 @@ public class EvidenceAnnotator {
         this.config = config;
     }
 
-    /** One annotation op: BOX/REDACT/CROP are a rectangle at ({@code x},{@code y}) sized
+    /** One annotation op: BOX/CROP are a rectangle at ({@code x},{@code y}) sized
      *  {@code width}x{@code height}; ARROW runs from ({@code x},{@code y}) to
-     *  ({@code x+width},{@code y+height}). There is deliberately no fill/wash kind
-     *  ("HIGHLIGHT") — {@link #paintAnnotation} has no branch for one, so passing that kind
-     *  renders as a plain BOX outline instead: a translucent-yellow wash over anything but a
-     *  tiny, precisely-placed target reliably read as a muddy smear rather than a pointer to
-     *  something specific, and a guessed rectangle from an unattended caller is never that precise. */
+     *  ({@code x+width},{@code y+height}). The MCP {@code capture_evidence} schema deliberately
+     *  does not expose a fill/wash "HIGHLIGHT" kind — a translucent-yellow wash over anything but
+     *  a tiny, precisely-placed target reads as a muddy smear rather than a pointer, and a guessed
+     *  rectangle from a headless caller is never that precise; an unknown kind here renders as a
+     *  plain BOX outline. The interactive {@link EvidencePhase2Dialog} does offer HIGHLIGHT (a
+     *  human places it deliberately), and {@link #paintAnnotation} handles it so both the live
+     *  canvas and the saved image agree. There is no REDACT kind — redaction of a value must be
+     *  done in the source text (request_text/response_text overrides), not by painting a black
+     *  box that a reader can still lift the pixels out from under. */
 public record Annotation(String kind, int x, int y, int width, int height) {}
 
 public java.awt.image.BufferedImage applyAnnotations(java.awt.image.BufferedImage source, java.util.List<EvidenceAnnotator.Annotation> annotations) {
@@ -59,13 +63,18 @@ public java.awt.image.BufferedImage applyAnnotations(java.awt.image.BufferedImag
         g2.dispose();
 
         if (crop == null) return out;
+        // Clamp to the image rather than trusting the caller's rectangle — a headless/agent
+        // caller routinely guesses a CROP that runs off the edge, and getSubimage() throws a
+        // RasterFormatException on a negative origin or a zero/negative size. If there's no
+        // overlap at all, skip the crop and return the fully-annotated image.
         Rectangle bounds = crop.intersection(new Rectangle(0, 0, out.getWidth(), out.getHeight()));
+        if (bounds.width <= 0 || bounds.height <= 0) return out;
         return out.getSubimage(bounds.x, bounds.y, bounds.width, bounds.height);
     }
 
 public void paintAnnotation(Graphics2D g2, Shape s, String kind, Color c) {
-        if ("REDACT".equals(kind)) {
-            g2.setColor(Color.BLACK);
+        if ("HIGHLIGHT".equals(kind)) {
+            g2.setColor(new Color(255, 255, 0, 80));
             g2.fill(s);
         } else if ("ARROW".equals(kind)) {
             g2.setColor(c);
@@ -80,8 +89,10 @@ public void paintAnnotation(Graphics2D g2, Shape s, String kind, Color c) {
 public Shape createArrow(Point from, Point to) {
         double angle = Math.atan2(to.y - from.y, to.x - from.x);
         double length = Math.hypot(to.x - from.x, to.y - from.y);
-        double headLength = Math.min(15, length * 0.6);
-        double headWidth = headLength * 0.65;
+        // Scale the head with the shaft (a fixed 15px head is invisible on a 1920px evidence image),
+        // clamped so a very short arrow still gets a real head and a long one doesn't get a spear.
+        double headLength = Math.max(16, Math.min(length * 0.35, 48));
+        double headWidth = headLength * 0.7;
 
         double baseX = to.x - headLength * Math.cos(angle);
         double baseY = to.y - headLength * Math.sin(angle);

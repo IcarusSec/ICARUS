@@ -5,6 +5,7 @@ import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import icarus.core.Finding;
 import icarus.core.IcarusModule;
+import icarus.core.I18n;
 import icarus.core.ModuleConfig;
 import icarus.modules.PassiveErrorModule;
 import icarus.modules.SensitiveHeaderModule;
@@ -13,9 +14,13 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -33,6 +38,13 @@ public final class ScanRunner {
     private final List<IcarusModule> modules;
     private final ModuleConfig config;
     private final ExecutorService executor;
+    // Passive scans run on a SEPARATE, bounded executor: Orchestrator submits one per proxied
+    // HTTP response, and Burp can proxy faster than ~35 regexes over each body run. The default
+    // single-thread executor's unbounded LinkedBlockingQueue turned that into a slow memory
+    // leak (each queued task pins an HttpResponseReceived) and a backlog behind any interactive
+    // scan. Passive analysis is best-effort background work — when we fall behind, dropping the
+    // oldest queued response is acceptable. The interactive executor above is untouched.
+    private final ThreadPoolExecutor passiveExecutor;
     private final BiConsumer<List<Finding>, Boolean> onFindings;
 
     // The single-thread executor means only one of these ever runs at a time — this just
@@ -101,6 +113,15 @@ public final class ScanRunner {
             t.setDaemon(true);
             return t;
         });
+        this.passiveExecutor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(64),
+                r -> {
+                    var t = new Thread(r, "ICARUS-passive");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.DiscardOldestPolicy());
     }
 
     /**
@@ -124,6 +145,9 @@ public final class ScanRunner {
         stopCurrent();
         if (executor != null) {
             executor.shutdownNow();
+        }
+        if (passiveExecutor != null) {
+            passiveExecutor.shutdownNow();
         }
     }
 
@@ -165,19 +189,24 @@ public final class ScanRunner {
         });
     }
 
-    /** Runs the passive (background) modules against a response, off the request-handling thread. */
+    /** Runs the passive (background) modules against a response, off the request-handling thread.
+     *  Best-effort: on a bounded queue, the oldest pending response is dropped when we're behind. */
     public void runPassiveScan(HttpResponseReceived response, Consumer<List<Finding>> onPassiveFindings) {
-        runAsync(() -> {
-            for (var module : modules) {
-                List<Finding> passiveFindings = null;
-                if (module instanceof SensitiveHeaderModule shm) {
-                    passiveFindings = shm.analyzeResponse(response, config);
-                } else if (module instanceof PassiveErrorModule pem) {
-                    passiveFindings = pem.analyzeResponse(response, config);
+        passiveExecutor.execute(() -> {
+            try {
+                for (var module : modules) {
+                    List<Finding> passiveFindings = null;
+                    if (module instanceof SensitiveHeaderModule shm) {
+                        passiveFindings = shm.analyzeResponse(response, config);
+                    } else if (module instanceof PassiveErrorModule pem) {
+                        passiveFindings = pem.analyzeResponse(response, config);
+                    }
+                    if (passiveFindings != null && !passiveFindings.isEmpty()) {
+                        onPassiveFindings.accept(passiveFindings);
+                    }
                 }
-                if (passiveFindings != null && !passiveFindings.isEmpty()) {
-                    onPassiveFindings.accept(passiveFindings);
-                }
+            } catch (Exception e) {
+                api.logging().logToError("ICARUS passive scan failed: " + e);
             }
         });
     }
@@ -197,36 +226,8 @@ public final class ScanRunner {
         log.accept("════════════════════════════════════════════════");
         log.accept("ICARUS scan started — " + target.request().method() + " " + target.request().path());
 
-        if (config.getBool("waf.detect_akamai", true) && target.response() != null) {
-            // ponytail: one-liner header check via stream matching. Ceiling: exact header string matching.
-            boolean isAkamai = target.response().headers().stream()
-                .anyMatch(h -> h.name().toLowerCase().startsWith("ak-") ||
-                               h.name().toLowerCase().startsWith("x-akamai-") ||
-                               (h.name().equalsIgnoreCase("server") && h.value().toLowerCase().contains("akamai")));
-
-            if (isAkamai) {
-                int[] choiceHolder = { -1 };
-                runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(api.userInterface().swingUtils().suiteFrame(),
-                        "Akamai WAF detected in baseline response!\nAre you sure you want to run default payloads?",
-                        "WAF Detected",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.WARNING_MESSAGE,
-                        null,
-                        new String[]{"Run Default", "Run Safe Mode (Safelist)"},
-                        "Run Safe Mode (Safelist)"));
-                int choice = choiceHolder[0];
-
-                if (choice == 1) {
-                    log.accept("User chose SAFE MODE (WAF bypass)");
-                    String safePayloads = config.getString("waf.safelist_payloads", "' OR 1=1--");
-                    config.set("pv.payload_sqli", safePayloads);
-                    config.set("pv.payload_xss", safePayloads);
-                    config.set("pv.payload_path_traversal", safePayloads);
-                    config.set("pv.payload_nosqli", safePayloads);
-                    config.set("pv.payload_format_string", safePayloads);
-                }
-            }
-        }
+        WafDecision decision = maybePromptForWaf(target, log);
+        ModuleConfig scanConfig = safeModeConfig(decision);
 
         for (var module : modules) {
             skipRequested = false;
@@ -240,7 +241,7 @@ public final class ScanRunner {
             log.accept("──── Running: " + module.name() + " ────");
 
             try {
-                var moduleFindings = module.run(target, config, verboseLogger(log, config));
+                var moduleFindings = module.run(target, scanConfig, verboseLogger(log, config));
                 findings.addAll(moduleFindings);
                 log.accept(module.name() + " → " + moduleFindings.size() + " findings");
             } catch (Exception e) {
@@ -263,9 +264,13 @@ public final class ScanRunner {
         };
         logger.accept("ICARUS → Running " + module.name());
         icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " starting, isManual=" + isManual);
+        WafDecision decision = module.sendsActivePayloads()
+                ? maybePromptForWaf(target, logger)
+                : new WafDecision(false, Optional.empty(), false);
+        ModuleConfig scanConfig = safeModeConfig(decision);
         List<Finding> findings;
         try {
-            findings = module.run(target, config, verboseLogger(logger, config));
+            findings = module.run(target, scanConfig, verboseLogger(logger, config));
         } catch (Exception e) {
             icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " threw: " + stackTrace(e));
             logger.accept("ICARUS → " + module.name() + " failed: " + e);
@@ -276,6 +281,106 @@ public final class ScanRunner {
         String status = Thread.currentThread().isInterrupted() ? "stopped by user" : "complete";
         icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " " + status + " — " + findings.size() + " findings");
         logger.accept("ICARUS → " + module.name() + " " + status + " — " + findings.size() + " findings.");
+    }
+
+    /** Outcome of the baseline WAF fingerprint + user prompt. */
+    private record WafDecision(boolean wafDetected, Optional<icarus.modules.WafVendor> vendor, boolean safeMode) {}
+
+    private static final String[] SAFE_MODE_DISABLED_TECHNIQUES =
+            {"pv.sqli", "pv.sqli_time", "pv.xss", "pv.path_traversal", "pv.cmdi", "pv.ssti"};
+
+    /**
+     * Fingerprints the baseline response for a WAF/CDN and, if one is found, asks the user
+     * whether to run the full payload set or a scoped Safe Mode. Prompts once per scan.
+     * Returns a no-op decision when detection is disabled or there's no baseline response.
+     */
+    private WafDecision maybePromptForWaf(HttpRequestResponse target, Consumer<String> log) {
+        boolean enabled = config.getBool("waf.detect", config.getBool("waf.detect_akamai", true));
+        if (!enabled || target.response() == null) {
+            return new WafDecision(false, Optional.empty(), false);
+        }
+
+        Optional<icarus.modules.WafVendor> vendor = icarus.modules.WafFingerprint.detect(target.response());
+        boolean baselineLooksBlocked = icarus.modules.WafFingerprint.looksBlocked(target.response());
+
+        // Active Probing: If baseline isn't blocked, send a malicious probe to see if a WAF intercepts it.
+        // This triggers silent WAFs (like Coraza/ModSecurity) that don't brand normal 200 OK responses.
+        if (!baselineLooksBlocked) {
+            try {
+                burp.api.montoya.http.message.requests.HttpRequest probeRequest = target.request()
+                        .withAddedParameters(burp.api.montoya.http.message.params.HttpParameter.urlParameter("icarus_waf_probe", "<script>alert(1)</script> union select 1,2,3--"));
+                HttpRequestResponse probeResult = api.http().sendRequest(probeRequest);
+                if (probeResult.response() != null) {
+                    Optional<icarus.modules.WafVendor> probeVendor = icarus.modules.WafFingerprint.detect(probeResult.response());
+                    boolean probeLooksBlocked = icarus.modules.WafFingerprint.looksBlocked(probeResult.response());
+                    
+                    if (probeVendor.isPresent() && probeLooksBlocked) {
+                        vendor = probeVendor;
+                        baselineLooksBlocked = true; // Force prompt
+                    } else if (probeResult.response().statusCode() == 403 || probeResult.response().statusCode() == 406) {
+                        // Behavioral fallback: 403 on a malicious probe implies a WAF/filter.
+                        vendor = Optional.of(icarus.modules.WafVendor.GENERIC);
+                        baselineLooksBlocked = true; // Force prompt
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore probe failure and proceed normally
+            }
+        }
+
+        if (vendor.isEmpty()) {
+            return new WafDecision(false, Optional.empty(), false);
+        }
+
+        String friendlyName = friendlyVendorName(vendor.get());
+
+        // A WAF/CDN in front of the target (Cloudflare especially) is extremely common and
+        // usually isn't actively blocking. Only interrupt with the Safe-Mode prompt when the
+        // baseline response itself looks like a block page; otherwise just note it and run
+        // normally — the ParamValidator 403 backoff prompt is the safety net if it does start
+        // blocking mid-scan.
+        if (!baselineLooksBlocked) {
+            log.accept(I18n.t("settings.waf.log.present", friendlyName));
+            return new WafDecision(true, vendor, false);
+        }
+
+        int[] choiceHolder = { -1 };
+        runOnEdtAndWait(() -> choiceHolder[0] = JOptionPane.showOptionDialog(
+                api.userInterface().swingUtils().suiteFrame(),
+                I18n.t("settings.waf.modal.msg", friendlyName),
+                I18n.t("settings.waf.modal.title"),
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE,
+                null,
+                new String[]{ I18n.t("settings.waf.modal.run_default"), I18n.t("settings.waf.modal.safe_mode") },
+                I18n.t("settings.waf.modal.safe_mode")));
+
+        // Default to Safe Mode on anything that isn't an explicit "Run Default" (index 0).
+        boolean safeMode = choiceHolder[0] != 0;
+        log.accept(I18n.t("settings.waf.log.detected", friendlyName,
+                I18n.t(safeMode ? "settings.waf.log.safe_mode" : "settings.waf.log.default_mode")));
+        return new WafDecision(true, vendor, safeMode);
+    }
+
+    private static String friendlyVendorName(icarus.modules.WafVendor vendor) {
+        return switch (vendor.name()) {
+            case "CLOUDFLARE"        -> "Cloudflare";
+            case "AKAMAI"            -> "Akamai";
+            case "AWS_WAF"           -> "AWS WAF";
+            case "IMPERVA_INCAPSULA" -> "Imperva Incapsula";
+            case "F5_BIGIP_ASM"      -> "F5 BIG-IP";
+            default                  -> "a WAF/CDN";
+        };
+    }
+
+    /** Shared scan config for a decision: the real config unless Safe Mode, then a scoped copy. */
+    private ModuleConfig safeModeConfig(WafDecision decision) {
+        if (!decision.safeMode()) return config;
+        ModuleConfig scanConfig = config.copy();
+        scanConfig.set("pv.depth", "LIGHT");
+        scanConfig.set("pv.max_mutations", 0);
+        for (String t : SAFE_MODE_DISABLED_TECHNIQUES) scanConfig.set(t, false);
+        return scanConfig;
     }
 
     private static String stackTrace(Throwable t) {

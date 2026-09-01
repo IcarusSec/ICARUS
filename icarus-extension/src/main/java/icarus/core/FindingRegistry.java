@@ -2,10 +2,15 @@ package icarus.core;
 
 import burp.api.montoya.MontoyaApi;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -22,9 +27,13 @@ public final class FindingRegistry {
     private final ModuleConfig config;
     private final Consumer<Runnable> uiDispatcher;
 
+    private static final DateTimeFormatter AUDIT_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /** Bound the retained audit log; the full stream still goes to {@code api.logging()}. */
+    private static final int MAX_AUDIT_ENTRIES = 1000;
+
     private final Map<String, FindingRecord> activeFindings = new ConcurrentHashMap<>();
-    private final List<String> auditLog = new ArrayList<>();
-    private final List<Consumer<List<FindingRecord>>> listeners = new ArrayList<>();
+    private final Deque<String> auditLog = new ArrayDeque<>();
+    private final List<Consumer<List<FindingRecord>>> listeners = new CopyOnWriteArrayList<>();
 
     // Set while a listener fan-out is already queued on the UI thread but hasn't run yet.
     // A rate-limit blast (or any bulk scan) can call notifyListenersOfUpdate() hundreds of
@@ -50,10 +59,12 @@ public final class FindingRegistry {
     }
 
     public void logAudit(String action) {
-        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String entry = "[" + timestamp + "] " + action;
+        String entry = "[" + LocalDateTime.now().format(AUDIT_TS) + "] " + action;
         synchronized (auditLog) {
-            auditLog.add(entry);
+            auditLog.addLast(entry);
+            while (auditLog.size() > MAX_AUDIT_ENTRIES) {
+                auditLog.removeFirst();
+            }
         }
         api.logging().logToOutput(entry);
     }
@@ -118,6 +129,29 @@ public final class FindingRegistry {
     }
 
     /**
+     * Wipe every tracked finding (active, passive, evidence-backed) and overwrite the
+     * persisted {@code icarus_state} blob so an extension reload / Burp restart starts clean.
+     * Suppression rules (stored separately in {@code config}) are kept. The audit log is
+     * cleared apart from this one entry.
+     */
+    public void clearAllFindings() {
+        long removed = activeFindings.values().stream()
+                .filter(r -> !"DUMMY".equals(r.getFinding().type())).count();
+        activeFindings.clear();
+        synchronized (auditLog) { auditLog.clear(); }
+        // Re-seed the suppression placeholders exactly as the constructor does, so a
+        // previously-suppressed hash stays suppressed if it's ever re-detected.
+        for (String hash : config.getStringList("suppressed_hashes")) {
+            FindingRecord fr = new FindingRecord(Finding.builder("System", "DUMMY").build());
+            fr.setSuppressed(true);
+            activeFindings.put(hash, fr);
+        }
+        logAudit("User wiped the findings registry (" + removed + " findings removed; suppression rules kept).");
+        api.persistence().extensionData().setString("icarus_state", serializeState());
+        notifyListenersOfUpdate();
+    }
+
+    /**
      * Records incoming findings: increments the count for duplicates (skipping suppressed
      * ones), or registers new ones (optionally raising a Burp audit issue). Returns the
      * subset that are newly-created or updated-but-actionable, for the caller to decide
@@ -141,7 +175,13 @@ public final class FindingRegistry {
                 }
                 record.incrementCount();
                 record.updateFinding(finding); // Keep the latest evidence and metadata
-                logAudit("Duplicate finding incremented to " + record.getCount() + "x: " + hash);
+                // Coalesce the audit trail for duplicates: a RateLimit blast re-enters this
+                // path per-response (~1500x), and one logToOutput + retained string per hit
+                // was the cost. Log the 2nd hit, then every 50th.
+                int dupCount = record.getCount();
+                if (dupCount == 2 || dupCount % 50 == 0) {
+                    logAudit("Duplicate finding now " + dupCount + "x: " + hash);
+                }
                 changed = true;
             } else {
                 var newRecord = new FindingRecord(finding);
@@ -250,6 +290,15 @@ public final class FindingRegistry {
             if (f.evidence() != null && f.evidence().request() != null) {
                 Map<String, Object> evidenceJson = new java.util.LinkedHashMap<>();
                 evidenceJson.put("request", java.util.Base64.getEncoder().encodeToString(f.evidence().request().toByteArray().getBytes()));
+                // Persist the target binding — toByteArray() drops it, and without it a
+                // reloaded finding's request has a null HttpService (breaks validate_finding
+                // / rescan_finding resends). See also ProjectStateCodec.
+                var svc = f.evidence().request().httpService();
+                if (svc != null) {
+                    evidenceJson.put("host", svc.host());
+                    evidenceJson.put("port", svc.port());
+                    evidenceJson.put("secure", svc.secure());
+                }
                 if (f.evidence().response() != null) {
                     evidenceJson.put("response", java.util.Base64.getEncoder().encodeToString(f.evidence().response().toByteArray().getBytes()));
                 }
@@ -304,7 +353,14 @@ public final class FindingRegistry {
                         if (evidenceRaw instanceof Map<?, ?> evidenceMap) {
                             Object reqB64 = evidenceMap.get("request");
                             if (reqB64 != null) {
-                                burp.api.montoya.http.message.requests.HttpRequest request = burp.api.montoya.http.message.requests.HttpRequest.httpRequest(burp.api.montoya.core.ByteArray.byteArray(java.util.Base64.getDecoder().decode(String.valueOf(reqB64))));
+                                burp.api.montoya.core.ByteArray reqBytes = burp.api.montoya.core.ByteArray.byteArray(java.util.Base64.getDecoder().decode(String.valueOf(reqB64)));
+                                Object evHost = evidenceMap.get("host");
+                                Object evPort = evidenceMap.get("port");
+                                burp.api.montoya.http.message.requests.HttpRequest request = (evHost != null && evPort instanceof Number)
+                                        ? burp.api.montoya.http.message.requests.HttpRequest.httpRequest(
+                                            burp.api.montoya.http.HttpService.httpService(String.valueOf(evHost), ((Number) evPort).intValue(), Boolean.TRUE.equals(evidenceMap.get("secure"))),
+                                            reqBytes)
+                                        : burp.api.montoya.http.message.requests.HttpRequest.httpRequest(reqBytes);
                                 burp.api.montoya.http.message.responses.HttpResponse response = null;
                                 Object resB64 = evidenceMap.get("response");
                                 if (resB64 != null) {

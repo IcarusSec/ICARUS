@@ -463,10 +463,12 @@ public class JwtCheckerModule implements IcarusModule {
     }
 
     private Finding createFinding(String type, String desc, Severity severity, HttpRequestResponse evidence) {
+        String path = (evidence != null && evidence.request() != null) ? evidence.request().path() : "";
         return Finding.builder(name(), type)
                 .description(desc)
                 .severity(severity)
                 .category(Category.JWT_WEAKNESS)
+                .path(path)
                 .evidence(evidence)
                 .build();
     }

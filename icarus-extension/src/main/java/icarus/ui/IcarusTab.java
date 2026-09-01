@@ -333,6 +333,20 @@ public class IcarusTab {
             orchestrator.clearPassiveFindings();
         });
 
+        JButton btnWipeAll = new JButton(I18n.t("ui.tab.results.btn.wipe_all"));
+        themeHelper.styleButton(btnWipeAll);
+        btnWipeAll.setToolTipText(I18n.t("ui.tab.results.btn.wipe_all.tooltip"));
+        btnWipeAll.addActionListener(e -> {
+            int choice = JOptionPane.showConfirmDialog(mainPanel,
+                    I18n.t("ui.tab.results.wipe_all.confirm"),
+                    I18n.t("ui.tab.results.btn.wipe_all"),
+                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (choice == JOptionPane.YES_OPTION) {
+                tableModel.setRowCount(0);
+                orchestrator.clearAllFindings();
+            }
+        });
+
         JButton btnImportProxy = new JButton(I18n.t("ui.tab.results.btn.import_proxy"));
         themeHelper.styleButton(btnImportProxy);
         btnImportProxy.addActionListener(e -> showProxyHistoryImportDialog());
@@ -389,6 +403,7 @@ public class IcarusTab {
         dataActions.add(btnImportProxy);
         dataActions.add(btnPassiveLogs);
         dataActions.add(btnClearBtn);
+        dataActions.add(btnWipeAll);
 
         reportActions.add(btnEvidenceManager);
         reportActions.add(btnPreviewReport);

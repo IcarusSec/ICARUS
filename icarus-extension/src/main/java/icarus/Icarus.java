@@ -157,6 +157,8 @@ public class Icarus implements BurpExtension {
         config.set("pv.finding_status_min", 200);
         config.set("pv.finding_status_max", 299);
         config.set("pv.require_baseline", true);
+        config.set("pv.scan_non_2xx_baseline", true);
+        config.set("pv.status_transition_detection", false);
         config.set("pv.filter_exact_match", false);
         config.set("pv.check_xss_reflection", true);
         config.set("pv.create_audit_issues", true);
@@ -175,8 +177,7 @@ public class Icarus implements BurpExtension {
         config.set("pv.payload_ssrf_heuristic",  PayloadRepository.SSRF_HEURISTIC_DEFAULT);
 
         // WAF defaults
-        config.set("waf.detect_akamai", true);
-        config.set("waf.safelist_payloads", "' OR 1=1--\n<svg/onload=alert(1)>");
+        config.set("waf.detect", true);
 
         // ── HTTPVerbFuzz defaults ──
         config.set("hv.enabled", true);

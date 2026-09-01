@@ -183,6 +183,7 @@ public class PostmanExportModule implements IcarusModule {
                         : "Postman Collection exported (not saved to disk)")
                 .severity(Severity.INFO)
                 .category(Category.EXPORT)
+                .path(path != null && !path.isEmpty() ? path : "/")
                 .evidence(requestResponse)
                 .meta("postman_json", json.toString())
                 .build();

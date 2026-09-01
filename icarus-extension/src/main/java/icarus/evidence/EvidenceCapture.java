@@ -31,6 +31,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.Consumer;
 
 public final class EvidenceCapture {
@@ -43,7 +45,6 @@ public final class EvidenceCapture {
 
     public static final Font MONO_FONT = new Font(Font.MONOSPACED, Font.PLAIN, 16);
     public static final Font BOLD_FONT = new Font(Font.MONOSPACED, Font.BOLD, 16);
-    public static final int BINARY_TRUNCATE_BYTES = 2048;
 
     // The bundled icarus_logo.png carries ~7% transparent padding so the circle isn't flush
     // against its bounding box; 48 here lands the visible disc at roughly the intended 44px.
@@ -61,12 +62,12 @@ public final class EvidenceCapture {
 
     private final MontoyaApi api;
     final ModuleConfig config;
-    public final List<CapturedEvidence> captured = new ArrayList<>();
+    public final List<CapturedEvidence> captured = new CopyOnWriteArrayList<>();
     public final CweRepository cweRepository = new CweRepository();
 
     // Lets a piece of evidence be left out of the *next* report without discarding it —
     // "Remove Evidence" is destructive (the screenshot is gone), this is a reversible toggle.
-    private final Set<CapturedEvidence> excludedFromReport = new HashSet<>();
+    private final Set<CapturedEvidence> excludedFromReport = new CopyOnWriteArraySet<>();
 
     // Notified with the final, identity-stable Finding once evidence is saved — lets the
     // caller (Orchestrator) fold it into the same registry the Results tab and report

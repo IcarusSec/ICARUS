@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Extract version from Icarus.java (single source of truth)
 VERSION=$(grep -oP 'VERSION = "\K[^"]+' src/main/java/icarus/Icarus.java)
@@ -30,6 +30,13 @@ if [ ! -f "libs/commonmark-0.30.0.jar" ]; then
     wget -q -O libs/commonmark-0.30.0.jar "https://repo1.maven.org/maven2/org/commonmark/commonmark/0.30.0/commonmark-0.30.0.jar"
 fi
 
+# 1c-ii. GFM tables extension for commonmark -- lets custom report sections use pipe tables
+# in the HTML report. Same version as core, bundled the same way.
+if [ ! -f "libs/commonmark-ext-gfm-tables-0.30.0.jar" ]; then
+    echo "[*] Downloading commonmark-ext-gfm-tables..."
+    wget -q -O libs/commonmark-ext-gfm-tables-0.30.0.jar "https://repo1.maven.org/maven2/org/commonmark/commonmark-ext-gfm-tables/0.30.0/commonmark-ext-gfm-tables-0.30.0.jar"
+fi
+
 if [ ! -f "libs/commons-csv-1.10.0.jar" ]; then
     echo "[*] Downloading commons-csv..."
     wget -q -O libs/commons-csv-1.10.0.jar "https://repo1.maven.org/maven2/org/apache/commons/commons-csv/1.10.0/commons-csv-1.10.0.jar"
@@ -40,7 +47,7 @@ EXTRA_LIBS=(
   "com/formdev/flatlaf-extras/3.4.1/flatlaf-extras-3.4.1.jar"
   "com/github/weisj/jsvg/1.4.0/jsvg-1.4.0.jar"
   "com/fifesoft/rsyntaxtextarea/3.3.3/rsyntaxtextarea-3.3.3.jar"
-  "org/jsoup/jsoup/1.17.2/jsoup-1.17.2.jar"
+  "org/jsoup/jsoup/1.23.1/jsoup-1.23.1.jar"
 )
 # Previously compile-only, on the (wrong) assumption Burp's own runtime already exposes
 # FlatLaf to extensions -- it doesn't (ClassNotFoundException on FlatLaf$DisabledIconProvider
@@ -81,6 +88,26 @@ for path in "${MCP_LIBS[@]}"; do
     fi
 done
 
+# 1e. Supply-chain integrity gate. Every bundled jar must exist, be non-trivially
+# sized, and match its pinned SHA-256 in libs/checksums.sha256 BEFORE we unpack a
+# single class into the fat jar. A poisoned mirror / MITM / partial download stops
+# the build here instead of shipping.
+echo "[*] Verifying dependency checksums..."
+while read -r _hash name; do
+    [ -n "${name:-}" ] || continue
+    f="libs/$name"
+    if [ ! -f "$f" ]; then
+        echo "[!] missing dependency: $f (listed in libs/checksums.sha256)"
+        exit 1
+    fi
+    size=$(wc -c < "$f")
+    if [ "$size" -lt 1024 ]; then
+        echo "[!] dependency suspiciously small (<1KB), likely a failed download: $f ($size bytes)"
+        exit 1
+    fi
+done < libs/checksums.sha256
+( cd libs && sha256sum -c checksums.sha256 ) || { echo "[!] checksum mismatch"; exit 1; }
+
 # 2. Prepare build directory
 rm -rf build_manual
 mkdir -p build_manual/classes
@@ -98,7 +125,7 @@ MCP_CP=$(printf ':libs/%s' "${MCP_LIBS[@]##*/}")
 EXTRA_CP=$(printf ':libs/%s' "${EXTRA_LIBS[@]##*/}")
 COMPILE_ONLY_CP=$(printf ':libs/%s' "${COMPILE_ONLY_LIBS[@]##*/}")
 javac -d build_manual/classes \
-      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}" \
+      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commonmark-ext-gfm-tables-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}" \
       --release 19 \
       @build_manual/sources.txt
 
@@ -115,6 +142,7 @@ echo "[*] Bundling OpenPDF classes..."
 unzip -q -o libs/openpdf-2.0.2.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling commonmark-java classes..."
 unzip -q -o libs/commonmark-0.30.0.jar -d build_manual/classes -x "META-INF/*"
+unzip -q -o libs/commonmark-ext-gfm-tables-0.30.0.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling commons-csv classes..."
 unzip -q -o libs/commons-csv-1.10.0.jar -d build_manual/classes -x "META-INF/*"
 echo "[*] Bundling MCP SDK classes..."

@@ -24,6 +24,7 @@ import icarus.core.I18n;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import javax.swing.JCheckBox;
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -40,12 +41,34 @@ public final class ParamValidatorModule implements IcarusModule {
         return "ParamValidator";
     }
 
+    @Override
+    public boolean sendsActivePayloads() {
+        return true;
+    }
+
     record MutationSpec(String type, String description, Object value, boolean remove, Category category, icarus.modules.ast.mutators.AstMutationResult astResult) {
         public MutationSpec(String type, String description, Object value, boolean remove, Category category) {
             this(type, description, value, remove, category, null);
         }
     }
-    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value) {}
+    record Mutation(String path, String type, String description, Category category, HttpRequest request, Object value, boolean remove, boolean isEvasion) {}
+
+    /** One baseline probe: send + measure. status/length == -1 and empty body on a null response. */
+    record BaselineSample(int status, int length, long millis, String bodyLower) {}
+
+    private BaselineSample captureBaseline(HttpRequest request) {
+        long st = System.currentTimeMillis();
+        try {
+            HttpRequestResponse rr = api.http().sendRequest(request);
+            if (rr == null || rr.response() == null) return new BaselineSample(-1, -1, 0, "");
+            HttpResponse resp = rr.response();
+            return new BaselineSample(resp.statusCode(), resp.body().length(),
+                    System.currentTimeMillis() - st, resp.bodyToString().toLowerCase());
+        } catch (Exception e) {
+            api.logging().logToError(I18n.t("module.pv.err.baseline_failed", e));
+            return new BaselineSample(-1, -1, 0, "");
+        }
+    }
 
     /** Backfill any missing/blank payload key with its seed so existing installs stop showing blank tabs. */
     public static void ensurePayloadDefaults(ModuleConfig config) {
@@ -75,6 +98,19 @@ public final class ParamValidatorModule implements IcarusModule {
         }
     }
 
+    /**
+     * Percent-encode a flat-param (URL query / form-body) value. Montoya's
+     * withUpdatedParameters inserts the value verbatim, so an un-encoded space or
+     * `&`/`#` corrupts the request line/body. For URL params + must become %20
+     * (a literal + in a query string decodes to space); for form bodies the
+     * x-www-form-urlencoded convention (+ = space) is correct as-is.
+     */
+    static String encodeParamValue(String value, boolean formBody) {
+        if (value == null) return "";
+        String enc = java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
+        return formBody ? enc : enc.replace("+", "%20");
+    }
+
     /** Split a textarea list on any line break, trim, drop blanks. */
     static List<String> splitPayloads(String raw) {
         if (raw == null || raw.isBlank()) return List.of();
@@ -92,35 +128,46 @@ public final class ParamValidatorModule implements IcarusModule {
         return normalizeList(stored).equals(normalizeList(seed));
     }
 
-    /** DEEP-only built-in evasion extras for a stock list. Empty for every key but SSRF heuristic. */
+    /** DEEP-only built-in evasion extras for a stock list, keyed by payload config key. */
     static List<String> deepExtras(String key) {
-        if ("pv.payload_ssrf_heuristic".equals(key)) return PayloadRepository.SSRF_EVASION;
-        return List.of();
+        switch (key == null ? "" : key) {
+            case "pv.payload_sqli":           return PayloadRepository.SQLI_EVASION;
+            case "pv.payload_xss":            return PayloadRepository.XSS_EVASION;
+            case "pv.payload_path_traversal": return PayloadRepository.PATH_TRAVERSAL_EVASION;
+            case "pv.payload_cmdi":           return PayloadRepository.CMDI_EVASION;
+            case "pv.payload_ssti":           return PayloadRepository.SSTI_EVASION;
+            case "pv.payload_nosqli":         return PayloadRepository.NOSQLI_EVASION;
+            case "pv.payload_ssrf_heuristic": return PayloadRepository.SSRF_EVASION;
+            default:                          return List.of();
+        }
     }
 
     /**
-     * Resolve a payload list: a hand-authored (non-stock) list is used verbatim; a stock list is
-     * depth-shaped — LIGHT = first payload only, MEDIUM = full seed, DEEP = full seed + deepExtras.
+     * Resolve a payload list. Base payloads: a hand-authored (non-stock) list is used verbatim;
+     * a stock list is depth-shaped — LIGHT = first only, MEDIUM/DEEP = full seed. The built-in
+     * evasion extras are then appended in EVERY case — they're WAF-bypass coverage, orthogonal
+     * to which base payloads the user picked, and the execution loop skips them unless
+     * depth=DEEP or the mid-scan WAF jump fires. (Pre-fix, a customised list — including an
+     * install whose stored seed no longer matches an updated default — silently lost them.)
      */
     static List<String> payloadsFor(String key, String seed, String depth, ModuleConfig config) {
         String stored = config.getString(key, seed);
         if (stored == null || stored.isBlank()) stored = seed;
-        if (!isStockList(stored, seed)) return splitPayloads(stored);
 
-        List<String> seedList = splitPayloads(seed);
-        switch (depth == null ? "MEDIUM" : depth) {
-            case "LIGHT":
-                return seedList.isEmpty() ? seedList : List.of(seedList.get(0));
-            case "DEEP": {
-                List<String> extras = deepExtras(key);
-                if (extras.isEmpty()) return seedList;
-                List<String> combined = new ArrayList<>(seedList);
-                for (String e : extras) if (!combined.contains(e)) combined.add(e);
-                return combined;
+        List<String> combined = new ArrayList<>();
+        if (!isStockList(stored, seed)) {
+            combined.addAll(splitPayloads(stored));
+        } else {
+            List<String> seedList = splitPayloads(seed);
+            if ("LIGHT".equals(depth)) {
+                if (!seedList.isEmpty()) combined.add(seedList.get(0));
+            } else {
+                combined.addAll(seedList);
             }
-            default:
-                return seedList;
         }
+
+        for (String e : deepExtras(key)) if (!combined.contains(e)) combined.add(e);
+        return combined;
     }
 
     /**
@@ -129,8 +176,17 @@ public final class ParamValidatorModule implements IcarusModule {
      */
     private static List<MutationSpec> truncateFairlyByType(List<MutationSpec> specs, int budget) {
         LinkedHashMap<String, ArrayDeque<MutationSpec>> byType = new LinkedHashMap<>();
-        for (MutationSpec s : specs) byType.computeIfAbsent(s.type(), k -> new ArrayDeque<>()).add(s);
-        List<MutationSpec> out = new ArrayList<>(budget);
+        List<MutationSpec> evasion = new ArrayList<>();
+        
+        for (MutationSpec s : specs) {
+            if (s.value() instanceof String && icarus.modules.PayloadRepository.isEvasionPayload((String) s.value())) {
+                evasion.add(s);
+            } else {
+                byType.computeIfAbsent(s.type(), k -> new ArrayDeque<>()).add(s);
+            }
+        }
+        
+        List<MutationSpec> out = new ArrayList<>(budget + evasion.size());
         while (out.size() < budget) {
             boolean progressed = false;
             for (ArrayDeque<MutationSpec> q : byType.values()) {
@@ -141,6 +197,7 @@ public final class ParamValidatorModule implements IcarusModule {
             }
             if (!progressed) break;
         }
+        out.addAll(evasion);
         return out;
     }
 
@@ -155,11 +212,17 @@ public final class ParamValidatorModule implements IcarusModule {
                 || (originalBody != null && (originalBody.trim().startsWith("{") || originalBody.trim().startsWith("[")));
         boolean hasJsonBody = originalBody != null && !originalBody.isBlank() && looksLikeJson;
 
-        List<ParsedHttpParameter> urlParams = request.parameters().stream()
-                .filter(p -> p.type() == HttpParameterType.URL)
+        // URL query params always; form-urlencoded body params only when the body
+        // isn't JSON (a JSON body is walked via JsonPaths, and Montoya doesn't parse
+        // BODY params out of it anyway — the !hasJsonBody filter is belt-and-suspenders).
+        // URL params DO coexist with a JSON body (POST /x?foo=1 {...}) — they must
+        // still be scanned, same as main.
+        List<ParsedHttpParameter> flatParams = request.parameters().stream()
+                .filter(p -> p.type() == HttpParameterType.URL
+                        || (p.type() == HttpParameterType.BODY && !hasJsonBody))
                 .toList();
 
-        if (!hasJsonBody && urlParams.isEmpty()) {
+        if (!hasJsonBody && flatParams.isEmpty()) {
             return List.of();
         }
 
@@ -195,7 +258,11 @@ public final class ParamValidatorModule implements IcarusModule {
             eligiblePaths.add(path);
         }
 
-        logger.accept(I18n.t("module.pv.log.detected_inputs", (eligiblePaths.size() + urlParams.size()), eligiblePaths.size(), urlParams.size()));
+        int jsonCount = eligiblePaths.size();
+        int urlOnlyCount = (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.URL).count();
+        int formOnlyCount = (int) flatParams.stream().filter(p -> p.type() == HttpParameterType.BODY).count();
+        logger.accept(I18n.t("module.pv.log.detected_inputs",
+                jsonCount + urlOnlyCount + formOnlyCount, jsonCount, urlOnlyCount, formOnlyCount));
 
         String depth = config.getString("pv.depth", "MEDIUM"); // LIGHT | MEDIUM | DEEP
         int configuredMax = Math.max(0, config.getInt("pv.max_mutations", 0));
@@ -212,8 +279,8 @@ public final class ParamValidatorModule implements IcarusModule {
         // ~25 specs (multi-line injection payloads); depth-first order meant maxMutations was
         // often spent entirely on the first field or two, so later fields — often where numeric
         // params live — silently got zero boundary specs (e.g. NUMBER_NEGATIVE) generated at all.
-        // Each field is either a JSON body path (fieldPaths set, fieldUrlParam null) or a URL
-        // query parameter (fieldUrlParam set, fieldPaths null) — mutually exclusive per index.
+        // Each field is either a JSON body path (fieldPaths set, fieldFlatParam null) or a flat
+        // URL/form param (fieldFlatParam set, fieldPaths null) — mutually exclusive per index.
         // Collaborator client is shared across every field so each gets its own uniquely
         // correlatable payload from the same session; created once and reused, never per-field.
         // Burp Collaborator is unavailable in some environments (disabled, air-gapped network)
@@ -231,7 +298,7 @@ public final class ParamValidatorModule implements IcarusModule {
 
         List<String> fieldPathStrings = new ArrayList<>();
         List<List<Object>> fieldPaths = new ArrayList<>();
-        List<ParsedHttpParameter> fieldUrlParam = new ArrayList<>();
+        List<ParsedHttpParameter> fieldFlatParam = new ArrayList<>();
         List<List<MutationSpec>> fieldSpecs = new ArrayList<>();
         for (List<Object> path : eligiblePaths) {
             String pathString = JsonPaths.pathToString(path);
@@ -257,29 +324,34 @@ public final class ParamValidatorModule implements IcarusModule {
             if (!specs.isEmpty()) {
                 fieldPathStrings.add(pathString);
                 fieldPaths.add(path);
-                fieldUrlParam.add(null);
+                fieldFlatParam.add(null);
                 fieldSpecs.add(specs);
             }
         }
-        for (ParsedHttpParameter param : urlParams) {
-            String pathString = "url:" + param.name();
-            if (!pathRules.isIncluded(pathString)) continue;
-            if (pathRules.isExcluded(pathString)) continue;
+        // numeric-looking flat values are typed as String, matching URL-param behaviour.
+        // flatParams already excludes BODY params when hasJsonBody (see filter above), so
+        // this loop runs for URL params even alongside a JSON body — same as main.
+        {
+            for (ParsedHttpParameter param : flatParams) {
+                String pathString = (param.type() == HttpParameterType.BODY ? "body:" : "url:") + param.name();
+                if (!pathRules.isIncluded(pathString)) continue;
+                if (pathRules.isExcluded(pathString)) continue;
 
-            List<MutationSpec> specs = new ArrayList<>();
-            for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config, depth)) {
-                if (pathRules.isException(pathString, spec)) continue;
-                specs.add(spec);
-            }
-            for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField, depth)) {
-                if (pathRules.isException(pathString, spec)) continue;
-                specs.add(spec);
-            }
-            if (!specs.isEmpty()) {
-                fieldPathStrings.add(pathString);
-                fieldPaths.add(null);
-                fieldUrlParam.add(param);
-                fieldSpecs.add(specs);
+                List<MutationSpec> specs = new ArrayList<>();
+                for (MutationSpec spec : SpecsFactory.specsFor(param.value(), config, depth)) {
+                    if (pathRules.isException(pathString, spec)) continue;
+                    specs.add(spec);
+                }
+                for (MutationSpec spec : contextualSpecs(pathString, param.value(), config, collaboratorClient, ssrfPayloadsByField, depth)) {
+                    if (pathRules.isException(pathString, spec)) continue;
+                    specs.add(spec);
+                }
+                if (!specs.isEmpty()) {
+                    fieldPathStrings.add(pathString);
+                    fieldPaths.add(null);
+                    fieldFlatParam.add(param);
+                    fieldSpecs.add(specs);
+                }
             }
         }
 
@@ -293,27 +365,53 @@ public final class ParamValidatorModule implements IcarusModule {
             }
         }
 
-        for (int round = 0; mutations.size() < maxMutations; round++) {
+        int stdMutationsCount = 0;
+        for (int round = 0; ; round++) {
             boolean anyFieldHadSpecAtThisRound = false;
             for (int f = 0; f < fieldSpecs.size(); f++) {
-                if (mutations.size() >= maxMutations) break;
                 List<MutationSpec> specs = fieldSpecs.get(f);
                 if (round >= specs.size()) continue;
+                
+                MutationSpec spec = specs.get(round);
+                boolean isEvasion = spec.value() instanceof String && icarus.modules.PayloadRepository.isEvasionPayload((String) spec.value());
+                
+                if (!isEvasion) {
+                    if (stdMutationsCount >= maxMutations) continue;
+                    stdMutationsCount++;
+                }
+                
                 anyFieldHadSpecAtThisRound = true;
 
-                MutationSpec spec = specs.get(round);
-                ParsedHttpParameter urlParam = fieldUrlParam.get(f);
-                if (urlParam != null) {
+                ParsedHttpParameter fp = fieldFlatParam.get(f);
+                if (fp != null) {
+                    // §1.5 (verified 2026-08-30 via icarus-lab echo): Montoya's
+                    // withUpdatedParameters does NOT percent-encode the value — a payload like
+                    // `' OR '1'='1` went on the wire with raw spaces → server "400 Bad request
+                    // syntax". So we encode here. urlParameter values must be percent-encoded
+                    // for the query string (+ -> %20 since a literal + in a query means space);
+                    // bodyParameter values use standard x-www-form-urlencoded (+ for space).
+                    boolean isBody = fp.type() == HttpParameterType.BODY;
+                    String rawNew = spec.value() != null ? spec.value().toString() : "";
+                    String encNew = encodeParamValue(rawNew, isBody);
+                    // Removal matches by name; fp.value() is already in wire form, don't re-encode it.
+                    HttpParameter removeTarget = isBody
+                            ? HttpParameter.bodyParameter(fp.name(), fp.value())
+                            : HttpParameter.urlParameter(fp.name(), fp.value());
+                    HttpParameter updateTarget = isBody
+                            ? HttpParameter.bodyParameter(fp.name(), encNew)
+                            : HttpParameter.urlParameter(fp.name(), encNew);
                     HttpRequest mutatedRequest = spec.remove()
-                            ? request.withRemovedParameters(HttpParameter.urlParameter(urlParam.name(), urlParam.value()))
-                            : request.withUpdatedParameters(HttpParameter.urlParameter(urlParam.name(), spec.value() != null ? spec.value().toString() : ""));
+                            ? request.withRemovedParameters(removeTarget)
+                            : request.withUpdatedParameters(updateTarget);
                     mutations.add(new Mutation(
                             fieldPathStrings.get(f),
                             spec.type(),
                             spec.description(),
                             spec.category(),
                             mutatedRequest,
-                            spec.value()
+                            spec.value(),
+                            spec.remove(),
+                            isEvasion
                     ));
                 } else {
                     if (spec.astResult() != null) {
@@ -325,13 +423,17 @@ public final class ParamValidatorModule implements IcarusModule {
                                     spec.description(),
                                     spec.category(),
                                     request.withBody(burp.api.montoya.core.ByteArray.byteArray(mutatedBody)),
-                                    spec.value()
+                                    spec.value(),
+                                    spec.remove(),
+                                    isEvasion
                             ));
                         } catch (Exception e) {
-                            api.logging().logToError("Failed to serialize AST: " + e.getMessage());
+                            api.logging().logToError("AST serialization failed: " + e.getMessage());
                         }
                     } else {
-                        Object clonedRoot = JsonParser.parse(originalBody);
+                        // Deep-copy the once-parsed tree instead of re-parsing originalBody per
+                        // mutation: O(tree) vs O(mutations x body).
+                        Object clonedRoot = JsonParser.deepCopy(originalRoot);
                         boolean applied = JsonPaths.applyAt(clonedRoot, fieldPaths.get(f), spec.value(), spec.remove());
                         if (applied) {
                             mutations.add(new Mutation(
@@ -340,7 +442,9 @@ public final class ParamValidatorModule implements IcarusModule {
                                     spec.description(),
                                     spec.category(),
                                     request.withBody(JsonParser.write(clonedRoot)),
-                                    spec.value()
+                                    spec.value(),
+                                    spec.remove(),
+                                    isEvasion
                             ));
                         }
                     }
@@ -354,25 +458,50 @@ public final class ParamValidatorModule implements IcarusModule {
         }
 
         boolean requireBaseline = config.getBool("pv.require_baseline", true);
-        int baselineStatusMin = 200;
-        int baselineStatusMax = 299;
+        int baselineStatus = -1;
         int baselineLength = -1;
+        long baselineTime = 0;
+        String baselineBodyLower = "";
+        boolean baselineStable = false;
 
         if (requireBaseline) {
-            HttpRequestResponse baselineResult = api.http().sendRequest(request);
-            if (baselineResult == null || baselineResult.response() == null) {
+            BaselineSample a = captureBaseline(request);
+            if (a.status() == -1) return List.of();   // PRESERVE main's null-response early return
+            BaselineSample b = captureBaseline(request);
+
+            baselineStatus = a.status();
+            baselineLength = a.length();
+            // TIMING: min of the two samples, NOT a.millis() (A eats TLS/cache-miss cost).
+            // B's -1 sentinel on a failed second probe must NOT leak into the min.
+            baselineTime = (b.status() != -1) ? Math.min(a.millis(), b.millis()) : a.millis();
+            // BODY: sample A, empty-fallback to B — only used for .contains() checks.
+            baselineBodyLower = !a.bodyLower().isEmpty() ? a.bodyLower() : b.bodyLower();
+
+            baselineStable = a.status() == b.status()
+                    && Math.abs(a.length() - b.length()) <= Math.max(32, a.length() / 50);
+            if (!baselineStable) {
+                logger.accept(I18n.t("module.pv.log.baseline_unstable",
+                        a.status(), a.length(), b.status(), b.length()));
+            }
+
+            boolean baselineNon2xx = baselineStatus < 200 || baselineStatus > 299;
+            if (baselineNon2xx && !config.getBool("pv.scan_non_2xx_baseline", true)) {
+                logger.accept(I18n.t("module.pv.log.baseline_non2xx_abort", baselineStatus));
                 return List.of();
             }
-            int baselineStatus = baselineResult.response().statusCode();
-            baselineLength = baselineResult.response().body().length();
-            
-            if (baselineStatus < baselineStatusMin || baselineStatus > baselineStatusMax) {
-                return List.of();
+            if (baselineNon2xx) {
+                logger.accept(I18n.t("module.pv.log.baseline_non2xx", baselineStatus));
             }
         } else {
-            if (requestResponse.response() != null) {
-                baselineLength = requestResponse.response().body().length();
+            // Passive scan: one sample, no pair — treat the baseline as untrustworthy so
+            // §2.3's relaxation and §3's transition detection both stay off.
+            HttpResponse r = requestResponse.response();
+            if (r != null) {
+                baselineStatus = r.statusCode();
+                baselineLength = r.body().length();
+                baselineBodyLower = r.bodyToString().toLowerCase();
             }
+            baselineStable = false;
         }
 
         mutations.sort((a, b) -> {
@@ -392,6 +521,7 @@ public final class ParamValidatorModule implements IcarusModule {
         List<HttpRequestResponse> responses = new ArrayList<>();
 
         boolean promptedThrottle = false;
+        boolean jumpToEvasion = false;
         int delayMs = 0;
 
         int blockStreak = 0;
@@ -403,6 +533,21 @@ public final class ParamValidatorModule implements IcarusModule {
                 break;
             }
             Mutation m = mutations.get(i);
+            
+            if (m.category() == Category.INJECTION) {
+                if (jumpToEvasion && !m.isEvasion()) {
+                    // We are jumping to evasion, so skip all standard noisy payloads
+                    responses.add(null);
+                    requestTimes[i] = 0;
+                    continue;
+                } else if (!jumpToEvasion && m.isEvasion() && !"DEEP".equals(depth)) {
+                    // Normal run on LIGHT/MEDIUM depth: skip the hidden evasion payloads
+                    responses.add(null);
+                    requestTimes[i] = 0;
+                    continue;
+                }
+            }
+            
             logger.accept(I18n.t("module.pv.log.testing_mutation", shortPath(m.path()), m.description().toLowerCase()));
 
             if (delayMs > 0) {
@@ -430,20 +575,35 @@ public final class ParamValidatorModule implements IcarusModule {
                         logger.accept(I18n.t("module.pv.log.tool_returning", st));
                         if (!promptedThrottle) {
                             promptedThrottle = true;
-                            // Blocking dialog must run on the EDT (CLAUDE.md) — same invokeAndWait
-                            // pattern ScanRunner already uses for its Akamai prompt.
-                            int[] choiceHolder = { javax.swing.JOptionPane.NO_OPTION };
+                            int[] choiceHolder = { 0 };
+                            Runnable wafPrompt = () -> {
+                                String[] options = { "Delay (2s)", "Try Evasion Payloads", "Ignore" };
+                                choiceHolder[0] = javax.swing.JOptionPane.showOptionDialog(
+                                    api.userInterface().swingUtils().suiteFrame(),
+                                    "WAF detected via blocked payloads (streak of 403s).\nDo you want to delay or skip to testing the evasion payloads?",
+                                    I18n.t("module.pv.ui.waf_throttle_title"),
+                                    javax.swing.JOptionPane.YES_NO_CANCEL_OPTION,
+                                    javax.swing.JOptionPane.WARNING_MESSAGE,
+                                    null, options, options[0]);
+                            };
                             try {
-                                javax.swing.SwingUtilities.invokeAndWait(() -> choiceHolder[0] = javax.swing.JOptionPane.showConfirmDialog(api.userInterface().swingUtils().suiteFrame(),
-                                    I18n.t("module.pv.ui.waf_throttle_msg", st),
-                                    I18n.t("module.pv.ui.waf_throttle_title"), javax.swing.JOptionPane.YES_NO_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE));
+                                // Called from the scan worker thread normally, but guard against an
+                                // EDT caller: invokeAndWait throws "cannot call from event dispatch thread".
+                                if (javax.swing.SwingUtilities.isEventDispatchThread()) wafPrompt.run();
+                                else javax.swing.SwingUtilities.invokeAndWait(wafPrompt);
                             } catch (InterruptedException ex) {
                                 Thread.currentThread().interrupt();
-                            } catch (java.lang.reflect.InvocationTargetException ex) {
-                                api.logging().logToError(I18n.t("module.pv.err.waf_dialog_failed", ex.getCause()));
+                            } catch (Exception ex) {
+                                api.logging().logToError("WAF dialog failed: " + ex);
                             }
-                            if (choiceHolder[0] == javax.swing.JOptionPane.YES_OPTION) {
+                            
+                            if (choiceHolder[0] == 0) { // Delay
                                 delayMs = 2000;
+                            } else if (choiceHolder[0] == 1) { // Try Evasion
+                                jumpToEvasion = true;
+                                blockStreak = 0;
+                                delayMs = 0;
+                                logger.accept("WAF Detected (Behavioral) — skipping standard payloads, jumping to evasion payloads...");
                             }
                         }
                     } else {
@@ -476,21 +636,12 @@ public final class ParamValidatorModule implements IcarusModule {
         int timeDelayMs = config.getInt("pv.payload_sqli_time_delay_ms", 10000);
 
         boolean behavioralAnalysis = config.getBool("pv.behavioral_analysis", false);
-        long baselineTime = 0;
-        String baselineBodyLower = "";
-        if (requireBaseline) {
-            long st = System.currentTimeMillis();
-            try {
-                HttpRequestResponse bl = api.http().sendRequest(request);
-                if (bl != null && bl.response() != null) baselineBodyLower = bl.response().bodyToString().toLowerCase();
-            } catch (Exception e) {
-                api.logging().logToError(I18n.t("module.pv.err.baseline_failed", e));
-            }
-            baselineTime = System.currentTimeMillis() - st;
-        }
 
         List<Finding> findings = new ArrayList<>();
         Map<String, List<MutationResult>> groupedByPath = new LinkedHashMap<>();
+        // §3.2: one status-transition finding per (path, transitionClass); session_lost logged once.
+        Set<String> statusTransitionsSeen = new HashSet<>();
+        boolean sessionLostLogged = false;
 
         int analyzedCount = Math.min(mutations.size(), responses.size());
         for (int i = 0; i < analyzedCount; i++) {
@@ -515,6 +666,7 @@ public final class ParamValidatorModule implements IcarusModule {
                     isWafBlock = true;
                 }
             }
+            if (!isWafBlock && icarus.modules.WafFingerprint.looksBlocked(mutatedResponse)) isWafBlock = true;
             if (isWafBlock) {
                 continue;
             }
@@ -524,7 +676,14 @@ public final class ParamValidatorModule implements IcarusModule {
             // it. Time-based SQLi, XSS reflection, and the CWE-209 verbose-error check still
             // run on 4xx responses since apps commonly leak SQL/stack errors on validation
             // failure pages coded 400/422, not just 500.
-            boolean isExpectedRejection = status >= 400 && status <= 499;
+            // A 4xx mutation is "expected" (excluded from drift / verbose-error heuristics)
+            // ONLY when the baseline was 2xx. When the baseline was ITSELF a stable 4xx and the
+            // status_transition flag is on, both responses come from the same error handler, so
+            // drift between them is real signal — analyse it.
+            boolean baselineIs4xx = baselineStatus >= 400 && baselineStatus <= 499;
+            boolean relax4xxDrift = config.getBool("pv.status_transition_detection", false);
+            boolean isExpectedRejection = (status >= 400 && status <= 499)
+                    && !(baselineIs4xx && baselineStable && relax4xxDrift);
 
             // ── Injection Context Extraction Engine ──
             String extractedContext = "";
@@ -591,6 +750,22 @@ public final class ParamValidatorModule implements IcarusModule {
                             injectionDesc += "\n[UNCERTAIN] " + I18n.t("module.pv.finding.desc.xss_uncertain");
                         }
                     }
+                }
+            }
+
+            // Canary probes carry `'"` and `<>`. If one comes back byte-for-byte (not
+            // HTML-entity-escaped), the parameter echoes attacker input unsanitised into the
+            // response — an injection point worth a manual XSS/HTMLi look even though the canary
+            // itself isn't a working payload. Escaped reflection produces no match, so no noise.
+            if (mutation.type().equals("CANARY_PROBE") && !isInjectionFinding
+                    && mutation.value() instanceof String canary && bodyStr.contains(canary)) {
+                String ct = mutatedResponse.headerValue("Content-Type");
+                boolean textualBody = ct == null || ct.toLowerCase().contains("html") || ct.toLowerCase().contains("xml");
+                if (textualBody) {
+                    isInjectionFinding = true;
+                    injectionSeverity = Severity.LOW;
+                    extractedContext = extractContext(bodyStr, canary, 60);
+                    injectionDesc = I18n.t("module.pv.finding.desc.canary_reflected", extractedContext);
                 }
             }
 
@@ -696,6 +871,36 @@ public final class ParamValidatorModule implements IcarusModule {
                         isInjectionFinding = true;
                         injectionSeverity = Severity.MEDIUM;
                         injectionDesc = I18n.t("module.pv.finding.desc.time_anomaly", responseTime, baselineTime);
+                    }
+                }
+            }
+
+            // ── §3: status-transition detection (behind pv.status_transition_detection) ──
+            // Runs after the dedicated per-type detectors, never downgrades a confirmed hit.
+            if (config.getBool("pv.status_transition_detection", false)
+                    && baselineStable && !isInjectionFinding
+                    && baselineStatus > 0 && status != baselineStatus) {
+                // Verbose-error regex only for 5xx (skip it on every 2xx mutation).
+                boolean bodyHasVerboseError = status >= 500
+                        && VerboseErrorDetector.getVerboseErrorMatch(bodyStr) != null;
+                StatusTransition.Transition t = StatusTransition.classifyTransition(
+                        baselineStatus, status, mutation.category(), mutation.remove(),
+                        baselineStable, true, behavioralAnalysis, bodyHasVerboseError);
+                if (t == StatusTransition.Transition.SESSION_LOST) {
+                    if (!sessionLostLogged) {
+                        sessionLostLogged = true;
+                        logger.accept(I18n.t("module.pv.log.session_lost", baselineStatus, status));
+                    }
+                } else if (t != StatusTransition.Transition.NONE) {
+                    boolean bypass = t == StatusTransition.Transition.BYPASS;
+                    String transitionClass = bypass ? "bypass" : "error";
+                    if (statusTransitionsSeen.add(mutation.path() + "|" + transitionClass)) {
+                        isInjectionFinding = true;
+                        injectionSeverity = Severity.MEDIUM;
+                        injectionDesc = I18n.t("module.pv.finding.desc.status_transition",
+                                baselineStatus, status,
+                                I18n.t(bypass ? "module.pv.finding.desc.status_bypass"
+                                              : "module.pv.finding.desc.status_error"));
                     }
                 }
             }
@@ -807,32 +1012,59 @@ public final class ParamValidatorModule implements IcarusModule {
                 }));
 
         List<Finding> finalFindings = new ArrayList<>();
-        
+        // "always" / "never" once the user ticked "Don't ask again"; "ask" (default) prompts per group.
+        String combinePref = config.getString("pv.combine_findings_pref", "ask");
+
         for (Map.Entry<String, List<Finding>> entry : groupedFindings.entrySet()) {
             List<Finding> group = entry.getValue();
             if (group.size() > 1) {
                 Finding first = group.get(0);
                 String fullPath = first.evidence() != null && first.evidence().request() != null ? first.evidence().request().path() : first.path();
                 String urlPath = fullPath.contains("?") ? fullPath.substring(0, fullPath.indexOf('?')) : fullPath;
-                
-                final int[] choice = new int[1];
-                try {
-                    SwingUtilities.invokeAndWait(() -> {
-                        choice[0] = JOptionPane.showConfirmDialog(
-                            null,
-                            I18n.t("module.pv.ui.combine_findings_msg", group.size(), first.type(), urlPath),
-                            I18n.t("module.pv.ui.combine_findings_title"),
-                            JOptionPane.YES_NO_OPTION
-                        );
-                    });
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    choice[0] = JOptionPane.NO_OPTION;
-                } catch (Exception e) {
-                    choice[0] = JOptionPane.NO_OPTION;
+
+                int choiceValue;
+                if ("always".equals(combinePref)) {
+                    choiceValue = JOptionPane.YES_OPTION;
+                } else if ("never".equals(combinePref)) {
+                    choiceValue = JOptionPane.NO_OPTION;
+                } else {
+                    final int[] choice = { JOptionPane.NO_OPTION };
+                    final boolean[] dontAsk = { false };
+                    final String groupType = first.type();
+                    final int groupSize = group.size();
+                    try {
+                        SwingUtilities.invokeAndWait(() -> {
+                            JCheckBox dontAskBox = new JCheckBox(I18n.t("module.pv.ui.combine_findings_dont_ask"));
+                            Object[] message = {
+                                I18n.t("module.pv.ui.combine_findings_msg", groupSize, groupType, urlPath),
+                                dontAskBox
+                            };
+                            choice[0] = JOptionPane.showConfirmDialog(
+                                null, message,
+                                I18n.t("module.pv.ui.combine_findings_title"),
+                                JOptionPane.YES_NO_OPTION
+                            );
+                            dontAsk[0] = dontAskBox.isSelected();
+                        });
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        choice[0] = JOptionPane.NO_OPTION;
+                    } catch (Exception e) {
+                        choice[0] = JOptionPane.NO_OPTION;
+                    }
+                    choiceValue = choice[0];
+                    if (dontAsk[0] && (choiceValue == JOptionPane.YES_OPTION || choiceValue == JOptionPane.NO_OPTION)) {
+                        combinePref = choiceValue == JOptionPane.YES_OPTION ? "always" : "never";
+                        config.set("pv.combine_findings_pref", combinePref);
+                        try {
+                            api.persistence().extensionData().setString("config", config.serialize());
+                        } catch (Exception ignored) {
+                            // in-memory pref still holds for the rest of the session
+                        }
+                    }
                 }
-                
-                if (choice[0] == JOptionPane.YES_OPTION) {
+
+                if (choiceValue == JOptionPane.YES_OPTION) {
                     StringBuilder combinedDesc = new StringBuilder(I18n.t("module.pv.finding.desc.combined_base", urlPath));
                     Finding mostSevere = group.get(0);
                     for (Finding f : group) {

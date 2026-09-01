@@ -36,6 +36,14 @@ libs/
 *.swp
 *~.nib
 *:Zone.Identifier
+*Zone.Identifier
+
+# Compiled class files (never tracked; build output goes to build_manual/)
+*.class
+
+# Agent working notes / scratch
+HANDOFF*.md
+/Main*.java
 
 # Anthropic Claude
 .claude/

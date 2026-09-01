@@ -120,11 +120,32 @@ public class ProjectStateService {
         }
 
         if (triggerButton != null) triggerButton.setEnabled(false);
-        new SwingWorker<ProjectStateCodec.ImportResult, Void>() {
+        new SwingWorker<StagedImport, Void>() {
             @Override
-            protected ProjectStateCodec.ImportResult doInBackground() throws Exception {
+            protected StagedImport doInBackground() throws Exception {
                 String json = Files.readString(selectedFile.toPath());
-                return ProjectStateCodec.importFrom(json);
+                ProjectStateCodec.ImportResult result = ProjectStateCodec.importFrom(json);
+
+                Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
+                Files.createDirectories(dir);
+
+                // Stage + validate every image off the EDT and into a local list BEFORE we
+                // touch the live Evidence Manager. A bad/undecodable image aborts the whole
+                // import here, leaving the existing evidence untouched.
+                List<Map.Entry<EvidenceCapture.CapturedEvidence, Boolean>> staged = new ArrayList<>();
+                for (var item : result.items()) {
+                    String filename = "evidence-" + item.finding().type().replaceAll("[^a-zA-Z0-9.-]", "_")
+                            + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".png";
+                    Path imagePath = dir.resolve(filename);
+                    Files.write(imagePath, item.imageBytes());
+                    BufferedImage image = ImageIO.read(imagePath.toFile());
+                    if (image == null) {
+                        throw new IOException("Undecodable evidence image for finding: " + item.finding().type());
+                    }
+                    var ce = new EvidenceCapture.CapturedEvidence(item.finding(), imagePath, image, item.caption());
+                    staged.add(Map.entry(ce, item.included()));
+                }
+                return new StagedImport(staged, result);
             }
 
             @Override
@@ -132,26 +153,19 @@ public class ProjectStateService {
                 if (triggerButton != null) triggerButton.setEnabled(true);
                 Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
                 try {
-                    ProjectStateCodec.ImportResult result = get();
-                    Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
-                    Files.createDirectories(dir);
+                    StagedImport staged = get();
 
                     evidenceCapture.clearAll();
-                    for (var item : result.items()) {
-                        String filename = "evidence-" + item.finding().type().replaceAll("[^a-zA-Z0-9.-]", "_")
-                                + "-" + System.currentTimeMillis() + "-" + java.util.UUID.randomUUID() + ".png";
-                        Path imagePath = dir.resolve(filename);
-                        Files.write(imagePath, item.imageBytes());
-                        java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(imagePath.toFile());
-                        var ce = new EvidenceCapture.CapturedEvidence(item.finding(), imagePath, image, item.caption());
-                        evidenceCapture.restoreCaptured(ce, item.included());
-                        findings.processDeduplication(List.of(item.finding()), false);
+                    for (var entry : staged.entries()) {
+                        var ce = entry.getKey();
+                        evidenceCapture.restoreCaptured(ce, entry.getValue());
+                        findings.processDeduplication(List.of(ce.finding()), false);
                     }
-                    result.reportTemplateConfig().saveTo(config);
+                    staged.result().reportTemplateConfig().saveTo(config);
                     api.persistence().extensionData().setString("config", config.serialize());
 
                     onImported.run();
-                    ToastNotification.show(suiteFrame, "Project imported: " + result.items().size() + " evidence item(s).");
+                    ToastNotification.show(suiteFrame, "Project imported: " + staged.entries().size() + " evidence item(s).");
                 } catch (Exception ex) {
                     api.logging().logToError("Project import failed: " + ex.getCause());
                     JOptionPane.showMessageDialog(parent, "Project import failed: " + ex.getCause());
@@ -159,5 +173,9 @@ public class ProjectStateService {
             }
         }.execute();
     }
+
+    private record StagedImport(
+            List<Map.Entry<EvidenceCapture.CapturedEvidence, Boolean>> entries,
+            ProjectStateCodec.ImportResult result) {}
 
 }

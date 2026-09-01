@@ -133,6 +133,17 @@ public class SettingsPanel {
         headerPanel.add(new JLabel(I18n.t("settings.label.mcp_hint")));
         cardMcp.addFormRow(headerPanel);
 
+        // Bearer token: MCP clients must send `Authorization: Bearer <token>`. Read-only,
+        // selectable so it can be copied; regenerated every time the server starts.
+        JTextField mcpTokenField = new JTextField(mcpServer.authToken() == null ? "" : mcpServer.authToken());
+        mcpTokenField.setEditable(false);
+        mcpTokenField.setColumns(40);
+        JPanel mcpTokenPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        mcpTokenPanel.setOpaque(false);
+        mcpTokenPanel.add(new JLabel(I18n.t("settings.label.mcp_token", "Auth token (Authorization: Bearer …):") + " "));
+        mcpTokenPanel.add(mcpTokenField);
+        cardMcp.addFormRow(mcpTokenPanel);
+
         JSpinner spinMcpPort = new JSpinner(new SpinnerNumberModel(config.getInt("mcp.port", 61337), 1024, 65535, 1));
         spinMcpPort.setEditor(new JSpinner.NumberEditor(spinMcpPort, "#"));
         JCheckBox chkMcp = new JCheckBox(I18n.t("settings.checkbox.mcp_enabled"), config.getBool("mcp.enabled", false));
@@ -171,6 +182,7 @@ public class SettingsPanel {
                 protected void done() {
                     mcpStatusBadge.setText(mcpServer.isRunning() ? I18n.t("settings.mcp.status.active", "● ACTIVE") : I18n.t("settings.mcp.status.stopped", "● STOPPED"));
                     mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
+                    mcpTokenField.setText(mcpServer.authToken() == null ? "" : mcpServer.authToken());
                     btnRestartMcp.setText(I18n.t("settings.button.restart_mcp", "Restart Server"));
                     btnRestartMcp.setEnabled(true);
                 }

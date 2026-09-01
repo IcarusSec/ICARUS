@@ -48,8 +48,9 @@ import java.util.Map;
  * build has no dependency resolver.
  *
  * <p>Off by default (config key {@code mcp.enabled}, toggled in Settings). Bound to 127.0.0.1
- * only, unauthenticated — loopback binding is the security boundary, so any local process can
- * already reach it and a bearer token would add nothing but friction to an AI agent's config.
+ * only AND gated by a per-start SecureRandom bearer token ({@link #authToken()}) plus an
+ * {@code Origin} allowlist — loopback binding alone is not a boundary on a multi-user or
+ * otherwise shared host. The token is shown in the Settings → MCP card and Burp's output log.
  *
  * <p>JSON mapping uses the SDK's own {@link JacksonMcpJsonMapper} (correct record&lt;-&gt;JSON
  * round-tripping) rather than hand-rolling one against this repo's {@link JsonParser} — but
@@ -69,6 +70,14 @@ public final class IcarusMcpServer {
     private IcarusMcpTransportProvider transportProvider;
     private McpSyncServer server;
     private int port = -1;
+
+    /**
+     * Bearer token required on every MCP request. Regenerated on each {@link #start(int)} with a
+     * 32-byte SecureRandom value; surfaced in the Settings → MCP card and in Burp's output log so
+     * the analyst can paste it into their MCP client config. Loopback binding alone is not a
+     * boundary — any other local process (or local user on a shared host) can reach the port.
+     */
+    private volatile String authToken;
 
     /**
      * Server-level guidance sent to every connected client — grounded in exactly what's
@@ -264,6 +273,11 @@ public final class IcarusMcpServer {
         return isRunning() ? "Running on http://127.0.0.1:" + port + "/mcp" : "Stopped";
     }
 
+    /** The bearer token clients must send ({@code Authorization: Bearer <token>}); null while stopped. */
+    public synchronized String authToken() {
+        return authToken;
+    }
+
     /** Starts on an ephemeral port (0 = OS-assigned), same as historical behavior. */
     public synchronized void start() {
         start(0);
@@ -277,8 +291,12 @@ public final class IcarusMcpServer {
                     .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             McpJsonMapper jsonMapper = new JacksonMcpJsonMapper(objectMapper);
 
+            byte[] tokenBytes = new byte[32];
+            new java.security.SecureRandom().nextBytes(tokenBytes);
+            authToken = java.util.HexFormat.of().formatHex(tokenBytes);
+
             transportProvider = new IcarusMcpTransportProvider(
-                    msg -> api.logging().logToError(msg), jsonMapper, "/mcp");
+                    msg -> api.logging().logToError(msg), jsonMapper, "/mcp", authToken);
 
             McpServerFeatures.SyncToolSpecification[] tools = {
                     listFindingsTool(), addFindingTool(), getFindingTool(), getFindingTrafficTool(), suppressFindingTool(), unsuppressFindingTool(),
@@ -303,6 +321,7 @@ public final class IcarusMcpServer {
 
             port = transportProvider.start(requestedPort);
             api.logging().logToOutput("ICARUS MCP server listening on http://127.0.0.1:" + port + "/mcp");
+            api.logging().logToOutput("ICARUS MCP auth token (send as 'Authorization: Bearer <token>'): " + authToken);
             api.logging().logToOutput("ICARUS MCP tools (" + tools.length + "): " + java.util.Arrays.stream(tools)
                     .map(t -> t.tool().name())
                     .collect(java.util.stream.Collectors.joining(", ")));
@@ -319,6 +338,7 @@ public final class IcarusMcpServer {
         transportProvider.stop();
         server = null;
         transportProvider = null;
+        authToken = null;
     }
 
     private McpServerFeatures.SyncToolSpecification listFindingsTool() {

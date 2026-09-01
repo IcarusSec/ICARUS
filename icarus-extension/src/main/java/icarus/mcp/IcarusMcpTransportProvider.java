@@ -49,20 +49,51 @@ import java.util.function.Consumer;
  */
 final class IcarusMcpTransportProvider implements McpStreamableServerTransportProvider {
 
+    /** Reject a request body larger than this (unbounded readNBytes(Content-Length) is an OOM lever). */
+    private static final int MAX_BODY_BYTES = 8 * 1024 * 1024;
+    /** Cap the request line / any single header line so a client can't stream us out of memory. */
+    private static final int MAX_LINE_BYTES = 64 * 1024;
+    /** Bound the live session map; oldest session is evicted past this. */
+    private static final int MAX_SESSIONS = 64;
+
     private final Consumer<String> errorLog;
     private final McpJsonMapper jsonMapper;
     private final String mcpPath;
+    /** Hex-encoded bearer token required on every request. Loopback binding is not a security boundary. */
+    private final String authToken;
 
     private final Map<String, McpStreamableServerSession> sessions = new ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentLinkedDeque<String> sessionOrder = new java.util.concurrent.ConcurrentLinkedDeque<>();
     private volatile McpStreamableServerSession.Factory sessionFactory;
     private ServerSocket serverSocket;
     private ExecutorService executor;
     private volatile boolean running;
 
-    IcarusMcpTransportProvider(Consumer<String> errorLog, McpJsonMapper jsonMapper, String mcpPath) {
+    IcarusMcpTransportProvider(Consumer<String> errorLog, McpJsonMapper jsonMapper, String mcpPath, String authToken) {
         this.errorLog = errorLog;
         this.jsonMapper = jsonMapper;
         this.mcpPath = mcpPath;
+        this.authToken = authToken;
+    }
+
+    /** Constant-time check of the {@code Authorization: Bearer <token>} header. */
+    private boolean authorized(Map<String, String> headers) {
+        String h = headers.get("authorization");
+        if (h == null) return false;
+        String prefix = "bearer ";
+        if (h.length() <= prefix.length() || !h.regionMatches(true, 0, prefix, 0, prefix.length())) return false;
+        byte[] presented = h.substring(prefix.length()).trim().getBytes(StandardCharsets.UTF_8);
+        byte[] expected = authToken.getBytes(StandardCharsets.UTF_8);
+        return java.security.MessageDigest.isEqual(presented, expected);
+    }
+
+    /** Only loopback origins (or a null/absent origin, e.g. a native MCP client) are allowed. */
+    private static boolean isAllowedOrigin(String origin) {
+        String o = origin.trim().toLowerCase();
+        return o.equals("null")
+                || o.startsWith("http://127.0.0.1") || o.startsWith("https://127.0.0.1")
+                || o.startsWith("http://localhost")  || o.startsWith("https://localhost")
+                || o.startsWith("http://[::1]")       || o.startsWith("https://[::1]");
     }
 
     /** Binds and starts the HTTP server on 127.0.0.1. {@code port} 0 picks an ephemeral port. Returns the bound port. */
@@ -122,6 +153,7 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
         return Mono.fromRunnable(() -> {
             sessions.values().forEach(McpStreamableServerSession::close);
             sessions.clear();
+            sessionOrder.clear();
         });
     }
 
@@ -156,12 +188,30 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
                 return;
             }
 
+            String origin = headers.get("origin");
+            if (origin != null && !isAllowedOrigin(origin)) {
+                sendSimpleResponse(socket, 403);
+                socket.close();
+                return;
+            }
+
+            if (!authorized(headers)) {
+                sendSimpleResponse(socket, 401);
+                socket.close();
+                return;
+            }
+
             if ("POST".equalsIgnoreCase(method)) {
                 int contentLength = 0;
                 try {
                     contentLength = Integer.parseInt(headers.getOrDefault("content-length", "0"));
                 } catch (NumberFormatException ignored) {
                     // treat as empty body
+                }
+                if (contentLength < 0 || contentLength > MAX_BODY_BYTES) {
+                    sendSimpleResponse(socket, 413);
+                    socket.close();
+                    return;
                 }
                 byte[] body = in.readNBytes(contentLength);
                 handlePost(socket, headers.get("mcp-session-id"), body);
@@ -233,6 +283,14 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
 
         String sessionId = UUID.randomUUID().toString();
         sessions.put(sessionId, init.session());
+        sessionOrder.addLast(sessionId);
+        // Bound the map: evict (and close) the oldest sessions once over the cap.
+        while (sessions.size() > MAX_SESSIONS) {
+            String evict = sessionOrder.pollFirst();
+            if (evict == null) break;
+            McpStreamableServerSession old = sessions.remove(evict);
+            if (old != null) old.close();
+        }
 
         McpSchema.JSONRPCResponse response = new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION, request.id(), result, null);
         sendJson(socket, 200, jsonMapper.writeValueAsString(response), sessionId);
@@ -308,14 +366,18 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
             case 200 -> "OK";
             case 202 -> "Accepted";
             case 400 -> "Bad Request";
+            case 401 -> "Unauthorized";
+            case 403 -> "Forbidden";
             case 404 -> "Not Found";
             case 405 -> "Method Not Allowed";
+            case 413 -> "Payload Too Large";
             case 500 -> "Internal Server Error";
             default -> "";
         };
     }
 
-    /** Reads one CRLF- or LF-terminated line as ASCII; returns null at EOF with nothing read. */
+    /** Reads one CRLF- or LF-terminated line as ASCII; returns null at EOF with nothing read.
+     *  Aborts past {@link #MAX_LINE_BYTES} so an endless header line can't exhaust memory. */
     private static String readLine(InputStream in) throws IOException {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         int b;
@@ -324,6 +386,9 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
             any = true;
             if (b == '\n') break;
             if (b != '\r') buf.write(b);
+            if (buf.size() > MAX_LINE_BYTES) {
+                throw new IOException("request line/header exceeds " + MAX_LINE_BYTES + " bytes");
+            }
         }
         if (!any) return null;
         return buf.toString(StandardCharsets.ISO_8859_1);
@@ -334,7 +399,8 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
      *  transport, driving initialize -> notifications/initialized -> tools/call over the wire. */
     public static void main(String[] args) throws Exception {
         var jsonMapper = new io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
-        var provider = new IcarusMcpTransportProvider(System.err::println, jsonMapper, "/mcp");
+        String testToken = "test-token-0123456789abcdef";
+        var provider = new IcarusMcpTransportProvider(System.err::println, jsonMapper, "/mcp", testToken);
 
         var tool = new McpSchema.Tool("echo", "Echo", "Echoes back the given text",
                 new McpSchema.JsonSchema("object", Map.of("text", Map.of("type", "string")), java.util.List.of("text"), false, null, null),
@@ -357,16 +423,24 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
             var client = java.net.http.HttpClient.newHttpClient();
             String url = "http://127.0.0.1:" + port + "/mcp";
 
-            var initResp = postJson(client, url, null,
+            var initResp = postJson(client, url, null, testToken,
                     "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"0\"}}}");
             String sessionId = initResp.headers().firstValue("Mcp-Session-Id").orElseThrow();
             assert initResp.body().contains("\"protocolVersion\"") : "no initialize result: " + initResp.body();
 
-            postJson(client, url, sessionId, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
+            postJson(client, url, sessionId, testToken, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");
 
-            var callResp = postJson(client, url, sessionId,
+            var callResp = postJson(client, url, sessionId, testToken,
                     "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"echo\",\"arguments\":{\"text\":\"hi\"}}}");
             assert callResp.body().contains("echo:hi") : "tools/call did not echo back: " + callResp.body();
+
+            // No token -> 401.
+            var noAuth = java.net.http.HttpClient.newHttpClient().send(
+                    java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                            .header("Content-Type", "application/json")
+                            .POST(java.net.http.HttpRequest.BodyPublishers.ofString("{}")).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+            assert noAuth.statusCode() == 401 : "unauthenticated request must be 401, got " + noAuth.statusCode();
 
             System.out.println("IcarusMcpTransportProvider self-check passed (run with -ea to enforce).");
         } finally {
@@ -375,9 +449,10 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
         }
     }
 
-    private static java.net.http.HttpResponse<String> postJson(java.net.http.HttpClient client, String url, String sessionId, String body) throws Exception {
+    private static java.net.http.HttpResponse<String> postJson(java.net.http.HttpClient client, String url, String sessionId, String token, String body) throws Exception {
         var builder = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
                 .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + token)
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body));
         if (sessionId != null) builder.header("Mcp-Session-Id", sessionId);
         var response = client.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());

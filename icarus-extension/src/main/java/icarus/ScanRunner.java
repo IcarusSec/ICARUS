@@ -15,9 +15,12 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
@@ -35,6 +38,13 @@ public final class ScanRunner {
     private final List<IcarusModule> modules;
     private final ModuleConfig config;
     private final ExecutorService executor;
+    // Passive scans run on a SEPARATE, bounded executor: Orchestrator submits one per proxied
+    // HTTP response, and Burp can proxy faster than ~35 regexes over each body run. The default
+    // single-thread executor's unbounded LinkedBlockingQueue turned that into a slow memory
+    // leak (each queued task pins an HttpResponseReceived) and a backlog behind any interactive
+    // scan. Passive analysis is best-effort background work — when we fall behind, dropping the
+    // oldest queued response is acceptable. The interactive executor above is untouched.
+    private final ThreadPoolExecutor passiveExecutor;
     private final BiConsumer<List<Finding>, Boolean> onFindings;
 
     // The single-thread executor means only one of these ever runs at a time — this just
@@ -103,6 +113,15 @@ public final class ScanRunner {
             t.setDaemon(true);
             return t;
         });
+        this.passiveExecutor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(64),
+                r -> {
+                    var t = new Thread(r, "ICARUS-passive");
+                    t.setDaemon(true);
+                    return t;
+                },
+                new ThreadPoolExecutor.DiscardOldestPolicy());
     }
 
     /**
@@ -126,6 +145,9 @@ public final class ScanRunner {
         stopCurrent();
         if (executor != null) {
             executor.shutdownNow();
+        }
+        if (passiveExecutor != null) {
+            passiveExecutor.shutdownNow();
         }
     }
 
@@ -167,19 +189,24 @@ public final class ScanRunner {
         });
     }
 
-    /** Runs the passive (background) modules against a response, off the request-handling thread. */
+    /** Runs the passive (background) modules against a response, off the request-handling thread.
+     *  Best-effort: on a bounded queue, the oldest pending response is dropped when we're behind. */
     public void runPassiveScan(HttpResponseReceived response, Consumer<List<Finding>> onPassiveFindings) {
-        runAsync(() -> {
-            for (var module : modules) {
-                List<Finding> passiveFindings = null;
-                if (module instanceof SensitiveHeaderModule shm) {
-                    passiveFindings = shm.analyzeResponse(response, config);
-                } else if (module instanceof PassiveErrorModule pem) {
-                    passiveFindings = pem.analyzeResponse(response, config);
+        passiveExecutor.execute(() -> {
+            try {
+                for (var module : modules) {
+                    List<Finding> passiveFindings = null;
+                    if (module instanceof SensitiveHeaderModule shm) {
+                        passiveFindings = shm.analyzeResponse(response, config);
+                    } else if (module instanceof PassiveErrorModule pem) {
+                        passiveFindings = pem.analyzeResponse(response, config);
+                    }
+                    if (passiveFindings != null && !passiveFindings.isEmpty()) {
+                        onPassiveFindings.accept(passiveFindings);
+                    }
                 }
-                if (passiveFindings != null && !passiveFindings.isEmpty()) {
-                    onPassiveFindings.accept(passiveFindings);
-                }
+            } catch (Exception e) {
+                api.logging().logToError("ICARUS passive scan failed: " + e);
             }
         });
     }

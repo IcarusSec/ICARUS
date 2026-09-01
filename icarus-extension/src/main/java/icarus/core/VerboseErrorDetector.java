@@ -1,9 +1,41 @@
 package icarus.core;
 
+import burp.api.montoya.core.ByteArray;
+
 import java.util.List;
 import java.util.regex.Pattern;
 
 public class VerboseErrorDetector {
+
+    /**
+     * Cheap necessary-condition sentinels for {@link #mightContainVerboseError}. Every
+     * DB/framework/language pattern below contains at least one of these as a substring, so a
+     * body with none of them cannot match — letting the passive path skip the full
+     * {@code bodyToString()} copy + ~35-regex pass on the common 200-OK-no-error case.
+     * Known residual: a body whose ONLY error signal is a bare stack frame with no keyword
+     * (e.g. a lone {@code at f (x.xyz:1:2)}) is no longer pre-matched.
+     */
+    private static final String[] SENTINELS = {
+        "exception", "traceback", "stack trace", "stacktrace", "stack:",
+        "error", "ora-", "sql", "mongo", "odbc", "jdbc", "oledb", "driver[",
+        "fatal error", "warning:", "notice:", "parse error", "caused by",
+        ", line ", ".rb:", ".js:", ".ts:", ".php", "java.", "at java",
+        "org.spring", "org.apache", "werkzeug", "system.", "whitelabel",
+        "jsonwebtoken", "jjwt", "nomethoderror", "unhandledpromise"
+    };
+
+    /**
+     * True if {@code body} might contain a verbose error — a fast, allocation-free
+     * (no String copy) case-insensitive substring scan over the raw bytes. When this returns
+     * false, {@link #getVerboseErrorMatch} on the same body returns null (see {@link #SENTINELS}).
+     */
+    public static boolean mightContainVerboseError(ByteArray body) {
+        if (body == null || body.length() == 0) return false;
+        for (String s : SENTINELS) {
+            if (body.indexOf(s, false) != -1) return true;
+        }
+        return false;
+    }
 
     private static final List<Pattern> DB_ERROR_PATTERNS = List.of(
         Pattern.compile("(?i)ORA-\\d{5}:"), // Oracle

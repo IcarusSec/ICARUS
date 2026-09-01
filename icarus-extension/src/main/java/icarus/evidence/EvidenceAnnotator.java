@@ -89,10 +89,9 @@ public void paintAnnotation(Graphics2D g2, Shape s, String kind, Color c) {
 public Shape createArrow(Point from, Point to) {
         double angle = Math.atan2(to.y - from.y, to.x - from.x);
         double length = Math.hypot(to.x - from.x, to.y - from.y);
-        // Scale the head with the shaft (a fixed 15px head is invisible on a 1920px evidence image),
-        // clamped so a very short arrow still gets a real head and a long one doesn't get a spear.
-        double headLength = Math.max(16, Math.min(length * 0.35, 48));
-        double headWidth = headLength * 0.7;
+        // Scale the head proportionally with a clean, modest clamp so it points sharply without dominating the image.
+        double headLength = Math.max(10, Math.min(length * 0.15, 18));
+        double headWidth = headLength * 0.45;
 
         double baseX = to.x - headLength * Math.cos(angle);
         double baseY = to.y - headLength * Math.sin(angle);

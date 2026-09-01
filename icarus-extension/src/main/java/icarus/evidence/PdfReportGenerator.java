@@ -185,12 +185,15 @@ public final class PdfReportGenerator {
         // Same single persistent "Retest Mode" toggle as ReportGenerator — see its generate() for why.
         boolean retest = config.getBool("retest.enabled", false);
 
-        // Not try-with-resources: doc.close() below already closes the underlying
-        // FileOutputStream via PdfWriter/DocWriter, and closing it again first would leave
-        // doc.close() flushing to an already-closed stream ("Stream Closed" IOException).
+        // doc.close() (happy path) closes the underlying FileOutputStream via PdfWriter, so
+        // no try-with-resources — that would close the stream before the finally's doc.close(),
+        // leaving it flushing to a closed stream ("Stream Closed" IOException). But if we throw
+        // before doc.open(), doc.close() never runs and the stream leaks (Windows file lock),
+        // so the finally closes it directly in that case.
         Document doc = new Document(PageSize.A4, 40, 40, 50, 40);
+        FileOutputStream fos = new FileOutputStream(outputPdfFile.toFile());
         try {
-            PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(outputPdfFile.toFile()));
+            PdfWriter writer = PdfWriter.getInstance(doc, fos);
             // Without this, OpenPDF defers image placement to better fill a page — which is
             // exactly what breaks finding-card order when a page break lands near a
             // description+image pair: several descriptions get flushed first, then their
@@ -211,6 +214,7 @@ public final class PdfReportGenerator {
             throw new IOException("PDF generation failed", e);
         } finally {
             if (doc.isOpen()) doc.close();
+            else fos.close();
         }
 
         if (api != null && api.logging() != null) {
@@ -229,8 +233,9 @@ public final class PdfReportGenerator {
         Color accent2 = themeColor(profile.pdfTheme().secondaryHex(), accent);
 
         Document doc = new Document(PageSize.A4, 40, 40, 50, 40);
+        FileOutputStream fos = new FileOutputStream(outputPdfFile.toFile());
         try {
-            PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(outputPdfFile.toFile()));
+            PdfWriter writer = PdfWriter.getInstance(doc, fos);
             writer.setStrictImageSequence(true);
             doc.open();
 
@@ -280,6 +285,7 @@ public final class PdfReportGenerator {
             throw new IOException("PDF generation failed", e);
         } finally {
             if (doc.isOpen()) doc.close();
+            else fos.close();
         }
 
         if (api != null && api.logging() != null) {

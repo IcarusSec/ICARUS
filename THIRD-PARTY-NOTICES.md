@@ -21,7 +21,7 @@ authoritative license text ships in each project's own repository.
 | FlatLaf Extras (`com.formdev:flatlaf-extras`) | 3.4.1 | Apache-2.0 | https://github.com/JFormDesigner/FlatLaf |
 | JSVG (`com.github.weisj:jsvg`) | 1.4.0 | Apache-2.0 | https://github.com/weisJ/jsvg |
 | RSyntaxTextArea (`com.fifesoft:rsyntaxtextarea`) | 3.3.3 | BSD-3-Clause | https://github.com/bobbylight/RSyntaxTextArea |
-| jsoup (`org.jsoup:jsoup`) | 1.17.2 | MIT | https://jsoup.org/ |
+| jsoup (`org.jsoup:jsoup`) | 1.23.1 | MIT | https://jsoup.org/ |
 | MCP Java SDK core (`io.modelcontextprotocol.sdk:mcp-core`) | 1.1.3 | Apache-2.0 | https://github.com/modelcontextprotocol/java-sdk |
 | MCP Java SDK Jackson2 JSON (`io.modelcontextprotocol.sdk:mcp-json-jackson2`) | 1.1.3 | Apache-2.0 | https://github.com/modelcontextprotocol/java-sdk |
 | Jackson Databind (`com.fasterxml.jackson.core:jackson-databind`) | 2.20.1 | Apache-2.0 | https://github.com/FasterXML/jackson-databind |

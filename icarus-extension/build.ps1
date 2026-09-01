@@ -34,7 +34,7 @@ $BUNDLED = @(
   'com/formdev/flatlaf-extras/3.4.1/flatlaf-extras-3.4.1.jar'
   'com/github/weisj/jsvg/1.4.0/jsvg-1.4.0.jar'
   'com/fifesoft/rsyntaxtextarea/3.3.3/rsyntaxtextarea-3.3.3.jar'
-  'org/jsoup/jsoup/1.17.2/jsoup-1.17.2.jar'
+  'org/jsoup/jsoup/1.23.1/jsoup-1.23.1.jar'
   'io/modelcontextprotocol/sdk/mcp-core/1.1.3/mcp-core-1.1.3.jar'
   'io/modelcontextprotocol/sdk/mcp-json-jackson2/1.1.3/mcp-json-jackson2-1.1.3.jar'
   'com/fasterxml/jackson/core/jackson-databind/2.20.1/jackson-databind-2.20.1.jar'

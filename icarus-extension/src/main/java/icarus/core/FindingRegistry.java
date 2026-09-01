@@ -2,7 +2,11 @@ package icarus.core;
 
 import burp.api.montoya.MontoyaApi;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,8 +27,12 @@ public final class FindingRegistry {
     private final ModuleConfig config;
     private final Consumer<Runnable> uiDispatcher;
 
+    private static final DateTimeFormatter AUDIT_TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    /** Bound the retained audit log; the full stream still goes to {@code api.logging()}. */
+    private static final int MAX_AUDIT_ENTRIES = 1000;
+
     private final Map<String, FindingRecord> activeFindings = new ConcurrentHashMap<>();
-    private final List<String> auditLog = new ArrayList<>();
+    private final Deque<String> auditLog = new ArrayDeque<>();
     private final List<Consumer<List<FindingRecord>>> listeners = new CopyOnWriteArrayList<>();
 
     // Set while a listener fan-out is already queued on the UI thread but hasn't run yet.
@@ -51,10 +59,12 @@ public final class FindingRegistry {
     }
 
     public void logAudit(String action) {
-        String timestamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-        String entry = "[" + timestamp + "] " + action;
+        String entry = "[" + LocalDateTime.now().format(AUDIT_TS) + "] " + action;
         synchronized (auditLog) {
-            auditLog.add(entry);
+            auditLog.addLast(entry);
+            while (auditLog.size() > MAX_AUDIT_ENTRIES) {
+                auditLog.removeFirst();
+            }
         }
         api.logging().logToOutput(entry);
     }
@@ -165,7 +175,13 @@ public final class FindingRegistry {
                 }
                 record.incrementCount();
                 record.updateFinding(finding); // Keep the latest evidence and metadata
-                logAudit("Duplicate finding incremented to " + record.getCount() + "x: " + hash);
+                // Coalesce the audit trail for duplicates: a RateLimit blast re-enters this
+                // path per-response (~1500x), and one logToOutput + retained string per hit
+                // was the cost. Log the 2nd hit, then every 50th.
+                int dupCount = record.getCount();
+                if (dupCount == 2 || dupCount % 50 == 0) {
+                    logAudit("Duplicate finding now " + dupCount + "x: " + hash);
+                }
                 changed = true;
             } else {
                 var newRecord = new FindingRecord(finding);

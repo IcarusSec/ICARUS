@@ -1,0 +1,240 @@
+{
+  "nodes": [
+    {
+      "id": "_agents_rules_graphify_graphify_knowledge_graph",
+      "label": "Graphify Knowledge Graph",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_graphify_query",
+      "label": "graphify query",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_query_graph",
+      "label": "query_graph",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_graphify_path",
+      "label": "graphify path",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_shortest_path",
+      "label": "shortest_path",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_graphify_explain",
+      "label": "graphify explain",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_get_node",
+      "label": "get_node",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_graphify_update",
+      "label": "graphify update",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_graph_json",
+      "label": "graphify-out/graph.json",
+      "file_type": "document",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_wiki_index",
+      "label": "graphify-out/wiki/index.md",
+      "file_type": "document",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_rules_graphify_graph_report",
+      "label": "graphify-out/GRAPH_REPORT.md",
+      "file_type": "document",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_workflows_graphify_graphify_workflow",
+      "label": "Graphify Workflow",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/workflows/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "_agents_workflows_graphify_graphify_skill",
+      "label": "Graphify Skill",
+      "file_type": "concept",
+      "source_file": "/home/trecto/BurpCustomActions/.agents/workflows/graphify.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "_agents_rules_graphify_graphify_knowledge_graph",
+      "target": "_agents_rules_graphify_graph_json",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "_agents_rules_graphify_graphify_query",
+      "target": "_agents_rules_graphify_query_graph",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "_agents_rules_graphify_graphify_path",
+      "target": "_agents_rules_graphify_shortest_path",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "_agents_rules_graphify_graphify_explain",
+      "target": "_agents_rules_graphify_get_node",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "_agents_workflows_graphify_graphify_workflow",
+      "target": "_agents_workflows_graphify_graphify_skill",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/workflows/graphify.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "_agents_workflows_graphify_graphify_workflow",
+      "target": "_agents_rules_graphify_graphify_knowledge_graph",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/workflows/graphify.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "_agents_rules_graphify_cli_commands",
+      "label": "Graphify CLI Commands",
+      "nodes": [
+        "_agents_rules_graphify_graphify_query",
+        "_agents_rules_graphify_graphify_path",
+        "_agents_rules_graphify_graphify_explain",
+        "_agents_rules_graphify_graphify_update"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md"
+    },
+    {
+      "id": "_agents_rules_graphify_mcp_tools",
+      "label": "Graphify MCP Tools",
+      "nodes": [
+        "_agents_rules_graphify_query_graph",
+        "_agents_rules_graphify_shortest_path",
+        "_agents_rules_graphify_get_node"
+      ],
+      "relation": "form",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "/home/trecto/BurpCustomActions/.agents/rules/graphify.md"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

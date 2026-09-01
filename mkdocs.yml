@@ -1,0 +1,45 @@
+site_name: ICARUS Documentation
+site_description: AI-native offensive security testing extension for Burp Suite
+site_url: https://IcarusSec.github.io/ICARUS/
+repo_url: https://github.com/IcarusSec/ICARUS
+repo_name: IcarusSec/ICARUS
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: deep orange
+    accent: orange
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Workflows: workflows.md
+  - Features:
+      - AutoAuth: features/autoauth.md
+      - Evidence Manager: features/evidence_manager.md
+      - Reporting: features/reporting.md
+  - Modules:
+      - Param Validator: modules/param_validator.md
+      - HTTP Verb Tester: modules/http_verb.md
+      - JWT Checker: modules/jwt_checker.md
+      - Rate Limit Tester: modules/rate_limit.md
+      - Passive Scanners: modules/passive_scanners.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - Core Concepts: architecture/core_concepts.md

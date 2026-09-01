@@ -1,7 +1,0 @@
-[allowlist]
-description = "Global allowlist for generated artifacts, caches and documentation"
-paths = [
-    '''graphify-out/.*''',
-    '''\.agents/.*''',
-    '''docs/.*'''
-]

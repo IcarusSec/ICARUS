@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # Extract version from Icarus.java (single source of truth)
 VERSION=$(grep -oP 'VERSION = "\K[^"]+' src/main/java/icarus/Icarus.java)
@@ -87,6 +87,26 @@ for path in "${MCP_LIBS[@]}"; do
         wget -q -O "$jarfile" "https://repo1.maven.org/maven2/${path}"
     fi
 done
+
+# 1e. Supply-chain integrity gate. Every bundled jar must exist, be non-trivially
+# sized, and match its pinned SHA-256 in libs/checksums.sha256 BEFORE we unpack a
+# single class into the fat jar. A poisoned mirror / MITM / partial download stops
+# the build here instead of shipping.
+echo "[*] Verifying dependency checksums..."
+while read -r _hash name; do
+    [ -n "${name:-}" ] || continue
+    f="libs/$name"
+    if [ ! -f "$f" ]; then
+        echo "[!] missing dependency: $f (listed in libs/checksums.sha256)"
+        exit 1
+    fi
+    size=$(wc -c < "$f")
+    if [ "$size" -lt 1024 ]; then
+        echo "[!] dependency suspiciously small (<1KB), likely a failed download: $f ($size bytes)"
+        exit 1
+    fi
+done < libs/checksums.sha256
+( cd libs && sha256sum -c checksums.sha256 ) || { echo "[!] checksum mismatch"; exit 1; }
 
 # 2. Prepare build directory
 rm -rf build_manual

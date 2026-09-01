@@ -52,6 +52,26 @@ foreach ($p in $BUNDLED) {
   }
 }
 
+# --- supply-chain integrity gate (mirrors build.sh step 1e) ---
+# Every bundled jar must exist, be >1KB, and match its pinned SHA-256 in
+# libs\checksums.sha256 before we unpack anything into the fat jar.
+Write-Host "[*] Verifying dependency checksums..."
+$expected = @{}
+foreach ($line in Get-Content 'libs\checksums.sha256') {
+  $parts = $line.Trim() -split '\s+', 2
+  if ($parts.Count -eq 2) { $expected[$parts[1].Trim()] = $parts[0].Trim().ToLower() }
+}
+foreach ($name in $expected.Keys) {
+  $f = "libs\$name"
+  if (-not (Test-Path $f)) { throw "missing dependency: $f (listed in libs\checksums.sha256)" }
+  if ((Get-Item $f).Length -lt 1024) { throw "dependency suspiciously small (<1KB), likely a failed download: $f" }
+  $got = (Get-FileHash -Algorithm SHA256 -Path $f).Hash.ToLower()
+  if ($got -ne $expected[$name]) {
+    throw "checksum mismatch: $name`n  expected $($expected[$name])`n  got      $got"
+  }
+}
+Write-Host "[+] All $($expected.Count) dependency checksums verified."
+
 # --- fresh build dir ---
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue build_manual
 $classes = 'build_manual\classes'

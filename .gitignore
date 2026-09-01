@@ -27,8 +27,9 @@ release.properties
 .DS_Store
 Thumbs.db
 
-# Dependencies (Raw JARs)
-libs/
+# Dependencies (raw JARs) — but keep the pinned checksums.sha256 lockfile tracked
+**/libs/*
+!**/libs/checksums.sha256
 
 # Temp
 *.tmp

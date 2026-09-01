@@ -176,12 +176,15 @@ public class HttpVerbModule implements IcarusModule {
         for (VerbResult result : results) {
             String method = result.method();
             int status = result.status();
+            String path = (result.evidence() != null && result.evidence().request() != null)
+                    ? result.evidence().request().path() : "";
 
             if (result.accepted()) {
                 findings.add(Finding.builder(name(), "ACCEPTED_METHOD")
                         .description("Method " + method + " was accepted with status " + status)
                         .severity(Severity.MEDIUM)
                         .category(Category.HTTP_METHOD)
+                        .path(path)
                         .evidence(result.evidence())
                         .meta("method", method)
                         .meta("status", String.valueOf(status))
@@ -193,6 +196,7 @@ public class HttpVerbModule implements IcarusModule {
                                 .description("Method " + method + " was accepted but is not in the Allow header.")
                                 .severity(Severity.MEDIUM)
                                 .category(Category.HTTP_METHOD)
+                                .path(path)
                                 .evidence(result.evidence())
                                 .meta("method", method)
                                 .build());
@@ -205,6 +209,7 @@ public class HttpVerbModule implements IcarusModule {
                         .description("TRACE request reflected injected marker header in response body.")
                         .severity(Severity.HIGH)
                         .category(Category.HTTP_METHOD)
+                        .path(path)
                         .evidence(result.evidence())
                         .build());
             }
@@ -217,6 +222,7 @@ public class HttpVerbModule implements IcarusModule {
                             .description("Method " + method + " requires authentication/authorization (" + status + ")")
                             .severity(Severity.LOW)
                             .category(Category.HTTP_METHOD)
+                            .path(path)
                             .evidence(result.evidence())
                             .meta("method", method)
                             .build());
@@ -228,6 +234,7 @@ public class HttpVerbModule implements IcarusModule {
                         .description("Method " + method + " resulted in a redirect (" + status + ")")
                         .severity(Severity.INFO)
                         .category(Category.HTTP_METHOD)
+                        .path(path)
                         .evidence(result.evidence())
                         .meta("method", method)
                         .build());
@@ -238,6 +245,7 @@ public class HttpVerbModule implements IcarusModule {
                         .description("Method " + method + " resulted in a server error (" + status + ")")
                         .severity(Severity.INFO)
                         .category(Category.HTTP_METHOD)
+                        .path(path)
                         .evidence(result.evidence())
                         .meta("method", method)
                         .build());

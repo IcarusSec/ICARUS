@@ -330,10 +330,12 @@ public class SensitiveHeaderModule implements IcarusModule {
     }
 
     private void addFinding(List<Finding> findings, HttpRequestResponse evidence, String type, Severity severity, Category category, String description) {
+        String path = (evidence != null && evidence.request() != null) ? evidence.request().path() : "";
         findings.add(Finding.builder(name(), type)
                 .description(description)
                 .severity(severity)
                 .category(category)
+                .path(path)
                 .evidence(evidence) // Can be null for passive scans
                 .build());
     }

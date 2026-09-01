@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -24,7 +25,7 @@ public final class FindingRegistry {
 
     private final Map<String, FindingRecord> activeFindings = new ConcurrentHashMap<>();
     private final List<String> auditLog = new ArrayList<>();
-    private final List<Consumer<List<FindingRecord>>> listeners = new ArrayList<>();
+    private final List<Consumer<List<FindingRecord>>> listeners = new CopyOnWriteArrayList<>();
 
     // Set while a listener fan-out is already queued on the UI thread but hasn't run yet.
     // A rate-limit blast (or any bulk scan) can call notifyListenersOfUpdate() hundreds of

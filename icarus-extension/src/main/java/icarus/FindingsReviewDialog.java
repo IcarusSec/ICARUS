@@ -108,8 +108,15 @@ public class FindingsReviewDialog {
             public void changedUpdate(javax.swing.event.DocumentEvent e) { applyFilter(); }
             private void applyFilter() {
                 String text = txtFilter.getText();
-                if (text.trim().length() == 0) sorter.setRowFilter(null);
-                else sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
+                if (text.trim().length() == 0) {
+                    sorter.setRowFilter(null);
+                } else {
+                    try {
+                        sorter.setRowFilter(RowFilter.regexFilter("(?i)" + text));
+                    } catch (java.util.regex.PatternSyntaxException ex) {
+                        sorter.setRowFilter(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text)));
+                    }
+                }
             }
         });
 

@@ -103,7 +103,12 @@ public final class ReportGenerator {
                 Path dest = reportDir.resolve(c.imagePath().getFileName()).normalize();
                 if (!src.equals(dest)) {
                     try {
-                        Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+                        if (Files.exists(src) || c.image() == null) {
+                            Files.copy(src, dest, StandardCopyOption.REPLACE_EXISTING);
+                        } else {
+                            // Screenshot file moved/deleted since capture — write the in-memory copy.
+                            javax.imageio.ImageIO.write(c.image(), "png", dest.toFile());
+                        }
                     } catch (IOException e) {
                         api.logging().logToError("Failed to copy evidence image " + src.getFileName() + " into report directory: " + e);
                     }
@@ -589,7 +594,7 @@ public final class ReportGenerator {
             """.formatted(
                 index, index++, escapeHtml(f.type()),
                 f.severity().name(), f.severity().name(),
-                f.module(), f.category().name(),
+                escapeHtml(f.module()), f.category().name(),
                 escapeHtml(f.path())
             ));
 
@@ -653,7 +658,7 @@ public final class ReportGenerator {
                     html.append("""
                             <div class="evidence-block">
                                 <img class="evidence-img" src="%s" alt="Evidence for %s">
-                    """.formatted(c.imagePath().getFileName().toString(), escapeHtml(f.type())));
+                    """.formatted(icarus.report.render.EvidenceView.encodeFileName(c.imagePath().getFileName().toString()), escapeHtml(f.type())));
                     String caption = c.caption() == null ? "" : c.caption();
                     html.append("                                <div class=\"evidence-caption\">")
                         .append(evidenceIndex).append(". ").append(escapeHtml(caption))

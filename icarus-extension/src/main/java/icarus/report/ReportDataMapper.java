@@ -106,6 +106,15 @@ public final class ReportDataMapper {
                             bytes = Files.readAllBytes(p);
                         } catch (IOException ignored) {}
                     }
+                    // File moved/deleted since capture: the in-memory screenshot is still there,
+                    // so the report shouldn't silently lose the image.
+                    if (bytes == null && ce.image() != null) {
+                        try {
+                            var png = new java.io.ByteArrayOutputStream();
+                            javax.imageio.ImageIO.write(ce.image(), "png", png);
+                            bytes = png.toByteArray();
+                        } catch (IOException ignored) {}
+                    }
                     evidenceList.add(new EvidenceView(p, ce.caption(), bytes));
                 }
             }

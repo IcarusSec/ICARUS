@@ -370,6 +370,10 @@ public void showPhase1(Finding finding) {
                     .path(finding.path())
                     .evidence(finding.evidence());
             finding.metadata().forEach(builder::meta);
+            // A scanner/MCP finding is already in the registry: renaming it here must update that
+            // record, not fork a new one. "Manual" findings are still unregistered templates that
+            // all share one placeholder type, so their title is what tells them apart.
+            if (!"Manual".equals(finding.module()) || finding.isUserEdited()) builder.keepIdentityOf(finding);
             selectedCwe.forEach(builder::cwe);
             return builder.build();
         };

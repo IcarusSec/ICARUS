@@ -616,7 +616,7 @@ public final class ReportGenerator {
 
             if (!f.metadata().isEmpty()) {
                 for (var meta : f.metadata().entrySet()) {
-                    if (!meta.getKey().equalsIgnoreCase("grc_id")) {
+                    if (!meta.getKey().equalsIgnoreCase("grc_id") && !Finding.isInternalMeta(meta.getKey())) {
                         html.append("""
                                 <tr><th>%s</th><td><code>%s</code></td></tr>
                         """.formatted(escapeHtml(meta.getKey()), escapeHtml(meta.getValue())));

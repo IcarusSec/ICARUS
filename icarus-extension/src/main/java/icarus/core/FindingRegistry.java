@@ -174,7 +174,12 @@ public final class FindingRegistry {
                     continue;
                 }
                 record.incrementCount();
-                record.updateFinding(finding); // Keep the latest evidence and metadata
+                // Keep the latest evidence and metadata — unless the user already edited this
+                // finding (title/severity/description) and this is a fresh scanner hit, which
+                // would otherwise silently revert their edit on every rescan.
+                if (!record.getFinding().isUserEdited() || finding.isUserEdited()) {
+                    record.updateFinding(finding);
+                }
                 // Coalesce the audit trail for duplicates: a RateLimit blast re-enters this
                 // path per-response (~1500x), and one logToOutput + retained string per hit
                 // was the cost. Log the 2nd hit, then every 50th.
@@ -219,22 +224,54 @@ public final class FindingRegistry {
     }
 
     private void createAuditIssue(Finding finding) {
+        KnowledgeBaseEntry kb = kbEntry(finding);
         var issue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
             "ICARUS: " + finding.type(),
             // Escaped: descriptions routinely quote response content (reflected input, error
             // excerpts), which Burp's issue pane would otherwise render as live HTML.
             htmlEscape(finding.description()).replace("\n", "<br>")
                     + "<br>Module: " + htmlEscape(finding.module()) + "<br>Path: " + htmlEscape(finding.path()),
-            "Review the finding and validate the vulnerability.",
+            remediationFor(kb),
             finding.evidence().request().url(),
             mapSeverity(finding.severity()),
-            burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM,
-            null,
+            confidenceFor(finding),
+            kb != null && kb.impact() != null && !kb.impact().isBlank() ? htmlEscape(kb.impact()).replace("\n", "<br>") : null,
             null,
             mapSeverity(finding.severity()),
             finding.evidence()
         );
         api.siteMap().add(issue);
+    }
+
+    /**
+     * Burp confidence from what the finding actually claims: a heuristic the module itself
+     * flagged {@code [UNCERTAIN]} is Tentative, a finding a human or agent confirmed and entered
+     * by hand is Certain, everything else stays Firm. Previously every issue was Firm.
+     */
+    static burp.api.montoya.scanner.audit.issues.AuditIssueConfidence confidenceFor(Finding finding) {
+        String desc = finding.description() == null ? "" : finding.description();
+        if (desc.contains("[UNCERTAIN]")) return burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.TENTATIVE;
+        if ("Manual".equals(finding.module()) || "MCP".equals(finding.module()))
+            return burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.CERTAIN;
+        return burp.api.montoya.scanner.audit.issues.AuditIssueConfidence.FIRM;
+    }
+
+    /** The user's knowledge-base entry for this finding type, if they wrote one. */
+    private static KnowledgeBaseEntry kbEntry(Finding finding) {
+        try {
+            KnowledgeBaseEntry e = VulnerabilityKnowledgeBase.getInstance().getEntry(finding.type());
+            return e != null && !e.deleted() ? e : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** Knowledge-base recommendation when one exists, instead of the same placeholder on every issue. */
+    private static String remediationFor(KnowledgeBaseEntry e) {
+        if (e != null && e.recommendation() != null && !e.recommendation().isBlank()) {
+            return htmlEscape(e.recommendation()).replace("\n", "<br>");
+        }
+        return "Review the finding and validate the vulnerability.";
     }
 
     private static String htmlEscape(String s) {

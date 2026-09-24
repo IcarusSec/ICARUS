@@ -61,9 +61,31 @@ public final class Finding {
     public static final String META_SCOPE = "endpoint";
 
     /**
+     * Metadata key pinning a finding's {@link #similarityHash()} across user edits. The hash is
+     * built from module/type/path and the editors change type (the title field IS the type), so
+     * renaming a finding used to give it a new identity: its screenshots split into a separate
+     * Evidence Manager group, its retest status was lost, and the registry kept the old record as
+     * a duplicate. An edited finding carries its original hash here instead.
+     */
+    public static final String META_IDENTITY = "identity";
+
+    /** Internal bookkeeping keys that shouldn't be printed in report metadata tables. */
+    public static boolean isInternalMeta(String key) {
+        return META_IDENTITY.equals(key);
+    }
+
+    /** True once a user edit pinned this finding's identity (see {@link #META_IDENTITY}). */
+    public boolean isUserEdited() {
+        String id = metadata.get(META_IDENTITY);
+        return id != null && !id.isBlank();
+    }
+
+    /**
      * Hash used for deduplication.
      */
     public String similarityHash() {
+        String pinned = metadata.get(META_IDENTITY);
+        if (pinned != null && !pinned.isBlank()) return pinned;
         String scope = metadata.get(META_SCOPE);
         String base = module + "|" + type + "|" + path;
         return scope == null || scope.isBlank() ? base : base + "|" + scope;
@@ -187,6 +209,8 @@ public final class Finding {
         public Builder evidence(HttpRequestResponse v) { this.evidence = v != null ? v.copyToTempFile() : null; return this; }
         public Builder meta(String key, String value)  { this.metadata.put(key, value); return this; }
         public Builder cwe(String cweId)      { if (!this.cweIds.contains(cweId)) this.cweIds.add(cweId); return this; }
+        /** Keeps {@code original}'s identity (dedup hash) even if this edit changes its type/path. */
+        public Builder keepIdentityOf(Finding original) { return meta(META_IDENTITY, original.similarityHash()); }
 
         public Finding build() {
             return new Finding(this);

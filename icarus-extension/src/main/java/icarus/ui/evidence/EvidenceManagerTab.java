@@ -924,8 +924,18 @@ public class EvidenceManagerTab {
             List<String> newCweIds = java.util.Arrays.stream(txtCwe.getText().split(","))
                     .map(String::strip).filter(s -> !s.isEmpty()).toList();
 
+            // Carry every other field over. This used to build the finding from module, title,
+            // severity and CWEs alone, so any edit here wiped the description, path,
+            // request/response evidence, category and metadata, and registered the stripped
+            // copy as a second finding next to the original.
             Finding.Builder builder = Finding.builder(current.module(), newTitle)
-                    .severity(newSeverity);
+                    .description(current.description())
+                    .severity(newSeverity)
+                    .category(current.category())
+                    .path(current.path())
+                    .evidence(current.evidence());
+            current.metadata().forEach(builder::meta);
+            builder.keepIdentityOf(current);
             newCweIds.forEach(builder::cwe);
             Finding updated = builder.build();
 

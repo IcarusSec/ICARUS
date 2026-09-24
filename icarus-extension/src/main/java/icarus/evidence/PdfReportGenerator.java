@@ -740,7 +740,7 @@ public final class PdfReportGenerator {
         }
 
         for (var entry : f.metadata().entrySet()) {
-            if (!entry.getKey().equalsIgnoreCase("grc_id")) {
+            if (!entry.getKey().equalsIgnoreCase("grc_id") && !Finding.isInternalMeta(entry.getKey())) {
                 addMetaRow(card, entry.getKey(), entry.getValue());
             }
         }

@@ -36,6 +36,11 @@ public class JwtCheckerModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "jwt.enabled";
+    }
+
+    @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("jwt.enabled", true)) {
             return List.of();

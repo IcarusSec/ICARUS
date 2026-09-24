@@ -29,6 +29,11 @@ public final class PassiveErrorModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "pem.enabled";
+    }
+
+    @Override
     public boolean includeInBulkScan() {
         // Purely observational (reads the response Burp already has) — background/on-demand
         // only, doesn't send its own requests like the actual security-test modules do.

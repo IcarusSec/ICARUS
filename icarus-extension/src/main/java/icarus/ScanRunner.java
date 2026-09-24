@@ -504,15 +504,7 @@ public final class ScanRunner {
     }
 
     private boolean isModuleEnabled(IcarusModule module) {
-        return switch (module.name()) {
-            case "ParamValidator"    -> config.getBool("pv.enabled", true);
-            case "HTTP Verb Tester"  -> config.getBool("hv.enabled", true);
-            case "JWT Checker"       -> config.getBool("jwt.enabled", true);
-            case "Sensitive Headers" -> config.getBool("sh.enabled", true);
-            case "Postman Export"    -> config.getBool("export.enabled", true);
-            case "Rate Limit Tester" -> config.getBool("rl.enabled", true);
-            case "Passive Error Detector" -> config.getBool("pem.enabled", true);
-            default -> true;
-        };
+        String key = module.enabledConfigKey();
+        return key == null || config.getBool(key, true);
     }
 }

@@ -84,6 +84,11 @@ public class SensitiveHeaderModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "sh.enabled";
+    }
+
+    @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("sh.enabled", true)) {
             return List.of();

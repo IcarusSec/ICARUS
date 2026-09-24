@@ -31,6 +31,11 @@ public class HttpVerbModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "hv.enabled";
+    }
+
+    @Override
     public boolean sendsActivePayloads() {
         return true;
     }

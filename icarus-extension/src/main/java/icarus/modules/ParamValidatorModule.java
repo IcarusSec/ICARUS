@@ -42,6 +42,11 @@ public final class ParamValidatorModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "pv.enabled";
+    }
+
+    @Override
     public boolean sendsActivePayloads() {
         return true;
     }

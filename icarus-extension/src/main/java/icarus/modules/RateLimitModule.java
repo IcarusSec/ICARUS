@@ -55,6 +55,11 @@ public class RateLimitModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "rl.enabled";
+    }
+
+    @Override
     public boolean sendsActivePayloads() {
         return true;
     }

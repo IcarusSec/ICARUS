@@ -28,6 +28,16 @@ public interface IcarusModule {
     List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger);
 
     /**
+     * Boolean config key that switches this module on/off (e.g. {@code "pv.enabled"}), or
+     * {@code null} if it can't be disabled. Declared by the module itself so the scan runner
+     * doesn't have to match on the display name, which silently ignored the setting whenever a
+     * module was renamed.
+     */
+    default String enabledConfigKey() {
+        return null;
+    }
+
+    /**
      * Whether this module should run as part of "Run All Modules". Utility modules that
      * aren't security tests (e.g. exporting a request, rather than looking for a
      * vulnerability) should return false here — they stay available via their own

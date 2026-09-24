@@ -2,6 +2,7 @@ package icarus.modules;
 
 import burp.api.montoya.http.handler.HttpResponseReceived;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.MimeType;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import icarus.core.Category;
 import icarus.core.Finding;
@@ -54,7 +55,10 @@ public final class PassiveErrorModule implements IcarusModule {
         List<Finding> findings = new ArrayList<>();
         // Errors are per-endpoint, not host-wide config like a missing security header —
         // path must be set so a 500 on /api/users doesn't dedup away a 500 on /api/orders.
-        String path = evidence != null ? evidence.request().path() : "";
+        // Query string dropped (a cache-buster made every hit a new finding) and the host kept
+        // as scope, so /health on two different targets stays two findings.
+        String path = evidence != null ? evidence.request().pathWithoutQuery() : "";
+        String host = evidence != null ? Finding.hostScope(evidence.request()) : "";
         int status = response.statusCode();
 
         if (status >= 500) {
@@ -65,13 +69,17 @@ public final class PassiveErrorModule implements IcarusModule {
                     .path(path)
                     .evidence(evidence)
                     .meta("status", String.valueOf(status))
+                    .meta(Finding.META_SCOPE, host)
                     .build());
         }
 
         // Pre-filter before the full body-string copy + ~35-regex pass: a 500+ always warrants
         // the check; otherwise only if the raw bytes carry a cheap error sentinel. Short-circuits
         // the common 200-OK-no-error response, which is the bulk of proxied traffic.
-        String verboseMatch = (status >= 500 || VerboseErrorDetector.mightContainVerboseError(response.body()))
+        // Static assets are skipped: JS bundles legitimately contain strings like
+        // "TypeError: ..." and "Stack trace", which was the main source of false leaks.
+        String verboseMatch = !isStaticAsset(response)
+                && (status >= 500 || VerboseErrorDetector.mightContainVerboseError(response.body()))
                 ? VerboseErrorDetector.getVerboseErrorMatch(response.bodyToString())
                 : null;
         if (verboseMatch != null) {
@@ -82,9 +90,21 @@ public final class PassiveErrorModule implements IcarusModule {
                     .path(path)
                     .evidence(evidence)
                     .meta("match", verboseMatch)
+                    .meta(Finding.META_SCOPE, host)
                     .build());
         }
 
         return findings;
+    }
+
+    private static boolean isStaticAsset(HttpResponse response) {
+        MimeType mime = response.statedMimeType();
+        if (mime == null || mime == MimeType.NONE || mime == MimeType.UNRECOGNIZED) mime = response.inferredMimeType();
+        if (mime == null) return false;
+        return switch (mime) {
+            case SCRIPT, CSS, IMAGE_UNKNOWN, IMAGE_JPEG, IMAGE_GIF, IMAGE_PNG, IMAGE_BMP, IMAGE_TIFF,
+                 IMAGE_SVG_XML, SOUND, VIDEO, FONT_WOFF, FONT_WOFF2, APPLICATION_FLASH -> true;
+            default -> false;
+        };
     }
 }

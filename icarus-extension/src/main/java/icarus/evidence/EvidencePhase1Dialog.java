@@ -327,7 +327,13 @@ public void showPhase1(Finding finding) {
         JCheckBox chk1080 = new JCheckBox(I18n.t("evidence.phase1.chk.force1080"), true);
         chk1080.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
         
+        JButton btnMaskSecrets = capture.uiHelpers.createModernButton(I18n.t("evidence.phase1.btn.maskSecrets"), new Color(70, 70, 70));
+        btnMaskSecrets.setIcon(EvidenceUiHelpers.createIcon("eye-off"));
+        btnMaskSecrets.setToolTipText(I18n.t("evidence.phase1.btn.maskSecrets.tip"));
+        btnMaskSecrets.putClientProperty("FlatLaf.style", btnStyle);
+
         pnlBottomLeft.add(btnCleanNoise);
+        pnlBottomLeft.add(btnMaskSecrets);
         pnlBottomLeft.add(chk1080);
 
         JPanel pnlBottomRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 0));
@@ -346,6 +352,7 @@ public void showPhase1(Finding finding) {
         // Force exact matching preferred height across all three action buttons
         int targetH = Math.max(42, Math.max(btnApply.getPreferredSize().height, Math.max(btnCleanNoise.getPreferredSize().height, btnAnnotate.getPreferredSize().height)));
         btnCleanNoise.setPreferredSize(new Dimension(btnCleanNoise.getPreferredSize().width + 12, targetH));
+        btnMaskSecrets.setPreferredSize(new Dimension(btnMaskSecrets.getPreferredSize().width + 12, targetH));
         btnAnnotate.setPreferredSize(new Dimension(btnAnnotate.getPreferredSize().width + 12, targetH));
         btnApply.setPreferredSize(new Dimension(btnApply.getPreferredSize().width + 12, targetH));
 
@@ -358,6 +365,10 @@ public void showPhase1(Finding finding) {
         btnCleanNoise.addActionListener(e -> {
             reqArea.setText(capture.phase1Dialog.cleanNoise(reqArea.getText()));
             resArea.setText(capture.phase1Dialog.cleanNoise(resArea.getText()));
+        });
+        btnMaskSecrets.addActionListener(e -> {
+            reqArea.setText(SecretMasker.mask(reqArea.getText()));
+            resArea.setText(SecretMasker.mask(resArea.getText()));
         });
 
         // Shared by both buttons below — builds the edited Finding once, from whatever's
@@ -491,9 +502,15 @@ public String cleanNoise(String text) {
             "Sec-Fetch-", "Sec-Ch-Ua"
         };
         StringBuilder sb = new StringBuilder();
+        boolean inHeaders = true;
+        boolean first = true;
         for (String line : text.split("\n")) {
+            // Header block only: a body line (JSON value, HTML text) that happens to start
+            // with "Connection:" etc. is content, not noise.
+            if (!first && line.strip().isEmpty()) inHeaders = false;
+            first = false;
             boolean isNoise = false;
-            for (String noise : noisyHeaders) {
+            for (String noise : inHeaders ? noisyHeaders : new String[0]) {
                 if (line.toLowerCase().startsWith(noise.toLowerCase())) {
                     isNoise = true;
                     break;

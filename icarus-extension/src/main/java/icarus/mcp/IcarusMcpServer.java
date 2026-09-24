@@ -1793,17 +1793,51 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                     "Session hijacking over unencrypted traffic combined with XSS", Severity.HIGH,
                     "Fix the reflected XSS first; set the Secure flag on session cookies."));
 
-    private List<Map<String, Object>> computeAttackChains(String pathFilter) {
-        Map<String, List<FindingRecord>> byPath = new LinkedHashMap<>();
+    /**
+     * Best-effort host a finding belongs to: the evidence request's real host if present, else
+     * parsed from an origin-style path ({@code https://host/...}), else the host token embedded
+     * in the endpoint scope ({@code METHOD host/path}). {@code ""} when nothing yields one.
+     */
+    private static String hostOf(Finding f) {
+        if (f.evidence() != null && f.evidence().request() != null
+                && f.evidence().request().httpService() != null) {
+            return f.evidence().request().httpService().host();
+        }
+        String path = f.path() == null ? "" : f.path();
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            try { return java.net.URI.create(path).getHost() == null ? "" : java.net.URI.create(path).getHost(); }
+            catch (Exception ignored) { return ""; }
+        }
+        String scope = f.metadata().get(Finding.META_SCOPE);
+        if (scope != null) {
+            int sp = scope.indexOf(' ');       // "GET host/path" -> "host/path"
+            String rest = sp >= 0 ? scope.substring(sp + 1) : scope;
+            int slash = rest.indexOf('/');
+            String host = slash >= 0 ? rest.substring(0, slash) : rest;
+            if (!host.isBlank() && host.contains(".")) return host;
+        }
+        return "";
+    }
+
+    /**
+     * Correlation is grouped by HOST, not exact path: these patterns pair a page/host-level
+     * weakness (missing CSP, a cookie flag) with an injection that may sit on a different
+     * endpoint of the same host, and the two findings legitimately carry different paths
+     * (a parameter path vs. the origin URL), so a path-equality join never matched them.
+     */
+    private List<Map<String, Object>> computeAttackChains(String hostFilter) {
+        Map<String, List<FindingRecord>> byHost = new LinkedHashMap<>();
         for (FindingRecord r : orchestrator.getAllFindingRecords()) {
             if (r.isSuppressed()) continue;
-            if (pathFilter != null && !r.getFinding().path().equals(pathFilter)) continue;
-            byPath.computeIfAbsent(r.getFinding().path(), k -> new ArrayList<>()).add(r);
+            String host = hostOf(r.getFinding());
+            if (host.isBlank()) continue;
+            if (hostFilter != null && !host.equalsIgnoreCase(hostFilter)) continue;
+            byHost.computeIfAbsent(host, k -> new ArrayList<>()).add(r);
         }
 
         List<Map<String, Object>> chains = new ArrayList<>();
-        for (var entry : byPath.entrySet()) {
-            String path = entry.getKey();
+        for (var entry : byHost.entrySet()) {
+            String host = entry.getKey();
             List<FindingRecord> records = entry.getValue();
             for (ChainPattern pattern : CHAIN_PATTERNS) {
                 List<FindingRecord> steps = new ArrayList<>();
@@ -1820,15 +1854,16 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                     stepMaps.add(Map.of(
                             "hash", r.getFinding().similarityHash(),
                             "type", r.getFinding().type(),
+                            "path", r.getFinding().path() == null ? "" : r.getFinding().path(),
                             "severity", r.getFinding().severity().name(),
                             "exploitable", EXPLOITABLE_TYPES.contains(r.getFinding().type()),
                             "validatable", VALIDATABLE_TYPES.contains(r.getFinding().type())));
                 }
 
                 Map<String, Object> chain = new LinkedHashMap<>();
-                chain.put("chainId", pattern.name() + "::" + path);
+                chain.put("chainId", pattern.name() + "::" + host);
                 chain.put("pattern", pattern.name());
-                chain.put("path", path);
+                chain.put("host", host);
                 chain.put("steps", stepMaps);
                 chain.put("finalImpact", pattern.finalImpact());
                 chain.put("combinedSeverity", pattern.combinedSeverity().name());
@@ -1841,11 +1876,11 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
     private McpServerFeatures.SyncToolSpecification findAttackChainsTool() {
         var inputSchema = new McpSchema.JsonSchema("object",
-                Map.of("path", Map.of("type", "string", "description", "Optional — restrict correlation to findings on this exact path (ICARUS scans one endpoint at a time, so this is usually the endpoint just tested)")),
+                Map.of("host", Map.of("type", "string", "description", "Optional — restrict correlation to findings on this exact host (e.g. app.example.com)")),
                 List.of(), false, null, null);
         var tool = new McpSchema.Tool("find_attack_chains",
                 "Correlate ICARUS findings into known dangerous combinations",
-                "Advisory, read-only: looks for pairs of findings on the same path that combine into a worse risk than either alone (e.g. reflected XSS "
+                "Advisory, read-only: looks for findings on the same host that combine into a worse risk than either alone (e.g. reflected XSS "
                         + "plus a missing Content-Security-Policy). Only fires when every finding a pattern needs was actually produced by ICARUS — no "
                         + "invented data, no execution. Patterns needing a detector ICARUS doesn't have (open redirect, CORS misconfiguration, MFA absence) "
                         + "aren't listed, so they simply never appear rather than silently never matching. Each returned chain has a chainId usable with "
@@ -1853,8 +1888,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String pathFilter = request.arguments().get("path") instanceof String s && !s.isBlank() ? s : null;
-            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(computeAttackChains(pathFilter))).build();
+            String hostFilter = request.arguments().get("host") instanceof String s && !s.isBlank() ? s : null;
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(computeAttackChains(hostFilter))).build();
         });
     }
 
@@ -1875,11 +1910,11 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
             if (chainId == null) return badArg("chain_id");
             int sep = chainId.indexOf("::");
             if (sep < 0) {
-                return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::path').").isError(true).build();
+                return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::host').").isError(true).build();
             }
-            String path = chainId.substring(sep + 2);
+            String host = chainId.substring(sep + 2);
 
-            for (Map<String, Object> chain : computeAttackChains(path)) {
+            for (Map<String, Object> chain : computeAttackChains(host)) {
                 if (!chainId.equals(chain.get("chainId"))) continue;
 
                 @SuppressWarnings("unchecked")

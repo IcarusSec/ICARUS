@@ -47,7 +47,9 @@ public java.awt.image.BufferedImage applyAnnotations(java.awt.image.BufferedImag
         Graphics2D g2 = out.createGraphics();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.drawImage(source, 0, 0, null);
-        g2.setStroke(new BasicStroke(3f));
+        // Scale with the capture: 3px at the 1200px default, 4px at 1920px, so a box stays
+        // visible once the image is shrunk to page width in the PDF/HTML report.
+        g2.setStroke(new BasicStroke(Math.max(3f, source.getWidth() / 480f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
         Rectangle crop = null;
         for (EvidenceAnnotator.Annotation a : annotations) {

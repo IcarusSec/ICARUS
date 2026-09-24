@@ -105,7 +105,8 @@ public BufferedImage drawRateLimitTable(Finding finding, int imgWidth, int imgHe
         int titleX = capture.imageRenderer.drawHeaderLogo(g, 70);
         g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-        g.drawString("ICARUS EVIDENCE  ·  " + finding.type() + "  ·  " + finding.path() + capture.imageRenderer.projectNameSuffix(), titleX, 30);
+        g.drawString(EvidenceImageRenderer.fitHeaderText(g, "ICARUS EVIDENCE  ·  " + finding.type() + "  ·  " + finding.path()
+                + capture.imageRenderer.projectNameSuffix(), EvidenceImageRenderer.headerRoom(imgWidth, titleX)), titleX, 30);
 
         String startTime = finding.metadata().getOrDefault("start_time", "");
         String endTime = finding.metadata().getOrDefault("end_time", "");
@@ -114,7 +115,11 @@ public BufferedImage drawRateLimitTable(Finding finding, int imgWidth, int imgHe
         // --- DRAW METADATA BANNER IN HEADER ---
         g.setColor(cs.dim());
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-        String baseStr = finding.description() + timeStr;
+        String rpsLabel = finding.metadata().get("rps");
+        // Leave room for the "  |  <rps>" suffix drawn after it.
+        int rpsReserve = rpsLabel != null && !rpsLabel.isBlank() ? g.getFontMetrics().stringWidth("  |  " + rpsLabel) : 0;
+        String baseStr = EvidenceImageRenderer.fitHeaderText(g, finding.description() + timeStr,
+                EvidenceImageRenderer.headerRoom(imgWidth, titleX) - rpsReserve);
         g.drawString(baseStr, titleX, 55);
 
         String rps = finding.metadata().get("rps");

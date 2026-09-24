@@ -57,6 +57,27 @@ public final class EvidencePaths {
     }
 
     /**
+     * Reserves a fresh, not-yet-existing PNG path in {@code dir} named
+     * {@code <prefix>-<findingType>-<millis>[-n].png}. A bare millisecond timestamp collided when
+     * two captures of the same finding type landed in the same millisecond (MCP batch captures),
+     * and the second silently overwrote the first screenshot on disk. {@link Files#createFile}
+     * is atomic, so concurrent callers can't both claim the same name.
+     */
+    public static Path reserveEvidenceFile(Path dir, String prefix, String findingType) throws java.io.IOException {
+        Files.createDirectories(dir);
+        String safeType = (findingType == null ? "finding" : findingType).replaceAll("[^a-zA-Z0-9.-]", "_");
+        String stem = prefix + "-" + safeType + "-" + System.currentTimeMillis();
+        for (int n = 0; ; n++) {
+            Path candidate = dir.resolve(n == 0 ? stem + ".png" : stem + "-" + n + ".png").normalize();
+            try {
+                return Files.createFile(candidate);
+            } catch (java.nio.file.FileAlreadyExistsException taken) {
+                // try the next suffix
+            }
+        }
+    }
+
+    /**
      * Best-effort only: Montoya's {@code Project} API exposes just a name, not a filesystem
      * path, so this parses Burp's own launch command line (a real, documented Montoya API —
      * {@code BurpSuite#commandLineArguments()} — not internal reflection) for a

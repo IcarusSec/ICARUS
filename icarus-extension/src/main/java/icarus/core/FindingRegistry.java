@@ -221,7 +221,10 @@ public final class FindingRegistry {
     private void createAuditIssue(Finding finding) {
         var issue = burp.api.montoya.scanner.audit.issues.AuditIssue.auditIssue(
             "ICARUS: " + finding.type(),
-            finding.description() + "<br>Module: " + finding.module() + "<br>Path: " + finding.path(),
+            // Escaped: descriptions routinely quote response content (reflected input, error
+            // excerpts), which Burp's issue pane would otherwise render as live HTML.
+            htmlEscape(finding.description()).replace("\n", "<br>")
+                    + "<br>Module: " + htmlEscape(finding.module()) + "<br>Path: " + htmlEscape(finding.path()),
             "Review the finding and validate the vulnerability.",
             finding.evidence().request().url(),
             mapSeverity(finding.severity()),
@@ -232,6 +235,12 @@ public final class FindingRegistry {
             finding.evidence()
         );
         api.siteMap().add(issue);
+    }
+
+    private static String htmlEscape(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
     }
 
     private burp.api.montoya.scanner.audit.issues.AuditIssueSeverity mapSeverity(Severity severity) {

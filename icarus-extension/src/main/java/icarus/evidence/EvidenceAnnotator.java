@@ -47,9 +47,7 @@ public java.awt.image.BufferedImage applyAnnotations(java.awt.image.BufferedImag
         Graphics2D g2 = out.createGraphics();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.drawImage(source, 0, 0, null);
-        // Scale with the capture: 3px at the 1200px default, 4px at 1920px, so a box stays
-        // visible once the image is shrunk to page width in the PDF/HTML report.
-        g2.setStroke(new BasicStroke(Math.max(3f, source.getWidth() / 480f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.setStroke(strokeFor(source.getWidth()));
 
         Rectangle crop = null;
         for (EvidenceAnnotator.Annotation a : annotations) {
@@ -72,6 +70,22 @@ public java.awt.image.BufferedImage applyAnnotations(java.awt.image.BufferedImag
         Rectangle bounds = crop.intersection(new Rectangle(0, 0, out.getWidth(), out.getHeight()));
         if (bounds.width <= 0 || bounds.height <= 0) return out;
         return out.getSubimage(bounds.x, bounds.y, bounds.width, bounds.height);
+    }
+
+    /**
+     * Annotation stroke for an image {@code imageWidth} px wide — scales with the capture (3px at
+     * the 1200px default, 4px at 1920px) so a box stays visible once the image is shrunk to page
+     * width in the PDF/HTML report. Shared by the live editor canvas, its saved image and the
+     * headless MCP path, so all three draw identical lines.
+     */
+    public static BasicStroke strokeFor(int imageWidth) {
+        return new BasicStroke(Math.max(3f, imageWidth / 480f), BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+    }
+
+    /** A drag this small is a stray click, not an intended annotation (it'd be invisible but still need undoing). */
+    public static boolean isAccidental(Shape s) {
+        Rectangle b = s.getBounds();
+        return b.width < 4 && b.height < 4;
     }
 
 public void paintAnnotation(Graphics2D g2, Shape s, String kind, Color c) {

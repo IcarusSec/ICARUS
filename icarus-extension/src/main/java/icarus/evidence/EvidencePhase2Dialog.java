@@ -73,7 +73,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
                 g2.drawImage(snap, 0, 0, null);
 
                 // Draw committed shapes
-                g2.setStroke(new BasicStroke(3f));
+                g2.setStroke(EvidenceAnnotator.strokeFor(snap.getWidth()));
                 for (int i = 0; i < shapes.size(); i++) {
                     drawAnnotation(g2, shapes.get(i), kinds.get(i), cols.get(i));
                 }
@@ -138,9 +138,11 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
                         canvas.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                     }
                 } else if (preview[0] != null) {
-                    shapes.add(preview[0]);
-                    cols.add(curCol[0]);
-                    kinds.add(mode[0]);
+                    if (!EvidenceAnnotator.isAccidental(preview[0])) {
+                        shapes.add(preview[0]);
+                        cols.add(curCol[0]);
+                        kinds.add(mode[0]);
+                    }
                     preview[0] = null;
                     dragStart[0] = null;
                     canvas.repaint();
@@ -256,20 +258,32 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
                 String lastDir = EvidencePaths.defaultOutputDir(api, config);
                 JFileChooser fc = new JFileChooser(new File(lastDir));
                 fc.setSelectedFile(new File("evidence-" + finalTitle.replaceAll("[^a-zA-Z0-9.-]", "_") + ".png"));
-                if (fc.showSaveDialog(frame) == JFileChooser.APPROVE_OPTION) {
-                    File f = fc.getSelectedFile();
-                    ImageIO.write(out, "png", f);
-                    capture.captured.add(new EvidenceCapture.CapturedEvidence(finding, f.toPath(), out, ""));
-                    capture.onApplied.accept(finding);
-                    if (f.getParentFile() != null) {
-                        config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
-                        api.persistence().extensionData().setString("config", config.serialize());
-                    }
-                    JOptionPane.showMessageDialog(frame, I18n.t("evidence.phase2.msg.saved") + f.getAbsolutePath());
-                    // frame.dispose(); // User requested not to close immediately
+                if (fc.showSaveDialog(frame) != JFileChooser.APPROVE_OPTION) return;
+
+                File f = fc.getSelectedFile().toPath().toAbsolutePath().normalize().toFile();
+                // ImageIO always writes PNG bytes; give the file a name that says so.
+                if (!f.getName().toLowerCase(Locale.ROOT).endsWith(".png")) {
+                    f = new File(f.getParentFile(), f.getName() + ".png");
                 }
+                if (f.exists() && JOptionPane.showConfirmDialog(frame,
+                        I18n.t("evidence.phase2.msg.overwrite", f.getName()),
+                        I18n.t("evidence.phase2.btn.save"), JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+                    return;
+                }
+                if (!ImageIO.write(out, "png", f)) throw new IOException("no PNG writer available");
+                // restoreCaptured (not a bare captured.add) so the Evidence Manager refreshes.
+                capture.restoreCaptured(new EvidenceCapture.CapturedEvidence(finding, f.toPath(), out, ""), true);
+                capture.onApplied.accept(finding);
+                if (f.getParentFile() != null) {
+                    config.set("evidence.output_dir", f.getParentFile().getAbsolutePath());
+                    api.persistence().extensionData().setString("config", config.serialize());
+                }
+                JOptionPane.showMessageDialog(frame, I18n.t("evidence.phase2.msg.saved") + f.getAbsolutePath());
             } catch (Exception ex) {
-                ex.printStackTrace();
+                api.logging().logToError("Failed to save annotated evidence: " + ex);
+                JOptionPane.showMessageDialog(frame, I18n.t("evidence.phase2.msg.save_failed", String.valueOf(ex.getMessage())),
+                        I18n.t("evidence.phase2.btn.save"), JOptionPane.ERROR_MESSAGE);
             }
         });
 
@@ -284,7 +298,13 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         copyBtn.setForeground(Color.WHITE);
         copyBtn.addActionListener(a -> {
             try {
-                BufferedImage out = capture.phase2Dialog.renderFinalImage(snap, shapes, kinds, cols);
+                // Opaque RGB copy: several platforms (notably Windows) paste an ARGB clipboard
+                // image as black or not at all.
+                BufferedImage argb = capture.phase2Dialog.renderFinalImage(snap, shapes, kinds, cols);
+                BufferedImage out = new BufferedImage(argb.getWidth(), argb.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics2D cg = out.createGraphics();
+                cg.drawImage(argb, 0, 0, Color.BLACK, null);
+                cg.dispose();
                 Transferable transferable = new Transferable() {
                     public DataFlavor[] getTransferDataFlavors() { return new DataFlavor[] { DataFlavor.imageFlavor }; }
                     public boolean isDataFlavorSupported(DataFlavor flavor) { return DataFlavor.imageFlavor.equals(flavor); }
@@ -294,7 +314,9 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
                 // JOptionPane.showMessageDialog(frame, "Image copied to clipboard.");
                 frame.dispose(); // User requested to close when copying
             } catch (Exception ex) {
-                ex.printStackTrace();
+                api.logging().logToError("Failed to copy evidence to clipboard: " + ex);
+                JOptionPane.showMessageDialog(frame, String.valueOf(ex.getMessage()),
+                        I18n.t("evidence.phase2.btn.copy"), JOptionPane.ERROR_MESSAGE);
             }
         });
 
@@ -336,7 +358,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
             }
         });
 
-        JLabel lblWorkflow = new JLabel("Workflow");
+        JLabel lblWorkflow = new JLabel(I18n.t("evidence.phase2.section.workflow"));
         lblWorkflow.setFont(lblWorkflow.getFont().deriveFont(Font.BOLD, 12f));
         lblWorkflow.setForeground(Color.GRAY);
         bar.add(lblWorkflow, gbc); gbc.gridy++;
@@ -344,7 +366,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         bar.add(backBtn, gbc); gbc.gridy++;
         bar.add(new JSeparator(), gbc); gbc.gridy++;
         
-        JLabel lblTools = new JLabel("Ferramentas");
+        JLabel lblTools = new JLabel(I18n.t("evidence.phase2.section.tools"));
         lblTools.setFont(lblTools.getFont().deriveFont(Font.BOLD, 12f));
         lblTools.setForeground(Color.GRAY);
         bar.add(lblTools, gbc); gbc.gridy++;
@@ -357,7 +379,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         bar.add(undoBtn, gbc); gbc.gridy++;
         bar.add(new JSeparator(), gbc); gbc.gridy++;
         
-        JLabel lblActions = new JLabel("Ações");
+        JLabel lblActions = new JLabel(I18n.t("evidence.phase2.section.actions"));
         lblActions.setFont(lblActions.getFont().deriveFont(Font.BOLD, 12f));
         lblActions.setForeground(Color.GRAY);
         bar.add(lblActions, gbc); gbc.gridy++;
@@ -441,7 +463,7 @@ public BufferedImage renderFinalImage(BufferedImage snap, List<Shape> shapes, Li
         Graphics2D g2 = out.createGraphics();
         g2.drawImage(snap, 0, 0, null);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setStroke(new BasicStroke(3f));
+        g2.setStroke(EvidenceAnnotator.strokeFor(snap.getWidth()));
         for (int i = 0; i < shapes.size(); i++) {
             // Same painter as the live canvas and the MCP path — keeps HIGHLIGHT (and any future
             // kind) rendering identically in the preview and the saved PNG.

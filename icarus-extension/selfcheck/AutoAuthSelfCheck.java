@@ -69,18 +69,19 @@ public final class AutoAuthSelfCheck {
         // the constructor's loadSession() before it would ever touch api — is enough to
         // invoke it via reflection.
         AutoAuthModule instance = new AutoAuthModule(null, new icarus.core.ModuleConfig());
-        Method m = AutoAuthModule.class.getDeclaredMethod("buildHeaderTarget", String.class, Range.class, String.class);
+        Method m = AutoAuthModule.class.getDeclaredMethod("buildHeaderTarget", String.class, Range.class, String.class, int.class);
         m.setAccessible(true);
 
-        Object target = m.invoke(instance, raw, fakeRange(selStart, selEnd), "example.com");
+        Object target = m.invoke(instance, raw, fakeRange(selStart, selEnd), "example.com", 2);
         assertNotNull(target, "header target");
         assertEquals("Authorization", invokeRecordAccessor(target, "headerName"), "header name");
         assertEquals("Bearer ", invokeRecordAccessor(target, "headerPrefix"), "header prefix");
         assertEquals("example.com", invokeRecordAccessor(target, "host"), "header target host");
+        assertEquals(2, invokeRecordAccessor(target, "sourceIndex"), "header target source index");
 
         // No prefix case: highlight starts exactly at the value.
         int noPrefixStart = raw.indexOf("Bearer ");
-        Object noPrefixTarget = m.invoke(instance, raw, fakeRange(noPrefixStart, selEnd), "example.com");
+        Object noPrefixTarget = m.invoke(instance, raw, fakeRange(noPrefixStart, selEnd), "example.com", 0);
         assertEquals("", invokeRecordAccessor(noPrefixTarget, "headerPrefix"), "no-prefix case");
     }
 

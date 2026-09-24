@@ -383,6 +383,20 @@ public final class IcarusMcpServer {
                 && request.arguments().get(key) instanceof String s && !s.isBlank() ? s : null;
     }
 
+    /**
+     * A reportable severity from a tool arg, or {@code null}. FIXED/NOT_FIXED are retest
+     * outcomes (set via the retest workflow), not severities a new finding can be filed at.
+     */
+    private static Severity parseRealSeverity(Object raw) {
+        if (!(raw instanceof String s) || s.isBlank()) return null;
+        try {
+            Severity sev = Severity.valueOf(s.strip().toUpperCase(java.util.Locale.ROOT));
+            return sev == Severity.FIXED || sev == Severity.NOT_FIXED ? null : sev;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     /** Standard "bad or missing argument" tool error. */
     private static McpSchema.CallToolResult badArg(String key) {
         return McpSchema.CallToolResult.builder()
@@ -963,7 +977,10 @@ public final class IcarusMcpServer {
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             String imagePath = reqStr(request, "image_path");
             if (imagePath == null) return badArg("image_path");
-            String caption = (String) request.arguments().get("caption");
+            // Absent/null clears the caption; anything else must be a string.
+            Object rawCaption = request.arguments().get("caption");
+            if (rawCaption != null && !(rawCaption instanceof String)) return badArg("caption");
+            String caption = rawCaption == null ? "" : (String) rawCaption;
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
             orchestrator.getEvidenceCapture().setCaption(ce, caption);
@@ -1306,16 +1323,16 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             Map<String, Object> args = request.arguments();
-            String title = String.valueOf(args.get("title"));
-            String description = String.valueOf(args.get("description"));
+            String title = reqStr(request, "title");
+            if (title == null) return badArg("title");
+            String description = reqStr(request, "description");
+            if (description == null) return badArg("description");
             String cweId = args.get("cwe_id") instanceof String s && !s.isBlank() ? s : null;
             String rawRequest = args.get("raw_request") instanceof String s ? s : "";
             String rawResponse = args.get("raw_response") instanceof String s ? s : "";
 
-            Severity severity;
-            try {
-                severity = Severity.valueOf(String.valueOf(args.get("severity")).toUpperCase());
-            } catch (IllegalArgumentException e) {
+            Severity severity = parseRealSeverity(args.get("severity"));
+            if (severity == null) {
                 return McpSchema.CallToolResult.builder()
                         .addTextContent("Invalid severity — use CRITICAL, HIGH, MEDIUM, LOW, or INFO.")
                         .isError(true)
@@ -1552,13 +1569,12 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             Map<String, Object> args = request.arguments();
-            String name = (String) args.get("name");
-            String severityStr = (String) args.get("severity");
-            Severity severity;
-            try {
-                severity = Severity.valueOf(severityStr.toUpperCase());
-            } catch (Exception e) {
-                return McpSchema.CallToolResult.builder().addTextContent("Invalid severity: " + severityStr).isError(true).build();
+            String name = reqStr(request, "name");
+            if (name == null) return badArg("name");
+            Severity severity = parseRealSeverity(args.get("severity"));
+            if (severity == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("Invalid severity: " + args.get("severity")
+                        + " — use CRITICAL, HIGH, MEDIUM, LOW, or INFO.").isError(true).build();
             }
 
             icarus.core.KnowledgeBaseEntry entry = new icarus.core.KnowledgeBaseEntry(

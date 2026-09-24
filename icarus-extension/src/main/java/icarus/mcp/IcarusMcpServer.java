@@ -337,7 +337,7 @@ public final class IcarusMcpServer {
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
                     getReportConfigTool(), updateReportConfigTool(), getProjectContextTool(),
-                    upsertKbVulnerabilityTool(), createFindingFromKbTool(),
+                    upsertKbVulnerabilityTool(), listKbVulnerabilitiesTool(), createFindingFromKbTool(),
                     validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool()
             };
 
@@ -879,8 +879,14 @@ public final class IcarusMcpServer {
                 if (rawAnnotations instanceof List<?> list && !list.isEmpty()) {
                     List<icarus.evidence.EvidenceAnnotator.Annotation> annotations = new ArrayList<>();
                     for (Object o : list) {
-                        Map<?, ?> m = (Map<?, ?>) o;
-                        String kind = (String) m.get("kind");
+                        if (!(o instanceof Map<?, ?> m)) {
+                            return badArg("annotations[] (each entry must be an object)");
+                        }
+                        // kind is optional; a missing/blank one renders as a plain BOX outline
+                        // (see EvidenceAnnotator). A non-string kind is a client bug, not a box.
+                        Object rawKind = m.get("kind");
+                        if (rawKind != null && !(rawKind instanceof String)) return badArg("annotations[].kind");
+                        String kind = rawKind instanceof String ks && !ks.isBlank() ? ks : "BOX";
                         Object anchorName = m.get("anchor");
                         if (anchorName instanceof String name) {
                             Rectangle r = anchors.get(name);
@@ -1270,7 +1276,11 @@ public final class IcarusMcpServer {
         f.put("path", finding.path());
         f.put("similarityHash", finding.similarityHash());
         f.put("cweIds", finding.cweIds());
-        if (!finding.metadata().isEmpty()) f.put("metadata", finding.metadata());
+        // Drop internal bookkeeping (the identity-pin key) from agent-facing output — it's
+        // noise, not a property of the vulnerability.
+        Map<String, String> publicMeta = new LinkedHashMap<>();
+        finding.metadata().forEach((k, v) -> { if (!Finding.isInternalMeta(k)) publicMeta.put(k, v); });
+        if (!publicMeta.isEmpty()) f.put("metadata", publicMeta);
         if (record != null) {
             f.put("count", record.getCount());
             f.put("suppressed", record.isSuppressed());
@@ -1598,6 +1608,30 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
         });
     }
 
+    private McpServerFeatures.SyncToolSpecification listKbVulnerabilitiesTool() {
+        var tool = new McpSchema.Tool("list_kb_vulnerabilities",
+                "List the reusable vulnerabilities in the Knowledge Base",
+                "Read-only. Returns every vulnerability template stored in the ICARUS Knowledge Base (name, severity, description, "
+                        + "impact, recommendation, CWE). Call this to discover the exact names create_finding_from_kb accepts, or to "
+                        + "review/reuse existing write-ups instead of re-describing a vulnerability from scratch.",
+                new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null), null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            List<Object> out = new ArrayList<>();
+            for (icarus.core.KnowledgeBaseEntry e : orchestrator.getKnowledgeBaseEntries()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", e.name());
+                m.put("severity", e.severity());
+                m.put("description", e.description());
+                m.put("impact", e.impact());
+                m.put("recommendation", e.recommendation());
+                m.put("cwe", e.cwe());
+                out.add(m);
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
+        });
+    }
+
     private McpServerFeatures.SyncToolSpecification createFindingFromKbTool() {
         var inputSchema = new McpSchema.JsonSchema("object",
                 Map.of("name", Map.of("type", "string", "description", "Name of the vulnerability in the KB")),
@@ -1623,12 +1657,13 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 severity = Severity.INFO;
             }
 
-            Finding finding = Finding.builder("Manual", entry.name())
+            Finding.Builder builder = Finding.builder("Manual", entry.name())
                     .description(entry.description())
                     .severity(severity)
                     .category(icarus.core.Category.MANUAL)
-                    .path("/")
-                    .build();
+                    .path("/");
+            if (entry.cwe() != null && !entry.cwe().isBlank()) builder.cwe(entry.cwe().strip());
+            Finding finding = builder.build();
 
             orchestrator.updateFinding(finding);
             return McpSchema.CallToolResult.builder().addTextContent("Created finding for '" + name + "'. Hash: " + finding.similarityHash()).build();

@@ -580,111 +580,124 @@ public final class ReportGenerator {
     private void appendFindings(StringBuilder html, List<Finding> findings, Map<String, List<CapturedEvidence>> evidenceByHash, ModuleConfig config, boolean retest, EvidenceCapture capture, ReportTemplateConfig rtc) {
         int index = 1;
         for (Finding f : findings) {
-            html.append("""
-                <div class="finding-card" id="finding-%d">
-                    <div class="finding-header">
-                        <h3 class="finding-title">#%d. %s</h3>
-                        <span class="badge %s">%s</span>
-                    </div>
-                    <div class="finding-body">
-                        <table class="meta-table">
-                            <tr><th>Module</th><td>%s</td></tr>
-                            <tr><th>Category</th><td>%s</td></tr>
-                            <tr><th>Target Path</th><td><code>%s</code></td></tr>
-            """.formatted(
-                index, index++, escapeHtml(f.type()),
-                f.severity().name(), f.severity().name(),
-                escapeHtml(f.module()), f.category().name(),
-                escapeHtml(f.path())
-            ));
+            // Isolate each card: a failure used to abort the styled render and degrade the
+            // whole report to the raw-text fallback. Roll back the partial card instead.
+            int mark = html.length();
+            int cardIndex = index;
+            try {
+                html.append("""
+                    <div class="finding-card" id="finding-%d">
+                        <div class="finding-header">
+                            <h3 class="finding-title">#%d. %s</h3>
+                            <span class="badge %s">%s</span>
+                        </div>
+                        <div class="finding-body">
+                            <table class="meta-table">
+                                <tr><th>Module</th><td>%s</td></tr>
+                                <tr><th>Category</th><td>%s</td></tr>
+                                <tr><th>Target Path</th><td><code>%s</code></td></tr>
+                """.formatted(
+                    index, index++, escapeHtml(f.type()),
+                    f.severity().name(), f.severity().name(),
+                    escapeHtml(f.module()), f.category().name(),
+                    escapeHtml(f.path())
+                ));
 
-            if (!f.cweIds().isEmpty()) {
-                String cweLabels = f.cweIds().stream()
-                        .map(id -> {
-                            var cwe = cweRepository.byId(id);
-                            return cwe != null ? cwe.label() : id;
-                        })
-                        .collect(java.util.stream.Collectors.joining(", "));
-                html.append("                        <tr><th>Attack Reference</th><td>")
-                    .append(escapeHtml(cweLabels))
-                    .append("</td></tr>\n");
-            }
-
-            if (retest) {
-                String status = config.getString("retest.status." + f.similarityHash(), "");
-                if (!status.isBlank()) {
-                    html.append("                        <tr><th>Status</th><td><strong>")
-                        .append(escapeHtml(status))
-                        .append("</strong></td></tr>\n");
+                if (!f.cweIds().isEmpty()) {
+                    String cweLabels = f.cweIds().stream()
+                            .map(id -> {
+                                var cwe = cweRepository.byId(id);
+                                return cwe != null ? cwe.label() : id;
+                            })
+                            .collect(java.util.stream.Collectors.joining(", "));
+                    html.append("                        <tr><th>Attack Reference</th><td>")
+                        .append(escapeHtml(cweLabels))
+                        .append("</td></tr>\n");
                 }
-            }
 
-            if (!f.metadata().isEmpty()) {
-                for (var meta : f.metadata().entrySet()) {
-                    if (!meta.getKey().equalsIgnoreCase("grc_id") && !Finding.isInternalMeta(meta.getKey())) {
-                        html.append("""
-                                <tr><th>%s</th><td><code>%s</code></td></tr>
-                        """.formatted(escapeHtml(meta.getKey()), escapeHtml(meta.getValue())));
+                if (retest) {
+                    String status = config.getString("retest.status." + f.similarityHash(), "");
+                    if (!status.isBlank()) {
+                        html.append("                        <tr><th>Status</th><td><strong>")
+                            .append(escapeHtml(status))
+                            .append("</strong></td></tr>\n");
                     }
                 }
-            }
+
+                if (!f.metadata().isEmpty()) {
+                    for (var meta : f.metadata().entrySet()) {
+                        if (!meta.getKey().equalsIgnoreCase("grc_id") && !Finding.isInternalMeta(meta.getKey())) {
+                            html.append("""
+                                    <tr><th>%s</th><td><code>%s</code></td></tr>
+                            """.formatted(escapeHtml(meta.getKey()), escapeHtml(meta.getValue())));
+                        }
+                    }
+                }
             
-            html.append("                        <tr><th>Description</th><td>")
-                .append(escapeHtml(f.description()))
-                .append("</td></tr>\n");
-
-            ReportTemplateConfig.FindingTemplate tmpl = rtc.getFindingTemplate(f.type());
-            String impact = (tmpl != null && tmpl.impacto() != null) ? tmpl.impacto() : "";
-            String recommendation = (tmpl != null && tmpl.recomendacao() != null) ? tmpl.recomendacao() : "";
-
-            if (!impact.isBlank()) {
-                html.append("                        <tr><th>Impact</th><td>")
-                    .append(escapeHtml(impact))
+                html.append("                        <tr><th>Description</th><td>")
+                    .append(escapeHtml(f.description()))
                     .append("</td></tr>\n");
-            }
-            if (!recommendation.isBlank()) {
-                html.append("                        <tr><th>Recommendation</th><td>")
-                    .append(escapeHtml(recommendation))
-                    .append("</td></tr>\n");
-            }
 
-            html.append("                        </table>\n");
+                ReportTemplateConfig.FindingTemplate tmpl = rtc.getFindingTemplate(f.type());
+                String impact = (tmpl != null && tmpl.impacto() != null) ? tmpl.impacto() : "";
+                String recommendation = (tmpl != null && tmpl.recomendacao() != null) ? tmpl.recomendacao() : "";
 
-            List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
-            if (!group.isEmpty()) {
-                html.append("                        <h4>Evidence</h4>\n");
-                int evidenceIndex = 1;
-                for (CapturedEvidence c : group) {
-                    html.append("""
-                            <div class="evidence-block">
-                                <img class="evidence-img" src="%s" alt="Evidence for %s">
-                    """.formatted(icarus.report.render.EvidenceView.encodeFileName(c.imagePath().getFileName().toString()), escapeHtml(f.type())));
-                    String caption = c.caption() == null ? "" : c.caption();
-                    html.append("                                <div class=\"evidence-caption\">")
-                        .append(evidenceIndex).append(". ").append(escapeHtml(caption))
-                        .append("</div>\n");
-                    html.append("                            </div>\n");
-                    evidenceIndex++;
+                if (!impact.isBlank()) {
+                    html.append("                        <tr><th>Impact</th><td>")
+                        .append(escapeHtml(impact))
+                        .append("</td></tr>\n");
                 }
-                html.append("                    </div>\n                </div>\n");
-            } else {
-                html.append("                        <h4>Evidence</h4>\n");
-                String dataUri = autoRenderedDataUri(f, capture);
-                if (dataUri != null) {
-                    html.append("""
-                            <div class="evidence-block">
-                                <img class="evidence-img" src="%s" alt="Evidence for %s">
-                                <div class="evidence-caption">Auto-rendered from the finding's captured traffic — no manual evidence was captured for it.</div>
-                            </div>
-                        </div>
-                    """.formatted(dataUri, escapeHtml(f.type())));
+                if (!recommendation.isBlank()) {
+                    html.append("                        <tr><th>Recommendation</th><td>")
+                        .append(escapeHtml(recommendation))
+                        .append("</td></tr>\n");
+                }
+
+                html.append("                        </table>\n");
+
+                List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
+                if (!group.isEmpty()) {
+                    html.append("                        <h4>Evidence</h4>\n");
+                    int evidenceIndex = 1;
+                    for (CapturedEvidence c : group) {
+                        html.append("""
+                                <div class="evidence-block">
+                                    <img class="evidence-img" src="%s" alt="Evidence for %s">
+                        """.formatted(icarus.report.render.EvidenceView.encodeFileName(c.imagePath().getFileName().toString()), escapeHtml(f.type())));
+                        String caption = c.caption() == null ? "" : c.caption();
+                        html.append("                                <div class=\"evidence-caption\">")
+                            .append(evidenceIndex).append(". ").append(escapeHtml(caption))
+                            .append("</div>\n");
+                        html.append("                            </div>\n");
+                        evidenceIndex++;
+                    }
+                    html.append("                    </div>\n                </div>\n");
                 } else {
-                    html.append("""
-                            <p style="color: var(--text-muted)">No screenshot captured, and no evidence image could be auto-rendered for this finding.</p>
-                        </div>
-                    """);
+                    html.append("                        <h4>Evidence</h4>\n");
+                    String dataUri = autoRenderedDataUri(f, capture);
+                    if (dataUri != null) {
+                        html.append("""
+                                <div class="evidence-block">
+                                    <img class="evidence-img" src="%s" alt="Evidence for %s">
+                                    <div class="evidence-caption">Auto-rendered from the finding's captured traffic — no manual evidence was captured for it.</div>
+                                </div>
+                            </div>
+                        """.formatted(dataUri, escapeHtml(f.type())));
+                    } else {
+                        html.append("""
+                                <p style="color: var(--text-muted)">No screenshot captured, and no evidence image could be auto-rendered for this finding.</p>
+                            </div>
+                        """);
+                    }
+                    html.append("                </div>\n");
                 }
-                html.append("                </div>\n");
+            } catch (RuntimeException e) {
+                html.setLength(mark);
+                index = cardIndex + 1;
+                api.logging().logToError("HTML report: could not render finding #" + cardIndex + " '" + f.type() + "': " + e);
+                html.append("<div class=\"finding-card\" id=\"finding-").append(cardIndex).append("\"><p>#")
+                    .append(cardIndex).append(". ").append(escapeHtml(f.type()))
+                    .append(" — this finding could not be rendered; see the extension error log.</p></div>\n");
             }
         }
     }

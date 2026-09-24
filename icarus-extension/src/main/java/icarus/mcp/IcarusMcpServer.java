@@ -338,7 +338,7 @@ public final class IcarusMcpServer {
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
                     getReportConfigTool(), updateReportConfigTool(), getProjectContextTool(),
-                    upsertKbVulnerabilityTool(), listKbVulnerabilitiesTool(), createFindingFromKbTool(),
+                    upsertKbVulnerabilityTool(), listKbVulnerabilitiesTool(), deleteKbVulnerabilityTool(), createFindingFromKbTool(),
                     validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool()
             };
 
@@ -1628,6 +1628,31 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
             orchestrator.upsertKnowledgeBaseEntry(entry);
             return McpSchema.CallToolResult.builder().addTextContent("Vulnerability '" + name + "' upserted successfully.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification deleteKbVulnerabilityTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("name", Map.of("type", "string", "description", "Name (primary key) of the KB vulnerability to delete")),
+                List.of("name"), false, null, null);
+        var tool = new McpSchema.Tool("delete_kb_vulnerability",
+                "Delete a vulnerability from the Knowledge Base",
+                "Removes a reusable vulnerability template from the mutable local KB overlay by name. Requires human approval. Does not touch any "
+                        + "findings already created from it. The symmetric counterpart to upsert_kb_vulnerability.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String name = reqStr(request, "name");
+            if (name == null) return badArg("name");
+            if (orchestrator.getKnowledgeBaseEntry(name) == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No vulnerability found in KB with name: " + name).isError(true).build();
+            }
+            if (!HumanApprovalGate.requestApproval(api, "Knowledge Base Deletion",
+                    "Allow MCP agent to delete KB vulnerability:\n\nName: " + name)) {
+                return McpSchema.CallToolResult.builder().addTextContent("Action denied by human operator.").isError(true).build();
+            }
+            orchestrator.deleteKnowledgeBaseEntry(name);
+            return McpSchema.CallToolResult.builder().addTextContent("Vulnerability '" + name + "' deleted from the KB.").build();
         });
     }
 

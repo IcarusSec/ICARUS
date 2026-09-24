@@ -60,6 +60,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ReportExportService reportExportService;
     private final ProjectStateService projectStateService;
     private final EvidenceTriggerService evidenceTriggerService;
+    private final StateAutosaver autosaver;
 
     private Runnable showEvidenceAction;
 
@@ -96,6 +97,22 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         VulnerabilityKnowledgeBase.getInstance().initialize(kbOutputDir);
 
         evidenceCapture.setOnApplied(this::registerManualFinding);
+
+        this.autosaver = new StateAutosaver(api, evidenceCapture, findings::serializeState);
+        findings.addListener(records -> autosaver.markRegistryDirty());
+        evidenceCapture.addChangeListener(autosaver::markEvidenceDirty);
+    }
+
+    /** Reloads the Evidence Manager saved in the Burp project (see {@link StateAutosaver}). */
+    public void restoreEvidence() {
+        autosaver.restoreEvidenceAsync(restored -> {
+            List<Finding> unregistered = new ArrayList<>();
+            for (Finding f : restored) {
+                if (findings.getRecordByHash(f.similarityHash()) == null) unregistered.add(f);
+            }
+            // passive=true: just re-register, don't raise fresh Burp issues for old findings.
+            if (!unregistered.isEmpty()) findings.processDeduplication(unregistered, true);
+        });
     }
 
     /**
@@ -210,7 +227,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
 
     public void shutdown() {
         scanRunner.shutdown();
-        api.persistence().extensionData().setString("icarus_state", findings.serializeState());
+        autosaver.shutdown(); // final synchronous save of the registry + evidence index
     }
 
     public void restoreState(String stateJson) {

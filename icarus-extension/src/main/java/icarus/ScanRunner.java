@@ -58,6 +58,13 @@ public final class ScanRunner {
     private static volatile boolean skipRequested = false;
     private static final Object PAUSE_LOCK = new Object();
 
+    /** True while an interactive/active scan (or single module) is still running on the executor.
+     *  Passive per-response analysis runs on a separate executor and isn't counted here. */
+    public boolean isScanRunning() {
+        Future<?> t = currentTask;
+        return t != null && !t.isDone();
+    }
+
     public static boolean isPaused() {
         return paused;
     }

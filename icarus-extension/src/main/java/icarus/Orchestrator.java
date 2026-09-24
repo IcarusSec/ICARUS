@@ -207,6 +207,11 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         scanRunner.runScan(target, isManual);
     }
 
+    /** Whether an active scan is currently running (for the MCP get_scan_status tool). */
+    public boolean isScanRunning() {
+        return scanRunner.isScanRunning();
+    }
+
     public List<FindingRecord> getAllFindingRecords() {
         return findings.getAllFindingRecords();
     }

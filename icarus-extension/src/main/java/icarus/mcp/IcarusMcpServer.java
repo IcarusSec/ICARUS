@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import icarus.core.Severity;
 import icarus.Icarus;
 import icarus.Orchestrator;
+import icarus.ScanRunner;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
@@ -332,7 +333,7 @@ public final class IcarusMcpServer {
             McpServerFeatures.SyncToolSpecification[] tools = {
                     listFindingsTool(), addFindingTool(), getFindingTool(), getFindingTrafficTool(), suppressFindingTool(), unsuppressFindingTool(),
                     getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(), clearAllFindingsTool(),
-                    getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), generateReportTool(),
+                    getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), getScanStatusTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
@@ -686,6 +687,28 @@ public final class IcarusMcpServer {
         return input.replace("&", "&amp;")
                     .replace("<", "&lt;")
                     .replace(">", "&gt;");
+    }
+
+    private McpServerFeatures.SyncToolSpecification getScanStatusTool() {
+        var tool = new McpSchema.Tool("get_scan_status",
+                "Report whether an active ICARUS scan is still running",
+                "Read-only. trigger_scan and rescan_finding run asynchronously; call this to tell whether the active scan has finished before "
+                        + "reading results, instead of polling list_findings blind. Returns {scanRunning, paused, totalFindings, "
+                        + "activeFindings, suppressedFindings}. Passive per-response analysis is not an active scan and is not reflected in scanRunning.",
+                new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null), null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            var records = orchestrator.getAllFindingRecords();
+            long active = records.stream().filter(r -> !r.isSuppressed() && !"DUMMY".equals(r.getFinding().type())).count();
+            long suppressed = records.stream().filter(FindingRecord::isSuppressed).count();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("scanRunning", orchestrator.isScanRunning());
+            out.put("paused", ScanRunner.isPaused());
+            out.put("totalFindings", active + suppressed);
+            out.put("activeFindings", active);
+            out.put("suppressedFindings", suppressed);
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
+        });
     }
 
     private McpServerFeatures.SyncToolSpecification generateReportTool() {

@@ -241,7 +241,7 @@ public final class ScanRunner {
             log.accept("──── Running: " + module.name() + " ────");
 
             try {
-                var moduleFindings = module.run(target, scanConfig, verboseLogger(log, config));
+                var moduleFindings = scoped(module.run(target, scanConfig, verboseLogger(log, config)), target);
                 findings.addAll(moduleFindings);
                 log.accept(module.name() + " → " + moduleFindings.size() + " findings");
             } catch (Exception e) {
@@ -270,7 +270,7 @@ public final class ScanRunner {
         ModuleConfig scanConfig = safeModeConfig(decision);
         List<Finding> findings;
         try {
-            findings = module.run(target, scanConfig, verboseLogger(logger, config));
+            findings = scoped(module.run(target, scanConfig, verboseLogger(logger, config)), target);
         } catch (Exception e) {
             icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " threw: " + stackTrace(e));
             logger.accept("ICARUS → " + module.name() + " failed: " + e);
@@ -281,6 +281,24 @@ public final class ScanRunner {
         String status = Thread.currentThread().isInterrupted() ? "stopped by user" : "complete";
         icarus.core.DebugLog.log("ScanRunner.runSingleModule: " + module.name() + " " + status + " — " + findings.size() + " findings");
         logger.accept("ICARUS → " + module.name() + " " + status + " — " + findings.size() + " findings.");
+    }
+
+    /**
+     * Stamps each finding that didn't pick its own scope with the scanned endpoint
+     * ({@link Finding#META_SCOPE}), so e.g. a {@code query:id} finding on /users and another on
+     * /orders stay two registry records instead of the second overwriting the first.
+     */
+    private static List<Finding> scoped(List<Finding> moduleFindings, HttpRequestResponse target) {
+        if (moduleFindings == null || moduleFindings.isEmpty()) return List.of();
+        // The scanned target, not each finding's own (possibly path-mutated) evidence request —
+        // otherwise a path-segment mutation would scatter one issue across several records.
+        String scope = Finding.endpointScope(target.request());
+        if (scope.isBlank()) return moduleFindings;
+        List<Finding> out = new ArrayList<>(moduleFindings.size());
+        for (Finding f : moduleFindings) {
+            out.add(f.metadata().containsKey(Finding.META_SCOPE) ? f : f.withMeta(Finding.META_SCOPE, scope));
+        }
+        return out;
     }
 
     /** Outcome of the baseline WAF fingerprint + user prompt. */

@@ -106,24 +106,53 @@ public class EvidenceManagerTab {
         detailScroll.setBorder(BorderFactory.createEmptyBorder());
 
         Runnable[] refreshAllRef = new Runnable[1];
+        // Set while reload() is rewriting the list model, so the selection listener doesn't
+        // rebuild the detail panel once per intermediate selection (clear, then reselect).
+        boolean[] suppressSelectionRefresh = {false};
+        // True when the latest reload changed which screenshots exist, or their order.
+        // A caption edit swaps the record in place and must not set this.
+        boolean[] evidenceStructureChanged = {true};
 
         Runnable reload = () -> icarus.core.DebugLog.timed(
                 "EvidenceManagerTab.reload (" + orchestrator.getEvidenceCapture().getCaptured().size() + " captured)",
                 () -> {
+            List<EvidenceCapture.CapturedEvidence> captured = orchestrator.getEvidenceCapture().getCaptured();
+            boolean sameStructure = evidenceStructureKeys(captured).equals(evidenceStructureKeys(hashOrder, groups));
+            evidenceStructureChanged[0] = !sameStructure;
+            if (sameStructure) {
+                // Keep the list instances the open cards already hold, and only swap in the
+                // new records (new caption text, same screenshot). Rebuilding the detail
+                // panel here would remove the caption field mid-keystroke and drop focus.
+                int cursor = 0;
+                for (String hash : hashOrder) {
+                    List<EvidenceCapture.CapturedEvidence> existing = groups.get(hash);
+                    for (int i = 0; i < existing.size(); i++, cursor++) {
+                        existing.set(i, captured.get(cursor));
+                    }
+                }
+                masterList.repaint();
+                return;
+            }
+
             String selectedHash = masterList.getSelectedValue();
             hashOrder.clear();
             groups.clear();
-            for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
+            for (var ce : captured) {
                 String hash = ce.finding().similarityHash();
                 if (!groups.containsKey(hash)) hashOrder.add(hash);
                 groups.computeIfAbsent(hash, h -> new ArrayList<>()).add(ce);
             }
-            masterModel.clear();
-            hashOrder.forEach(masterModel::addElement);
-            if (selectedHash != null && hashOrder.contains(selectedHash)) {
-                masterList.setSelectedValue(selectedHash, true);
-            } else if (!hashOrder.isEmpty()) {
-                masterList.setSelectedIndex(0);
+            suppressSelectionRefresh[0] = true;
+            try {
+                masterModel.clear();
+                hashOrder.forEach(masterModel::addElement);
+                if (selectedHash != null && hashOrder.contains(selectedHash)) {
+                    masterList.setSelectedValue(selectedHash, true);
+                } else if (!hashOrder.isEmpty()) {
+                    masterList.setSelectedIndex(0);
+                }
+            } finally {
+                suppressSelectionRefresh[0] = false;
             }
         });
 
@@ -158,14 +187,21 @@ public class EvidenceManagerTab {
         });
 
         masterList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) refreshDetail.run();
+            if (suppressSelectionRefresh[0] || e.getValueIsAdjusting()) return;
+            refreshDetail.run();
         });
 
         refreshAllRef[0] = () -> { reload.run(); refreshDetail.run(); };
         refreshAllRef[0].run();
         this.onReload = refreshAllRef[0];
 
-        this.orchestrator.getEvidenceCapture().addChangeListener(this::reload);
+        // Caption (and include-toggle) edits notify this listener on every change. Rebuild the
+        // detail panel only when the screenshot list actually changed shape; otherwise the
+        // caption text area is removed and recreated and keyboard focus dies after one character.
+        this.orchestrator.getEvidenceCapture().addChangeListener(() -> {
+            reload.run();
+            if (evidenceStructureChanged[0]) refreshDetail.run();
+        });
         this.orchestrator.addListener(records -> this.reload());
 
         JToolBar masterToolbar = new JToolBar();
@@ -544,6 +580,31 @@ public class EvidenceManagerTab {
         row.add(combo);
         row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
         return row;
+    }
+
+    /**
+     * Identity of the evidence list for reload purposes: finding hash plus screenshot path,
+     * in display order. Caption text is deliberately not part of it.
+     */
+    private static List<String> evidenceStructureKeys(List<EvidenceCapture.CapturedEvidence> captured) {
+        List<String> keys = new ArrayList<>(captured.size());
+        for (EvidenceCapture.CapturedEvidence ce : captured) {
+            keys.add(ce.finding().similarityHash() + "\0" + ce.imagePath());
+        }
+        return keys;
+    }
+
+    private static List<String> evidenceStructureKeys(List<String> hashOrder,
+                                                      Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
+        List<String> keys = new ArrayList<>();
+        for (String hash : hashOrder) {
+            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+            if (group == null) continue;
+            for (EvidenceCapture.CapturedEvidence ce : group) {
+                keys.add(ce.finding().similarityHash() + "\0" + ce.imagePath());
+            }
+        }
+        return keys;
     }
 
     private void syncGroupsToCapture(List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {

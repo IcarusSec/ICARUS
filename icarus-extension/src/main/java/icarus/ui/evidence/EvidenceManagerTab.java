@@ -84,6 +84,9 @@ public class EvidenceManagerTab {
             JLabel titleLabel = new JLabel(display.type());
             titleLabel.setForeground(panel.getForeground());
             titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+            // The row is a fixed height and the list assigns the width. Don't let an
+            // unbroken title report a preferred width of thousands of pixels.
+            titleLabel.setMinimumSize(new Dimension(0, 0));
 
             JPanel leftPanel = new JPanel(new BorderLayout(8, 0));
             leftPanel.setOpaque(false);
@@ -992,7 +995,13 @@ public class EvidenceManagerTab {
         header.add(titleLbl, gbc);
         
         gbc.gridx = 1; gbc.weightx = 1.0; gbc.gridwidth = 3;
-        JTextField txtTitle = new JTextField(current.type());
+        // Column count, not the string, sets the preferred width. A title of several
+        // hundred characters (or one long unbroken token) would otherwise make this
+        // field, and the caption buttons pinned to the card's right edge, wider than
+        // the window. The document still holds the full title; HTML/PDF reports read
+        // Finding.type(), not the visible slice.
+        JTextField txtTitle = new JTextField(current.type(), 24);
+        txtTitle.setMinimumSize(new Dimension(80, txtTitle.getPreferredSize().height));
         txtTitle.putClientProperty("FlatLaf.style", "margin: 6,8,6,8; arc: 8;");
         header.add(txtTitle, gbc);
 

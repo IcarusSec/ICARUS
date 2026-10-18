@@ -8,9 +8,14 @@ import icarus.core.I18n;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
 import icarus.evidence.EvidenceCapture;
+import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ReportGenerator;
 
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
+
 import javax.imageio.ImageIO;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
@@ -19,6 +24,8 @@ import javax.swing.text.BadLocationException;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.DefaultKeyboardFocusManager;
 import java.awt.Graphics2D;
 import java.awt.KeyboardFocusManager;
@@ -41,6 +48,7 @@ public final class EvidenceManagerUiTest {
         captionKeepsFocusAcrossKeystrokes();
         removingEvidenceStillRefreshesTheDetail();
         titleSurvivesRegistryRefreshWhileTyping();
+        longTitleStaysInsideTheWindow();
         System.out.println("EvidenceManagerUiTest: all checks passed.");
     }
 
@@ -127,6 +135,78 @@ public final class EvidenceManagerUiTest {
         } finally {
             SwingUtilities.invokeAndWait(frame::dispose);
         }
+    }
+
+    /**
+     * A very long finding title, including one unbroken token, must not stretch the Evidence
+     * panel past the window. The full title stays in the field and in the HTML and PDF reports.
+     */
+    private static void longTitleStaysInsideTheWindow() throws Exception {
+        String token = "VeryLongUnbrokenToken".repeat(20);
+        String longTitle = token + " trailing words stay in the report";
+        Fixture fx = Fixture.create(longTitle, "caption");
+        JFrame frame = new JFrame("evidence width");
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                frame.setSize(1100, 720);
+                Component ui = fx.tab.getUiComponent();
+                frame.add(ui);
+                frame.setVisible(true);
+                frame.validate();
+                int pref = ui.getPreferredSize().width;
+                check(pref < 1400, "evidence panel preferred width " + pref + " would stretch the window");
+                JTextField title = textFields(fx).get(0);
+                check(longTitle.equals(title.getText()), "title field text was '" + title.getText() + "'");
+                Rectangle tb = boundsIn(ui, title);
+                check(tb.x >= 0 && tb.x + tb.width <= ui.getWidth() + 1,
+                        "title field extends past the window: " + tb + " uiWidth=" + ui.getWidth());
+                for (JButton button : find(ui, JButton.class)) {
+                    if (!button.isShowing()) continue;
+                    Rectangle r = boundsIn(ui, button);
+                    check(r.x >= -1 && r.x + r.width <= ui.getWidth() + 1,
+                            "button '" + button.getToolTipText() + "' is outside the window: " + r + " uiWidth=" + ui.getWidth());
+                }
+                BufferedImage shot = new BufferedImage(ui.getWidth(), ui.getHeight(), BufferedImage.TYPE_INT_RGB);
+                Graphics2D g = shot.createGraphics();
+                ui.paint(g);
+                g.dispose();
+                try {
+                    ImageIO.write(shot, "png", Path.of("/tmp/evidence-long-title-after.png").toFile());
+                } catch (java.io.IOException e) {
+                    throw new AssertionError(e);
+                }
+            });
+        } finally {
+            SwingUtilities.invokeAndWait(frame::dispose);
+        }
+
+        Finding finding = fx.evidence.getCaptured().get(0).finding();
+        check(longTitle.equals(finding.type()), "stored title changed: " + finding.type());
+        Path dir = Files.createTempDirectory("icarus-report");
+        Path html = dir.resolve("report.html");
+        check(new ReportGenerator(fx.api).generate(List.of(finding), fx.config, fx.evidence, html), "HTML report was not written");
+        check(Files.readString(html).contains(longTitle), "HTML report does not contain the full title");
+        Path pdf = dir.resolve("report.pdf");
+        check(new PdfReportGenerator(fx.api).generate(List.of(finding), fx.config, fx.evidence, pdf), "PDF report was not written");
+        StringBuilder pdfText = new StringBuilder();
+        PdfReader reader = new PdfReader(pdf.toString());
+        try {
+            PdfTextExtractor extractor = new PdfTextExtractor(reader);
+            for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                pdfText.append(extractor.getTextFromPage(i)).append('\n');
+            }
+        } finally {
+            reader.close();
+        }
+        // The PDF wraps a long unbroken token across lines; the extractor keeps those breaks.
+        String squashed = pdfText.toString().replaceAll("\\s+", "");
+        check(squashed.contains(token), "PDF report does not contain the full title");
+        check(squashed.contains("trailingwordsstayinthereport"), "PDF report dropped the end of the title");
+    }
+
+    private static Rectangle boundsIn(Component root, Component c) {
+        Point p = SwingUtilities.convertPoint(c, 0, 0, root);
+        return new Rectangle(p.x, p.y, c.getWidth(), c.getHeight());
     }
 
     /** Gives {@code target} keyboard focus even when the native window is not the active OS window. */

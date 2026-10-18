@@ -31,6 +31,8 @@ public class EvidenceManagerTab {
     private final ModuleConfig config;
     private final MontoyaApi api;
     private Runnable onReload;
+    /** Rebuilds the open finding's detail. Inclusion changes use this; caption edits must not. */
+    private Runnable refreshDetailView = () -> {};
     /** A findings-registry refresh arrived while a detail text field had focus. Applied on focus loss. */
     private boolean registryReloadDeferred;
     private Runnable flushRegistryReload = () -> {};
@@ -192,6 +194,7 @@ public class EvidenceManagerTab {
             detailPanel.revalidate();
             detailPanel.repaint();
         });
+        refreshDetailView = refreshDetail;
 
         masterList.addListSelectionListener(e -> {
             if (suppressSelectionRefresh[0] || e.getValueIsAdjusting()) return;
@@ -232,14 +235,10 @@ public class EvidenceManagerTab {
             if (evidenceStructureChanged[0]) refreshDetail.run();
         });
 
-        JToolBar masterToolbar = new JToolBar();
-        masterToolbar.setFloatable(false);
+        JPanel masterToolbar = new JPanel(new GridLayout(0, 2, UiMetrics.XS, UiMetrics.XS));
         masterToolbar.setOpaque(false);
-        masterToolbar.setBorder(BorderFactory.createEmptyBorder());
 
-        JButton btnGroupUp = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("chevron-up"));
-        btnGroupUp.setToolTipText(I18n.t("ui.evidence.btn.move_up"));
-        btnGroupUp.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnGroupUp = UiMetrics.commandButton(I18n.t("ui.evidence.btn.shot_up"), I18n.t("ui.evidence.btn.move_up"));
         btnGroupUp.addActionListener(e -> {
             int idx = masterList.getSelectedIndex();
             if (idx > 0) {
@@ -249,9 +248,7 @@ public class EvidenceManagerTab {
             }
         });
         
-        JButton btnGroupDown = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("chevron-down"));
-        btnGroupDown.setToolTipText(I18n.t("ui.evidence.btn.move_down"));
-        btnGroupDown.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnGroupDown = UiMetrics.commandButton(I18n.t("ui.evidence.btn.shot_down"), I18n.t("ui.evidence.btn.move_down"));
         btnGroupDown.addActionListener(e -> {
             int idx = masterList.getSelectedIndex();
             if (idx >= 0 && idx < hashOrder.size() - 1) {
@@ -261,18 +258,13 @@ public class EvidenceManagerTab {
             }
         });
 
-        JButton btnPopOut = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("external-link"));
-        btnPopOut.setToolTipText(I18n.t("ui.evidence.btn.popout"));
-        btnPopOut.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnPopOut = UiMetrics.commandButton(I18n.t("ui.evidence.btn.detach"), I18n.t("ui.evidence.btn.popout"));
 
-        JButton btnExportProject = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("download"));
-        btnExportProject.setToolTipText(I18n.t("ui.evidence.btn.export_project"));
-        btnExportProject.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnExportProject = UiMetrics.commandButton(I18n.t("ui.evidence.btn.export_short"), I18n.t("ui.evidence.btn.export_project"));
         btnExportProject.addActionListener(e -> orchestrator.exportProjectStateInteractive(mainPanel, btnExportProject));
 
         masterToolbar.add(btnGroupUp);
         masterToolbar.add(btnGroupDown);
-        masterToolbar.addSeparator();
         masterToolbar.add(btnPopOut);
         masterToolbar.add(btnExportProject);
         
@@ -356,12 +348,12 @@ public class EvidenceManagerTab {
             }
         });
 
-        JPanel masterHeader = new JPanel(new BorderLayout());
+        JPanel masterHeader = new JPanel(new BorderLayout(0, UiMetrics.XS));
         masterHeader.setOpaque(false);
         JLabel findingsLbl = new JLabel(I18n.t("ui.evidence.lbl.findings"));
         findingsLbl.setFont(UiMetrics.font(UiMetrics.Role.TITLE));
-        masterHeader.add(findingsLbl, BorderLayout.WEST);
-        masterHeader.add(masterToolbar, BorderLayout.EAST);
+        masterHeader.add(findingsLbl, BorderLayout.NORTH);
+        masterHeader.add(masterToolbar, BorderLayout.CENTER);
 
         JPanel masterPanel = new JPanel(new BorderLayout(0, 8));
         masterPanel.setBorder(UiMetrics.pad(UiMetrics.MD));
@@ -753,21 +745,18 @@ public class EvidenceManagerTab {
         });
         right.add(captionPanel, BorderLayout.CENTER);
 
-        JPanel controls = new JPanel(new BorderLayout());
+        JPanel controls = new JPanel(new BorderLayout(0, UiMetrics.XS));
 
-        JPanel leftCtrls = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
         JCheckBox chkInclude = new JCheckBox(I18n.t("ui.evidence.chk.include"), orchestrator.getEvidenceCapture().isIncluded(ceRef[0]));
-        chkInclude.addActionListener(e -> orchestrator.getEvidenceCapture().setIncluded(ceRef[0], chkInclude.isSelected()));
-        leftCtrls.add(chkInclude);
+        chkInclude.addActionListener(e -> {
+            orchestrator.getEvidenceCapture().setIncluded(ceRef[0], chkInclude.isSelected());
+            refreshDetailView.run();
+        });
 
-        JToolBar cardActions = new JToolBar();
-        cardActions.setFloatable(false);
+        JPanel cardActions = new JPanel(new GridLayout(0, 3, UiMetrics.XS, UiMetrics.XS));
         cardActions.setOpaque(false);
-        cardActions.setBorder(BorderFactory.createEmptyBorder());
 
-        JButton btnUp = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("arrow-up"));
-        btnUp.setToolTipText("Move Up");
-        btnUp.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnUp = UiMetrics.commandButton(I18n.t("ui.evidence.btn.shot_up"), "Move Up");
         btnUp.setEnabled(indexInGroup > 0);
         btnUp.addActionListener(e -> {
             Collections.swap(group, indexInGroup, indexInGroup - 1);
@@ -775,9 +764,7 @@ public class EvidenceManagerTab {
             onChange.run();
         });
 
-        JButton btnDown = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("arrow-down"));
-        btnDown.setToolTipText("Move Down");
-        btnDown.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnDown = UiMetrics.commandButton(I18n.t("ui.evidence.btn.shot_down"), "Move Down");
         btnDown.setEnabled(indexInGroup < group.size() - 1);
         btnDown.addActionListener(e -> {
             Collections.swap(group, indexInGroup, indexInGroup + 1);
@@ -785,14 +772,10 @@ public class EvidenceManagerTab {
             onChange.run();
         });
         
-        JButton btnEdit = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("pencil"));
-        btnEdit.setToolTipText(I18n.t("ui.evidence.btn.edit"));
-        btnEdit.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnEdit = UiMetrics.commandButton(I18n.t("ui.evidence.btn.edit_short"), I18n.t("ui.evidence.btn.edit"));
         btnEdit.addActionListener(e -> orchestrator.getEvidenceCapture().captureInteractive(ceRef[0].finding()));
 
-        JButton btnMove = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("corner-up-right"));
-        btnMove.setToolTipText(I18n.t("ui.evidence.btn.move_finding"));
-        btnMove.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnMove = UiMetrics.commandButton(I18n.t("ui.evidence.btn.move_short"), I18n.t("ui.evidence.btn.move_finding"));
         btnMove.addActionListener(e -> {
             String ownHash = ceRef[0].finding().similarityHash();
             List<String> targets = hashOrder.stream().filter(h -> !h.equals(ownHash)).toList();
@@ -817,9 +800,7 @@ public class EvidenceManagerTab {
             onChange.run();
         });
 
-        JButton btnRemove = new JButton(icarus.evidence.EvidenceUiHelpers.createIcon("trash"));
-        btnRemove.setToolTipText(I18n.t("ui.evidence.btn.remove"));
-        btnRemove.putClientProperty("JButton.buttonType", "toolBarButton");
+        JButton btnRemove = UiMetrics.commandButton(I18n.t("ui.evidence.btn.remove"), I18n.t("ui.evidence.btn.remove"));
         btnRemove.addActionListener(e -> {
             int confirm = JOptionPane.showConfirmDialog(mainPanel,
                     I18n.t("ui.evidence.dialog.remove.msg"),
@@ -831,14 +812,12 @@ public class EvidenceManagerTab {
 
         cardActions.add(btnUp);
         cardActions.add(btnDown);
-        cardActions.addSeparator();
         cardActions.add(btnEdit);
         cardActions.add(btnMove);
-        cardActions.addSeparator();
         cardActions.add(btnRemove);
 
-        controls.add(leftCtrls, BorderLayout.WEST);
-        controls.add(cardActions, BorderLayout.EAST);
+        controls.add(chkInclude, BorderLayout.NORTH);
+        controls.add(cardActions, BorderLayout.CENTER);
         
         right.add(controls, BorderLayout.SOUTH);
         card.add(right, BorderLayout.CENTER);
@@ -1081,6 +1060,25 @@ public class EvidenceManagerTab {
         });
         txtCwe.addActionListener(e -> save.run());
 
+        boolean inReport = group.stream().allMatch(ce -> orchestrator.getEvidenceCapture().isIncluded(ce));
+        JButton btnAddToReport = UiMetrics.commandButton(
+                inReport ? I18n.t("ui.evidence.btn.in_report") : I18n.t("ui.evidence.btn.add_to_report"),
+                I18n.t("ui.evidence.btn.add_to_report"));
+        btnAddToReport.setEnabled(!inReport);
+        btnAddToReport.addActionListener(e -> {
+            for (EvidenceCapture.CapturedEvidence ce : group) {
+                orchestrator.getEvidenceCapture().setIncluded(ce, true);
+            }
+            refreshDetailView.run();
+        });
+        gbc.gridy = 2;
+        gbc.gridx = 0;
+        gbc.gridwidth = 4;
+        gbc.weightx = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.anchor = GridBagConstraints.WEST;
+        header.add(btnAddToReport, gbc);
+
         header.setMaximumSize(new Dimension(Integer.MAX_VALUE, header.getPreferredSize().height));
         return header;
     }
@@ -1135,13 +1133,7 @@ public class EvidenceManagerTab {
         lblTitle.setForeground(Color.WHITE);
         topBar.add(lblTitle, BorderLayout.WEST);
 
-        JButton btnClose = new JButton();
-        btnClose.setIcon(icarus.evidence.EvidenceUiHelpers.createIcon("x", 20, Color.WHITE));
-        btnClose.setToolTipText("Fechar (ESC)");
-        btnClose.setBorderPainted(false);
-        btnClose.setContentAreaFilled(false);
-        btnClose.setFocusPainted(false);
-        btnClose.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        JButton btnClose = UiMetrics.commandButton(I18n.t("ui.evidence.btn.close"), "Fechar (ESC)");
         btnClose.addActionListener(e -> dialog.dispose());
         topBar.add(btnClose, BorderLayout.EAST);
 

@@ -67,6 +67,7 @@ public class Icarus implements BurpExtension {
         if (savedState != null) {
             orchestrator.restoreState(savedState);
         }
+        orchestrator.restoreEvidence();
 
         // Local MCP server (AI agent access to findings) — off by default, toggled in Settings.
         // Built here (not lazily in the toggle handler) so Settings can start/stop the same

@@ -36,6 +36,11 @@ public class JwtCheckerModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "jwt.enabled";
+    }
+
+    @Override
     public List<Finding> run(HttpRequestResponse requestResponse, ModuleConfig config, Consumer<String> logger) {
         if (!config.getBool("jwt.enabled", true)) {
             return List.of();
@@ -251,13 +256,13 @@ public class JwtCheckerModule implements IcarusModule {
                     lowered.contains("api_key") || lowered.contains("token") || lowered.contains("hash")) {
                     boolean redact = config.getBool("jwt.redact_sensitive_claims", false);
                     String displayValue = redact ? "[REDACTED]" : valuePreview;
-                    findings.add(createFinding("SENSITIVE_CLAIM", "Possible sensitive data in JWT claim: " + key + "=" + displayValue, Severity.HIGH, baseRR));
+                    findings.add(createFinding("SENSITIVE_CLAIM", "Possible sensitive data in JWT claim: " + key + "=" + displayValue, Severity.HIGH, baseRR, "claim " + key));
                 }
 
                 if (lowered.equals("role") || lowered.equals("roles") || lowered.equals("scope") || lowered.equals("scp") ||
                     lowered.equals("permissions") || lowered.equals("perm") || lowered.equals("isadmin") ||
                     lowered.equals("admin") || lowered.equals("tenant") || lowered.equals("tenant_id")) {
-                    findings.add(createFinding("PRIVILEGED_CLAIM", "Privileged claim found: " + key + " - candidate for privilege escalation", Severity.INFO, baseRR));
+                    findings.add(createFinding("PRIVILEGED_CLAIM", "Privileged claim found: " + key + " - candidate for privilege escalation", Severity.INFO, baseRR, "claim " + key));
                 }
             }
         }
@@ -460,6 +465,17 @@ public class JwtCheckerModule implements IcarusModule {
             hConf.asObject().putString("alg", "HS256");
             testToken.accept("rs256-to-hs256-confusion-structural-probe", buildRawToken(hConf.toJsonString(), payloadJson.toJsonString(), signaturePart));
         }
+    }
+
+    /**
+     * Per-claim variant: several SENSITIVE_CLAIM / PRIVILEGED_CLAIM hits in one token share a
+     * module/type/path, so without {@code subject} in the scope they collapsed into one record
+     * listing only the last claim.
+     */
+    private Finding createFinding(String type, String desc, Severity severity, HttpRequestResponse evidence, String subject) {
+        Finding f = createFinding(type, desc, severity, evidence);
+        String endpoint = evidence != null ? Finding.endpointScope(evidence.request()) : "";
+        return f.withMeta(Finding.META_SCOPE, (endpoint + " " + subject).trim());
     }
 
     private Finding createFinding(String type, String desc, Severity severity, HttpRequestResponse evidence) {

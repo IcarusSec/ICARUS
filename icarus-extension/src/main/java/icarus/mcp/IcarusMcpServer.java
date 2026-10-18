@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import icarus.core.Severity;
 import icarus.Icarus;
 import icarus.Orchestrator;
+import icarus.ScanRunner;
 import icarus.core.Finding;
 import icarus.core.FindingRecord;
 import icarus.core.JsonParser;
@@ -332,12 +333,12 @@ public final class IcarusMcpServer {
             McpServerFeatures.SyncToolSpecification[] tools = {
                     listFindingsTool(), addFindingTool(), getFindingTool(), getFindingTrafficTool(), suppressFindingTool(), unsuppressFindingTool(),
                     getAuditLogTool(), getPassiveFindingsTool(), clearPassiveFindingsTool(), clearAllFindingsTool(),
-                    getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), generateReportTool(),
+                    getReportableFindingsTool(), triggerScanTool(), rescanFindingTool(), getScanStatusTool(), generateReportTool(),
                     getEvidenceTool(), captureEvidenceTool(),
                     listEvidenceTool(), setEvidenceCaptionTool(), setEvidenceIncludedTool(),
                     moveEvidenceTool(), removeEvidenceTool(), reorderEvidenceTool(),
                     getReportConfigTool(), updateReportConfigTool(), getProjectContextTool(),
-                    upsertKbVulnerabilityTool(), createFindingFromKbTool(),
+                    upsertKbVulnerabilityTool(), listKbVulnerabilitiesTool(), deleteKbVulnerabilityTool(), createFindingFromKbTool(),
                     validateFindingTool(), exploitFindingTool(), findAttackChainsTool(), simulateAttackChainTool()
             };
 
@@ -381,6 +382,20 @@ public final class IcarusMcpServer {
     private static String reqStr(McpSchema.CallToolRequest request, String key) {
         return request.arguments() != null
                 && request.arguments().get(key) instanceof String s && !s.isBlank() ? s : null;
+    }
+
+    /**
+     * A reportable severity from a tool arg, or {@code null}. FIXED/NOT_FIXED are retest
+     * outcomes (set via the retest workflow), not severities a new finding can be filed at.
+     */
+    private static Severity parseRealSeverity(Object raw) {
+        if (!(raw instanceof String s) || s.isBlank()) return null;
+        try {
+            Severity sev = Severity.valueOf(s.strip().toUpperCase(java.util.Locale.ROOT));
+            return sev == Severity.FIXED || sev == Severity.NOT_FIXED ? null : sev;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /** Standard "bad or missing argument" tool error. */
@@ -674,6 +689,28 @@ public final class IcarusMcpServer {
                     .replace(">", "&gt;");
     }
 
+    private McpServerFeatures.SyncToolSpecification getScanStatusTool() {
+        var tool = new McpSchema.Tool("get_scan_status",
+                "Report whether an active ICARUS scan is still running",
+                "Read-only. trigger_scan and rescan_finding run asynchronously; call this to tell whether the active scan has finished before "
+                        + "reading results, instead of polling list_findings blind. Returns {scanRunning, paused, totalFindings, "
+                        + "activeFindings, suppressedFindings}. Passive per-response analysis is not an active scan and is not reflected in scanRunning.",
+                new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null), null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            var records = orchestrator.getAllFindingRecords();
+            long active = records.stream().filter(r -> !r.isSuppressed() && !"DUMMY".equals(r.getFinding().type())).count();
+            long suppressed = records.stream().filter(FindingRecord::isSuppressed).count();
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("scanRunning", orchestrator.isScanRunning());
+            out.put("paused", ScanRunner.isPaused());
+            out.put("totalFindings", active + suppressed);
+            out.put("activeFindings", active);
+            out.put("suppressedFindings", suppressed);
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
+        });
+    }
+
     private McpServerFeatures.SyncToolSpecification generateReportTool() {
         Map<String, Object> stringProp = Map.of("type", "string");
         Map<String, Object> properties = new LinkedHashMap<>();
@@ -865,8 +902,14 @@ public final class IcarusMcpServer {
                 if (rawAnnotations instanceof List<?> list && !list.isEmpty()) {
                     List<icarus.evidence.EvidenceAnnotator.Annotation> annotations = new ArrayList<>();
                     for (Object o : list) {
-                        Map<?, ?> m = (Map<?, ?>) o;
-                        String kind = (String) m.get("kind");
+                        if (!(o instanceof Map<?, ?> m)) {
+                            return badArg("annotations[] (each entry must be an object)");
+                        }
+                        // kind is optional; a missing/blank one renders as a plain BOX outline
+                        // (see EvidenceAnnotator). A non-string kind is a client bug, not a box.
+                        Object rawKind = m.get("kind");
+                        if (rawKind != null && !(rawKind instanceof String)) return badArg("annotations[].kind");
+                        String kind = rawKind instanceof String ks && !ks.isBlank() ? ks : "BOX";
                         Object anchorName = m.get("anchor");
                         if (anchorName instanceof String name) {
                             Rectangle r = anchors.get(name);
@@ -963,7 +1006,10 @@ public final class IcarusMcpServer {
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             String imagePath = reqStr(request, "image_path");
             if (imagePath == null) return badArg("image_path");
-            String caption = (String) request.arguments().get("caption");
+            // Absent/null clears the caption; anything else must be a string.
+            Object rawCaption = request.arguments().get("caption");
+            if (rawCaption != null && !(rawCaption instanceof String)) return badArg("caption");
+            String caption = rawCaption == null ? "" : (String) rawCaption;
             var ce = findEvidence(imagePath);
             if (ce == null) return evidenceNotFound(imagePath);
             orchestrator.getEvidenceCapture().setCaption(ce, caption);
@@ -1253,7 +1299,11 @@ public final class IcarusMcpServer {
         f.put("path", finding.path());
         f.put("similarityHash", finding.similarityHash());
         f.put("cweIds", finding.cweIds());
-        if (!finding.metadata().isEmpty()) f.put("metadata", finding.metadata());
+        // Drop internal bookkeeping (the identity-pin key) from agent-facing output — it's
+        // noise, not a property of the vulnerability.
+        Map<String, String> publicMeta = new LinkedHashMap<>();
+        finding.metadata().forEach((k, v) -> { if (!Finding.isInternalMeta(k)) publicMeta.put(k, v); });
+        if (!publicMeta.isEmpty()) f.put("metadata", publicMeta);
         if (record != null) {
             f.put("count", record.getCount());
             f.put("suppressed", record.isSuppressed());
@@ -1306,16 +1356,16 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             Map<String, Object> args = request.arguments();
-            String title = String.valueOf(args.get("title"));
-            String description = String.valueOf(args.get("description"));
+            String title = reqStr(request, "title");
+            if (title == null) return badArg("title");
+            String description = reqStr(request, "description");
+            if (description == null) return badArg("description");
             String cweId = args.get("cwe_id") instanceof String s && !s.isBlank() ? s : null;
             String rawRequest = args.get("raw_request") instanceof String s ? s : "";
             String rawResponse = args.get("raw_response") instanceof String s ? s : "";
 
-            Severity severity;
-            try {
-                severity = Severity.valueOf(String.valueOf(args.get("severity")).toUpperCase());
-            } catch (IllegalArgumentException e) {
+            Severity severity = parseRealSeverity(args.get("severity"));
+            if (severity == null) {
                 return McpSchema.CallToolResult.builder()
                         .addTextContent("Invalid severity — use CRITICAL, HIGH, MEDIUM, LOW, or INFO.")
                         .isError(true)
@@ -1552,13 +1602,12 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             Map<String, Object> args = request.arguments();
-            String name = (String) args.get("name");
-            String severityStr = (String) args.get("severity");
-            Severity severity;
-            try {
-                severity = Severity.valueOf(severityStr.toUpperCase());
-            } catch (Exception e) {
-                return McpSchema.CallToolResult.builder().addTextContent("Invalid severity: " + severityStr).isError(true).build();
+            String name = reqStr(request, "name");
+            if (name == null) return badArg("name");
+            Severity severity = parseRealSeverity(args.get("severity"));
+            if (severity == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("Invalid severity: " + args.get("severity")
+                        + " — use CRITICAL, HIGH, MEDIUM, LOW, or INFO.").isError(true).build();
             }
 
             icarus.core.KnowledgeBaseEntry entry = new icarus.core.KnowledgeBaseEntry(
@@ -1579,6 +1628,55 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
             orchestrator.upsertKnowledgeBaseEntry(entry);
             return McpSchema.CallToolResult.builder().addTextContent("Vulnerability '" + name + "' upserted successfully.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification deleteKbVulnerabilityTool() {
+        var inputSchema = new McpSchema.JsonSchema("object",
+                Map.of("name", Map.of("type", "string", "description", "Name (primary key) of the KB vulnerability to delete")),
+                List.of("name"), false, null, null);
+        var tool = new McpSchema.Tool("delete_kb_vulnerability",
+                "Delete a vulnerability from the Knowledge Base",
+                "Removes a reusable vulnerability template from the mutable local KB overlay by name. Requires human approval. Does not touch any "
+                        + "findings already created from it. The symmetric counterpart to upsert_kb_vulnerability.",
+                inputSchema, null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            String name = reqStr(request, "name");
+            if (name == null) return badArg("name");
+            if (orchestrator.getKnowledgeBaseEntry(name) == null) {
+                return McpSchema.CallToolResult.builder().addTextContent("No vulnerability found in KB with name: " + name).isError(true).build();
+            }
+            if (!HumanApprovalGate.requestApproval(api, "Knowledge Base Deletion",
+                    "Allow MCP agent to delete KB vulnerability:\n\nName: " + name)) {
+                return McpSchema.CallToolResult.builder().addTextContent("Action denied by human operator.").isError(true).build();
+            }
+            orchestrator.deleteKnowledgeBaseEntry(name);
+            return McpSchema.CallToolResult.builder().addTextContent("Vulnerability '" + name + "' deleted from the KB.").build();
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification listKbVulnerabilitiesTool() {
+        var tool = new McpSchema.Tool("list_kb_vulnerabilities",
+                "List the reusable vulnerabilities in the Knowledge Base",
+                "Read-only. Returns every vulnerability template stored in the ICARUS Knowledge Base (name, severity, description, "
+                        + "impact, recommendation, CWE). Call this to discover the exact names create_finding_from_kb accepts, or to "
+                        + "review/reuse existing write-ups instead of re-describing a vulnerability from scratch.",
+                new McpSchema.JsonSchema("object", Map.of(), List.of(), false, null, null), null, null, null);
+
+        return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
+            List<Object> out = new ArrayList<>();
+            for (icarus.core.KnowledgeBaseEntry e : orchestrator.getKnowledgeBaseEntries()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("name", e.name());
+                m.put("severity", e.severity());
+                m.put("description", e.description());
+                m.put("impact", e.impact());
+                m.put("recommendation", e.recommendation());
+                m.put("cwe", e.cwe());
+                out.add(m);
+            }
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(out)).build();
         });
     }
 
@@ -1607,12 +1705,13 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 severity = Severity.INFO;
             }
 
-            Finding finding = Finding.builder("Manual", entry.name())
+            Finding.Builder builder = Finding.builder("Manual", entry.name())
                     .description(entry.description())
                     .severity(severity)
                     .category(icarus.core.Category.MANUAL)
-                    .path("/")
-                    .build();
+                    .path("/");
+            if (entry.cwe() != null && !entry.cwe().isBlank()) builder.cwe(entry.cwe().strip());
+            Finding finding = builder.build();
 
             orchestrator.updateFinding(finding);
             return McpSchema.CallToolResult.builder().addTextContent("Created finding for '" + name + "'. Hash: " + finding.similarityHash()).build();
@@ -1742,17 +1841,51 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                     "Session hijacking over unencrypted traffic combined with XSS", Severity.HIGH,
                     "Fix the reflected XSS first; set the Secure flag on session cookies."));
 
-    private List<Map<String, Object>> computeAttackChains(String pathFilter) {
-        Map<String, List<FindingRecord>> byPath = new LinkedHashMap<>();
+    /**
+     * Best-effort host a finding belongs to: the evidence request's real host if present, else
+     * parsed from an origin-style path ({@code https://host/...}), else the host token embedded
+     * in the endpoint scope ({@code METHOD host/path}). {@code ""} when nothing yields one.
+     */
+    private static String hostOf(Finding f) {
+        if (f.evidence() != null && f.evidence().request() != null
+                && f.evidence().request().httpService() != null) {
+            return f.evidence().request().httpService().host();
+        }
+        String path = f.path() == null ? "" : f.path();
+        if (path.startsWith("http://") || path.startsWith("https://")) {
+            try { return java.net.URI.create(path).getHost() == null ? "" : java.net.URI.create(path).getHost(); }
+            catch (Exception ignored) { return ""; }
+        }
+        String scope = f.metadata().get(Finding.META_SCOPE);
+        if (scope != null) {
+            int sp = scope.indexOf(' ');       // "GET host/path" -> "host/path"
+            String rest = sp >= 0 ? scope.substring(sp + 1) : scope;
+            int slash = rest.indexOf('/');
+            String host = slash >= 0 ? rest.substring(0, slash) : rest;
+            if (!host.isBlank() && host.contains(".")) return host;
+        }
+        return "";
+    }
+
+    /**
+     * Correlation is grouped by HOST, not exact path: these patterns pair a page/host-level
+     * weakness (missing CSP, a cookie flag) with an injection that may sit on a different
+     * endpoint of the same host, and the two findings legitimately carry different paths
+     * (a parameter path vs. the origin URL), so a path-equality join never matched them.
+     */
+    private List<Map<String, Object>> computeAttackChains(String hostFilter) {
+        Map<String, List<FindingRecord>> byHost = new LinkedHashMap<>();
         for (FindingRecord r : orchestrator.getAllFindingRecords()) {
             if (r.isSuppressed()) continue;
-            if (pathFilter != null && !r.getFinding().path().equals(pathFilter)) continue;
-            byPath.computeIfAbsent(r.getFinding().path(), k -> new ArrayList<>()).add(r);
+            String host = hostOf(r.getFinding());
+            if (host.isBlank()) continue;
+            if (hostFilter != null && !host.equalsIgnoreCase(hostFilter)) continue;
+            byHost.computeIfAbsent(host, k -> new ArrayList<>()).add(r);
         }
 
         List<Map<String, Object>> chains = new ArrayList<>();
-        for (var entry : byPath.entrySet()) {
-            String path = entry.getKey();
+        for (var entry : byHost.entrySet()) {
+            String host = entry.getKey();
             List<FindingRecord> records = entry.getValue();
             for (ChainPattern pattern : CHAIN_PATTERNS) {
                 List<FindingRecord> steps = new ArrayList<>();
@@ -1769,15 +1902,16 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                     stepMaps.add(Map.of(
                             "hash", r.getFinding().similarityHash(),
                             "type", r.getFinding().type(),
+                            "path", r.getFinding().path() == null ? "" : r.getFinding().path(),
                             "severity", r.getFinding().severity().name(),
                             "exploitable", EXPLOITABLE_TYPES.contains(r.getFinding().type()),
                             "validatable", VALIDATABLE_TYPES.contains(r.getFinding().type())));
                 }
 
                 Map<String, Object> chain = new LinkedHashMap<>();
-                chain.put("chainId", pattern.name() + "::" + path);
+                chain.put("chainId", pattern.name() + "::" + host);
                 chain.put("pattern", pattern.name());
-                chain.put("path", path);
+                chain.put("host", host);
                 chain.put("steps", stepMaps);
                 chain.put("finalImpact", pattern.finalImpact());
                 chain.put("combinedSeverity", pattern.combinedSeverity().name());
@@ -1790,11 +1924,11 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
 
     private McpServerFeatures.SyncToolSpecification findAttackChainsTool() {
         var inputSchema = new McpSchema.JsonSchema("object",
-                Map.of("path", Map.of("type", "string", "description", "Optional — restrict correlation to findings on this exact path (ICARUS scans one endpoint at a time, so this is usually the endpoint just tested)")),
+                Map.of("host", Map.of("type", "string", "description", "Optional — restrict correlation to findings on this exact host (e.g. app.example.com)")),
                 List.of(), false, null, null);
         var tool = new McpSchema.Tool("find_attack_chains",
                 "Correlate ICARUS findings into known dangerous combinations",
-                "Advisory, read-only: looks for pairs of findings on the same path that combine into a worse risk than either alone (e.g. reflected XSS "
+                "Advisory, read-only: looks for findings on the same host that combine into a worse risk than either alone (e.g. reflected XSS "
                         + "plus a missing Content-Security-Policy). Only fires when every finding a pattern needs was actually produced by ICARUS — no "
                         + "invented data, no execution. Patterns needing a detector ICARUS doesn't have (open redirect, CORS misconfiguration, MFA absence) "
                         + "aren't listed, so they simply never appear rather than silently never matching. Each returned chain has a chainId usable with "
@@ -1802,8 +1936,8 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
                 inputSchema, null, null, null);
 
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
-            String pathFilter = request.arguments().get("path") instanceof String s && !s.isBlank() ? s : null;
-            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(computeAttackChains(pathFilter))).build();
+            String hostFilter = request.arguments().get("host") instanceof String s && !s.isBlank() ? s : null;
+            return McpSchema.CallToolResult.builder().addTextContent(JsonParser.write(computeAttackChains(hostFilter))).build();
         });
     }
 
@@ -1824,11 +1958,11 @@ private McpServerFeatures.SyncToolSpecification addFindingTool() {
             if (chainId == null) return badArg("chain_id");
             int sep = chainId.indexOf("::");
             if (sep < 0) {
-                return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::path').").isError(true).build();
+                return McpSchema.CallToolResult.builder().addTextContent("Malformed chain_id (expected 'Pattern Name::host').").isError(true).build();
             }
-            String path = chainId.substring(sep + 2);
+            String host = chainId.substring(sep + 2);
 
-            for (Map<String, Object> chain : computeAttackChains(path)) {
+            for (Map<String, Object> chain : computeAttackChains(host)) {
                 if (!chainId.equals(chain.get("chainId"))) continue;
 
                 @SuppressWarnings("unchecked")

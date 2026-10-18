@@ -20,12 +20,6 @@
 - **Planning & Changes**: Always ask `agy` about the proposed changes and plan before executing them.
 - **Commits**: Commit after every massive/significant code alteration, with a descriptive commit message explaining the change.
 
-## Porting to MUNINN
-- `../muninn-extension` is a rebranded fork of `icarus-extension` (package `muninn`, product name MUNINN, own logo/branding — never overwrite those).
-- To port icarus-extension commits over, run in muninn-extension: `scripts/migrate-from-icarus.sh <commit-range> [--dry-run]`. It format-patches `icarus-extension/src/main/java` only, rewrites `icarus`/`Icarus`/`ICARUS` → `muninn`/`Muninn`/`MUNINN` (and strips the `icarus-extension/` path prefix), then `git am`s the result — no LLM involved for the mechanical part.
-- Conflicts happen where MUNINN has diverged; resolve manually, `git add -A`, `git am --continue`.
-
-<!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the

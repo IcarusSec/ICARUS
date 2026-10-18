@@ -39,14 +39,32 @@ public final class ProjectStateCodec {
 
     private ProjectStateCodec() {}
 
-    public record ImportedItem(Finding finding, byte[] imageBytes, String caption, boolean included) {}
+    /** {@code imageBytes} is set for a portable project file; {@code imagePath} for a {@link #exportIndex} entry. */
+    public record ImportedItem(Finding finding, byte[] imageBytes, String caption, boolean included, String imagePath) {}
 
     public record ImportResult(List<ImportedItem> items, ReportTemplateConfig reportTemplateConfig) {}
+
+    /**
+     * Lightweight index of the Evidence Manager for Burp's own project persistence: same finding
+     * JSON as {@link #export}, but each screenshot is referenced by its on-disk path instead of
+     * being Base64-embedded (it already lives in the evidence folder), so saving stays cheap
+     * enough to run after every change. Read back with {@link #importFrom}.
+     */
+    public static String exportIndex(List<CapturedEvidence> evidence, Predicate<CapturedEvidence> isIncluded) {
+        List<Object> findingsJson = new ArrayList<>();
+        for (CapturedEvidence ce : evidence) {
+            findingsJson.add(findingToJson(ce, isIncluded.test(ce), false));
+        }
+        Map<String, Object> root = new LinkedHashMap<>();
+        root.put("formatVersion", 1.0);
+        root.put("findings", findingsJson);
+        return JsonParser.write(root);
+    }
 
     public static String export(List<CapturedEvidence> evidence, Predicate<CapturedEvidence> isIncluded, ReportTemplateConfig rtc) {
         List<Object> findingsJson = new ArrayList<>();
         for (CapturedEvidence ce : evidence) {
-            findingsJson.add(findingToJson(ce, isIncluded.test(ce)));
+            findingsJson.add(findingToJson(ce, isIncluded.test(ce), true));
         }
 
         // Reuses ReportTemplateConfig's own JSON shape (Step 02/03) instead of inventing a
@@ -62,7 +80,7 @@ public final class ProjectStateCodec {
         return JsonParser.write(root);
     }
 
-    private static Map<String, Object> findingToJson(CapturedEvidence ce, boolean included) {
+    private static Map<String, Object> findingToJson(CapturedEvidence ce, boolean included, boolean embedImage) {
         Finding f = ce.finding();
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("module", f.module());
@@ -75,7 +93,11 @@ public final class ProjectStateCodec {
         m.put("metadata", new LinkedHashMap<Object, Object>(f.metadata()));
         m.put("caption", ce.caption());
         m.put("included", included);
-        m.put("imagePng", Base64.getEncoder().encodeToString(imageToPngBytes(ce.image())));
+        if (embedImage) {
+            m.put("imagePng", Base64.getEncoder().encodeToString(imageToPngBytes(ce.image())));
+        } else {
+            m.put("imagePath", ce.imagePath().toAbsolutePath().normalize().toString());
+        }
 
         HttpRequestResponse rr = f.evidence();
         if (rr != null && rr.request() != null) {
@@ -168,9 +190,12 @@ public final class ProjectStateCodec {
         }
 
         Finding finding = builder.build();
-        byte[] imageBytes = Base64.getDecoder().decode(String.valueOf(m.getOrDefault("imagePng", "")));
+        Object pathRaw = m.get("imagePath");
+        String imagePath = pathRaw instanceof String p && !p.isBlank() ? p : null;
+        byte[] imageBytes = imagePath != null ? null
+                : Base64.getDecoder().decode(String.valueOf(m.getOrDefault("imagePng", "")));
         String caption = String.valueOf(m.getOrDefault("caption", ""));
         boolean included = Boolean.TRUE.equals(m.getOrDefault("included", true));
-        return new ImportedItem(finding, imageBytes, caption, included);
+        return new ImportedItem(finding, imageBytes, caption, included, imagePath);
     }
 }

@@ -56,10 +56,6 @@ public final class EvidenceCapture {
     // and drawn 1:1 by drawHeaderLogo.
     public static final BufferedImage LOGO = EvidenceImageRenderer.loadScaledLogo(HEADER_LOGO_SIZE);
 
-    
-
-    
-
     private final MontoyaApi api;
     final ModuleConfig config;
     public final List<CapturedEvidence> captured = new CopyOnWriteArrayList<>();
@@ -252,7 +248,8 @@ public final class EvidenceCapture {
         int titleX = imageRenderer.drawHeaderLogo(g, 70);
         g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-        g.drawString("ICARUS  ·  " + newFinding.type() + imageRenderer.projectNameSuffix(), titleX, 30);
+        g.drawString(EvidenceImageRenderer.fitHeaderText(g, "ICARUS  ·  " + newFinding.type() + imageRenderer.projectNameSuffix(),
+                EvidenceImageRenderer.headerRoom(imgWidth, titleX)), titleX, 30);
 
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
         String severity = newFinding.severity().name();
@@ -261,7 +258,8 @@ public final class EvidenceCapture {
         int severityWidth = g.getFontMetrics().stringWidth(severity);
 
         g.setColor(cs.dim());
-        g.drawString("  ·  " + newFinding.description(), titleX + severityWidth, 55);
+        g.drawString(EvidenceImageRenderer.fitHeaderText(g, "  ·  " + newFinding.description(),
+                EvidenceImageRenderer.headerRoom(imgWidth, titleX + severityWidth)), titleX + severityWidth, 55);
 
         g.dispose();
         return out;
@@ -345,11 +343,8 @@ public final class EvidenceCapture {
         BufferedImage img = imageRenderer.renderTextToImage(wrappedRequest, wrappedResponse, finding.type(), finding.description(),
                 finding.severity().name(), false);
         try {
-            Path dir = EvidencePaths.evidenceImageDir(api, config);
-            Files.createDirectories(dir);
-            String filename = "evidence-manual-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_")
-                    + "-" + System.currentTimeMillis() + ".png";
-            Path imagePath = dir.resolve(filename);
+            Path imagePath = EvidencePaths.reserveEvidenceFile(EvidencePaths.evidenceImageDir(api, config),
+                    "evidence-manual", finding.type());
             ImageIO.write(img, "png", imagePath.toFile());
             CapturedEvidence ce = new CapturedEvidence(finding, imagePath, img, "");
             restoreCaptured(ce, true);
@@ -363,12 +358,6 @@ public final class EvidenceCapture {
     // PHASE 1: TEXT CLEANUP
     // ===================================================================================
 
-    
-
-    
-
-    
-
     /**
      * Writes the rendered evidence image to the configured output directory (no save
      * dialog — this is the one-click path) and hands the finished {@code finding} to
@@ -380,10 +369,8 @@ public final class EvidenceCapture {
      */
     public void saveAndRegisterEvidence(Finding finding, BufferedImage image) {
         try {
-            Path dir = EvidencePaths.evidenceImageDir(api, config);
-            Files.createDirectories(dir);
-            String filename = "evidence-" + finding.type().replaceAll("[^a-zA-Z0-9.-]", "_") + "-" + System.currentTimeMillis() + ".png";
-            Path out = dir.resolve(filename);
+            Path out = EvidencePaths.reserveEvidenceFile(EvidencePaths.evidenceImageDir(api, config),
+                    "evidence", finding.type());
             ImageIO.write(image, "png", out.toFile());
 
             captured.add(new CapturedEvidence(finding, out, image, ""));
@@ -398,110 +385,14 @@ public final class EvidenceCapture {
         }
     }
 
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    /**
-     * Computes how many monospace characters actually fit in a request/response column's
-     * real pixel width, so wrapping matches what will actually be drawn instead of a
-     * hardcoded guess. Both MONO_FONT and BOLD_FONT are monospace, so per-char advance
-     * width is uniform within each — checking both covers request/status lines (bold) and
-     * everything else (plain).
-     */
-    
-
-    /**
-     * Wraps text to maxLineLength, breaking on the last whitespace before the limit when
-     * one exists (so prose doesn't split mid-word) and falling back to a hard character
-     * break when a single token (URL, base64 blob, etc.) has no whitespace to break on.
-     * Continuation lines keep the original line's leading indentation, so a wrapped JSON
-     * or header value stays visually aligned within its structure instead of collapsing
-     * to the left margin.
-     */
-    
-
     // ===================================================================================
     // IMAGE RENDERING
     // ===================================================================================
-
-    
-
-    /**
-     * Draws as many pre-wrapped lines as fit in [startY, imgHeight), then a dim truncation
-     * marker for whatever's left — instead of the caller growing the image to fit everything
-     * (which is what let a long JSON body balloon into a multi-thousand-pixel-tall PNG). Line
-     * wrapping/indentation and drawLine's JSON/header syntax coloring are untouched; this only
-     * bounds how many of the already-wrapped lines get drawn.
-     */
-    
-
-    /**
-     * @param lastValueColor single-element carrier holding the color of the most recently
-     *                       drawn key/value's value, so a wrapped continuation line (no
-     *                       leading quote/colon of its own to classify by) can be drawn in
-     *                       the same color as the value it's continuing instead of falling
-     *                       back to the generic default. Reset to null on any line that
-     *                       isn't itself indented, since that means it's fresh top-level
-     *                       content, not a continuation. Re-derived from the current text's
-     *                       own indentation every draw, so it stays correct even after the
-     *                       user edits the text in showPhase1's JTextArea.
-     */
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
 
     // ===================================================================================
     // PHASE 2: VISUAL ANNOTATION
     // ===================================================================================
 
-    
-
-    /** Flattens the base snapshot + committed annotations into one image. Shared by Save and Copy. */
-    
-
-    /** Draws the ICARUS logo centered on {@code HEADER_LOGO_CENTER_X} in the header banner; returns the x to resume text at. */
-    
-
-    /**
-     * Builds a shaft + closed triangular head. The shaft stops at the head's base
-     * (not the tip) so it doesn't poke through the filled head once drawAnnotation
-     * fills this shape.
-     */
-    
-    
-
-    
-
-    
-
-    
-
-    
-
-    
     /** @param caption editable text tied to this specific piece of evidence, shown beneath its image in reports. */
     public record CapturedEvidence(Finding finding, Path imagePath, BufferedImage image, String caption) {}
 }

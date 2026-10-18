@@ -41,6 +41,7 @@ public class IcarusTab {
 
     private final JPanel mainPanel;
     private final DefaultTableModel tableModel;
+    private JTable resultsTable;
     private final DefaultListModel<String> auditModel;
 
     public IcarusTab(MontoyaApi api, ModuleConfig config, List<IcarusModule> modules,
@@ -65,9 +66,24 @@ public class IcarusTab {
 
         // Listen for new findings
         orchestrator.addListener(records -> {
-            // Rebuild the whole table so counts update, but omit suppressed
+            // Rebuild the whole table so counts update, but omit suppressed. This fires on every
+            // registry change (continuously during passive scanning), so keep the user's
+            // selection (by hash, model column 0) and use a stable order — the registry is a
+            // hash map, and rows used to reshuffle and lose the selection mid-action.
+            java.util.Set<Object> selectedHashes = new java.util.HashSet<>();
+            if (resultsTable != null) {
+                for (int viewRow : resultsTable.getSelectedRows()) {
+                    selectedHashes.add(tableModel.getValueAt(resultsTable.convertRowIndexToModel(viewRow), 0));
+                }
+            }
+            List<icarus.core.FindingRecord> ordered = new java.util.ArrayList<>(records);
+            ordered.sort(java.util.Comparator
+                    .comparingInt((icarus.core.FindingRecord r) -> r.getFinding().severity().ordinal())
+                    .thenComparing(r -> java.util.Objects.toString(r.getFinding().module(), ""))
+                    .thenComparing(r -> java.util.Objects.toString(r.getFinding().type(), ""))
+                    .thenComparing(r -> java.util.Objects.toString(r.getFinding().path(), "")));
             tableModel.setRowCount(0);
-            for (var r : records) {
+            for (var r : ordered) {
                 if (!r.isSuppressed()) {
                     Finding f = r.getFinding();
                     tableModel.addRow(new Object[]{
@@ -79,6 +95,14 @@ public class IcarusTab {
                         f.path(),
                         f.description()
                     });
+                }
+            }
+            if (resultsTable != null && !selectedHashes.isEmpty()) {
+                for (int m = 0; m < tableModel.getRowCount(); m++) {
+                    if (selectedHashes.contains(tableModel.getValueAt(m, 0))) {
+                        int v = resultsTable.convertRowIndexToView(m);
+                        if (v >= 0) resultsTable.addRowSelectionInterval(v, v);
+                    }
                 }
             }
             // Update audit log
@@ -110,6 +134,7 @@ public class IcarusTab {
         themeHelper.applyTheme(resultsPanel);
 
         JTable table = new JTable(tableModel);
+        this.resultsTable = table;
         themeHelper.styleTable(table);
 
         // Hide the Hash column

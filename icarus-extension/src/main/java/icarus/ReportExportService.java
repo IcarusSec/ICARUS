@@ -58,15 +58,20 @@ public class ReportExportService {
 
     public List<Finding> getReportableFindings() {
         List<Finding> result = new ArrayList<>();
-        Set<Finding> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        // One entry per finding identity (hash), in first-capture order. Screenshots are grouped
+        // by hash downstream, so two captures holding different Finding objects for the same
+        // finding (e.g. one taken before and one after an edit) used to put that finding — with
+        // its whole screenshot group — into the report twice, the older one showing stale text.
+        Set<String> seenHashes = new java.util.HashSet<>();
         for (var ce : evidenceCapture.getCaptured()) {
             if (!evidenceCapture.isIncluded(ce)) continue;
-            Finding f = ce.finding();
-            if (!seen.add(f)) continue;
-            var record = findings.getRecordByHash(f.similarityHash());
+            String hash = ce.finding().similarityHash();
+            if (!seenHashes.add(hash)) continue;
+            var record = findings.getRecordByHash(hash);
             if (record == null || record.isSuppressed()
-                    || !record.getFinding().similarityHash().equals(f.similarityHash())) continue;
-            result.add(f);
+                    || !record.getFinding().similarityHash().equals(hash)) continue;
+            // The registry holds the latest edit of this finding.
+            result.add(record.getFinding());
         }
         return result;
     }
@@ -85,6 +90,7 @@ public class ReportExportService {
         Path tempFile;
         try {
             tempFile = Files.createTempFile("icarus-report-preview-", ".pdf");
+            tempFile.toFile().deleteOnExit(); // previews otherwise pile up in the temp dir
         } catch (IOException e) {
             api.logging().logToError("Failed to create preview temp file: " + e);
             JOptionPane.showMessageDialog(parent, "Failed to create a temp file for the preview: " + e.getMessage());

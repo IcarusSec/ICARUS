@@ -154,6 +154,12 @@ public class EvidenceTriggerService {
 
     private java.awt.image.BufferedImage toBufferedImage(Image img) {
         if (img instanceof java.awt.image.BufferedImage bi) return bi;
+        // Clipboard images can arrive as not-yet-loaded Toolkit images whose width/height read
+        // -1 (BufferedImage then throws); ImageIcon blocks until the pixels are available.
+        img = new javax.swing.ImageIcon(img).getImage();
+        if (img.getWidth(null) <= 0 || img.getHeight(null) <= 0) {
+            throw new IllegalArgumentException("clipboard image has no pixels");
+        }
         var bi = new java.awt.image.BufferedImage(img.getWidth(null), img.getHeight(null), java.awt.image.BufferedImage.TYPE_INT_ARGB);
         Graphics2D g2 = bi.createGraphics();
         g2.drawImage(img, 0, 0, null);

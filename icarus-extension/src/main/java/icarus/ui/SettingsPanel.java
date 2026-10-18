@@ -431,9 +431,32 @@ public class SettingsPanel {
         JSpinner spinner = new JSpinner(new SpinnerNumberModel(config.getInt(key, defaultVal), min, max, step));
         spinner.setEditor(new JSpinner.NumberEditor(spinner, "#"));
         row.add(spinner);
-        
+
         card.addFormRow(row);
-        
+
+        // Commit typed text into the spinner model as it's edited. Without this, a value the
+        // user types but never commits (no Enter, no focus loss — e.g. they type a port/limit
+        // then trigger a scan from a context menu) is silently dropped: getValue() returns the
+        // last committed value, and the change listener never fires. Each valid commit updates
+        // the model and fires the listener below, which saves. Intermediate/invalid text (empty
+        // field, out-of-range) throws and is left uncommitted at the last valid value.
+        JComponent editor = spinner.getEditor();
+        if (editor instanceof JSpinner.DefaultEditor de) {
+            de.getTextField().getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                private void commit() {
+                    // Deferred: committing re-syncs the editor text, which would mutate the
+                    // document while it's still notifying listeners ("Attempt to mutate in
+                    // notification"). invokeLater runs it after this event settles.
+                    SwingUtilities.invokeLater(() -> {
+                        try { spinner.commitEdit(); } catch (java.text.ParseException ignored) { /* keep last valid */ }
+                    });
+                }
+                public void insertUpdate(javax.swing.event.DocumentEvent e) { commit(); }
+                public void removeUpdate(javax.swing.event.DocumentEvent e) { commit(); }
+                public void changedUpdate(javax.swing.event.DocumentEvent e) { commit(); }
+            });
+        }
+
         saveHooks.add(() -> config.set(key, (int) spinner.getValue()));
         spinner.addChangeListener(e -> saveAll());
     }

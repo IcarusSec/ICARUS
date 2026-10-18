@@ -34,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Consumer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,26 +125,38 @@ public class ProjectStateService {
                 String json = Files.readString(selectedFile.toPath());
                 ProjectStateCodec.ImportResult result = ProjectStateCodec.importFrom(json);
 
-                Path dir = Path.of(EvidencePaths.defaultOutputDir(api, config));
-                Files.createDirectories(dir);
+                // Same dedicated screenshot folder every other capture path uses — the bare
+                // output dir can point at wherever the user last saved a report (e.g. Desktop).
+                Path dir = EvidencePaths.evidenceImageDir(api, config);
 
                 // Stage + validate every image off the EDT and into a local list BEFORE we
-                // touch the live Evidence Manager. A bad/undecodable image aborts the whole
-                // import here, leaving the existing evidence untouched.
+                // touch the live Evidence Manager. A bad/undecodable image is skipped and
+                // logged instead of aborting the whole import over one entry.
                 List<Map.Entry<EvidenceCapture.CapturedEvidence, Boolean>> staged = new ArrayList<>();
+                int skipped = 0;
                 for (var item : result.items()) {
-                    String filename = "evidence-" + item.finding().type().replaceAll("[^a-zA-Z0-9.-]", "_")
-                            + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + ".png";
-                    Path imagePath = dir.resolve(filename);
-                    Files.write(imagePath, item.imageBytes());
-                    BufferedImage image = ImageIO.read(imagePath.toFile());
-                    if (image == null) {
-                        throw new IOException("Undecodable evidence image for finding: " + item.finding().type());
+                    Path imagePath = null;
+                    try {
+                        imagePath = EvidencePaths.reserveEvidenceFile(dir, "evidence", item.finding().type());
+                        Files.write(imagePath, item.imageBytes());
+                        BufferedImage image = ImageIO.read(imagePath.toFile());
+                        if (image == null) {
+                            throw new IOException("undecodable image");
+                        }
+                        var ce = new EvidenceCapture.CapturedEvidence(item.finding(), imagePath, image, item.caption());
+                        staged.add(Map.entry(ce, item.included()));
+                    } catch (Exception e) {
+                        skipped++;
+                        api.logging().logToError("Project import: skipped evidence for " + item.finding().type() + ": " + e);
+                        if (imagePath != null) {
+                            try { Files.deleteIfExists(imagePath); } catch (IOException ignored) { }
+                        }
                     }
-                    var ce = new EvidenceCapture.CapturedEvidence(item.finding(), imagePath, image, item.caption());
-                    staged.add(Map.entry(ce, item.included()));
                 }
-                return new StagedImport(staged, result);
+                if (staged.isEmpty() && skipped > 0) {
+                    throw new IOException("none of the " + skipped + " evidence image(s) could be read");
+                }
+                return new StagedImport(staged, result, skipped);
             }
 
             @Override
@@ -156,16 +167,22 @@ public class ProjectStateService {
                     StagedImport staged = get();
 
                     evidenceCapture.clearAll();
+                    List<Finding> imported = new ArrayList<>();
                     for (var entry : staged.entries()) {
                         var ce = entry.getKey();
                         evidenceCapture.restoreCaptured(ce, entry.getValue());
-                        findings.processDeduplication(List.of(ce.finding()), false);
+                        imported.add(ce.finding());
                     }
+                    // One registry batch (one UI refresh). passive=true only skips creating Burp
+                    // issues: these were raised when first found, and re-importing the same
+                    // project re-added every one of them to the site map each time.
+                    findings.processDeduplication(imported, true);
                     staged.result().reportTemplateConfig().saveTo(config);
                     api.persistence().extensionData().setString("config", config.serialize());
 
                     onImported.run();
-                    ToastNotification.show(suiteFrame, "Project imported: " + staged.entries().size() + " evidence item(s).");
+                    ToastNotification.show(suiteFrame, "Project imported: " + staged.entries().size() + " evidence item(s)."
+                            + (staged.skipped() > 0 ? " " + staged.skipped() + " unreadable item(s) skipped — see the extension error log." : ""));
                 } catch (Exception ex) {
                     api.logging().logToError("Project import failed: " + ex.getCause());
                     JOptionPane.showMessageDialog(parent, "Project import failed: " + ex.getCause());
@@ -176,6 +193,7 @@ public class ProjectStateService {
 
     private record StagedImport(
             List<Map.Entry<EvidenceCapture.CapturedEvidence, Boolean>> entries,
-            ProjectStateCodec.ImportResult result) {}
+            ProjectStateCodec.ImportResult result,
+            int skipped) {}
 
 }

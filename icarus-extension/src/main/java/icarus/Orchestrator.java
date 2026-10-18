@@ -60,9 +60,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     private final ReportExportService reportExportService;
     private final ProjectStateService projectStateService;
     private final EvidenceTriggerService evidenceTriggerService;
+    private final StateAutosaver autosaver;
 
     private Runnable showEvidenceAction;
-
 
     // Local, in-process drag-and-drop transfer of a CapturedEvidence reference from an
     // evidence card (Evidence Manager detail panel) onto a finding in the master list, to
@@ -97,6 +97,22 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         VulnerabilityKnowledgeBase.getInstance().initialize(kbOutputDir);
 
         evidenceCapture.setOnApplied(this::registerManualFinding);
+
+        this.autosaver = new StateAutosaver(api, evidenceCapture, findings::serializeState);
+        findings.addListener(records -> autosaver.markRegistryDirty());
+        evidenceCapture.addChangeListener(autosaver::markEvidenceDirty);
+    }
+
+    /** Reloads the Evidence Manager saved in the Burp project (see {@link StateAutosaver}). */
+    public void restoreEvidence() {
+        autosaver.restoreEvidenceAsync(restored -> {
+            List<Finding> unregistered = new ArrayList<>();
+            for (Finding f : restored) {
+                if (findings.getRecordByHash(f.similarityHash()) == null) unregistered.add(f);
+            }
+            // passive=true: just re-register, don't raise fresh Burp issues for old findings.
+            if (!unregistered.isEmpty()) findings.processDeduplication(unregistered, true);
+        });
     }
 
     /**
@@ -109,11 +125,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         findings.processDeduplication(List.of(finding), false);
     }
 
-    
     public void updateFinding(Finding finding) {
         findings.processDeduplication(List.of(finding), false);
     }
-    
+
     public burp.api.montoya.MontoyaApi api() { return api; }
 
     public EvidenceCapture getEvidenceCapture() {
@@ -152,65 +167,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         return findings.getFindingByHash(hash);
     }
 
-
-    /**
-     * Findings that actually belong in a report: ones the user explicitly sent through
-     * Evidence Capture (Apply / Send annotation), not every passively-detected finding
-     * (e.g. SensitiveHeaderModule's header checks, PassiveErrorModule) that only ever
-     * landed in the Results tab for awareness. Order follows EvidenceCapture's captured
-     * list, which the Evidence Manager's drag-and-drop reordering controls directly —
-     * report order was previously undefined HashMap iteration order via getAllFindingRecords().
-     * Also drops orphaned entries left behind when a finding was re-edited (the old,
-     * pre-edit CapturedEvidence stays in the list, but the registry only tracks the latest),
-     * and entries the user unchecked in the Evidence Manager's Include column.
-     */
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    /**
-     * Exports the full Evidence Manager state (findings, screenshots, captions, inclusion,
-     * and the active {@link ReportTemplateConfig}) to a portable {@code .icarus} project
-     * file, via {@link ProjectStateCodec}. Base64-encoding every screenshot is the expensive
-     * part, so it runs in {@code doInBackground} — a large evidence set shouldn't freeze the
-     * dialog while exporting.
-     */
-
-    /**
-     * Imports a {@code .icarus} project file, fully replacing current Evidence Manager state
-     * (simpler than a merge, and matches the "baseline for a retest months later" use case) —
-     * every imported finding is re-registered into {@link FindingRegistry} via the same
-     * dedup path manual evidence capture uses, so it's immediately visible in the Results tab
-     * and reportable, not just sitting in {@link EvidenceCapture} orphaned from the registry.
-     */
-
-    /**
-     * Renders the actual PDF (cover page, gradient band, risk tables, everything
-     * {@link #exportPdfReportInteractive} would produce) to a temp file and opens it in the
-     * system's default PDF viewer via {@link Desktop#open}, stdlib, no new dependency. The
-     * HTML report has drifted from the PDF's design — no cover page, no risk-matrix tables —
-     * so it stopped being a meaningful preview of what actually gets delivered; the PDF export
-     * path itself is what needs previewing. Writes nothing to the user's chosen report
-     * location and never touches FindingRegistry — purely a look.
-     */
-
     /**
      * Adds a manually-confirmed finding — the MCP server's {@code add_finding} tool, for an
      * LLM that verified a vulnerability itself (outside any ICARUS module, e.g. by sending
@@ -231,47 +187,6 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
     }
 
     /**
-     * Non-interactive report generation for the MCP server ({@code generate_icarus_report}
-     * tool) — no file chooser, no Swing thread. Hydrates the ICARUS template fields
-     * ({@code classification}, {@code team}, {@code requester}, etc.) into the persisted {@link ReportTemplateConfig}
-     * before rendering, same as a human filling in the Reporting tab, then writes to a
-     * timestamped file under {@link EvidencePaths#defaultOutputDir}.
-     *
-     * @return the written file's absolute path, or null if there were no reportable findings.
-     */
-
-
-
-    /**
-     * Shared by the "ICARUS Scan Results" dialog and the Results tab's own report buttons —
-     * both just gather whatever {@link Finding}s they're showing and hand them here.
-     *
-     * @param parent used to anchor the file chooser / confirm dialogs
-     * @param triggerButton disabled while generating and re-enabled after, if not null
-     */
-
-    /** Same shell as {@link #generateHtmlReportInteractive}, writing via {@link PdfReportGenerator} instead. */
-
-    
-
-
-
-
-
-    /**
-     * Shared by the "Create Evidence" context-menu item and the Ctrl+P hotkey handler —
-     * both entry points get Smart Evidence detection for free by routing through here.
-     */
-
-    /**
-     * Quietly checks the response for something worth flagging (verbose error / server
-     * error, or an unencoded reflection of a request parameter) and, if the user confirms,
-     * pre-fills the evidence with that finding instead of the blank manual template.
-     */
-
-
-
-    /**
      * Reads a screenshot off the system clipboard (e.g. an OS/browser screenshot of Burp's
      * embedded browser tab) and opens it directly in ICARUS's annotation editor as manual
      * evidence, tied to {@code rr} the same way {@link #blankManualFinding} is — keeps
@@ -288,9 +203,13 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
      * existing annotation flow instead of reinventing screen capture.
      */
 
-
     public void runScan(HttpRequestResponse target, boolean isManual) {
         scanRunner.runScan(target, isManual);
+    }
+
+    /** Whether an active scan is currently running (for the MCP get_scan_status tool). */
+    public boolean isScanRunning() {
+        return scanRunner.isScanRunning();
     }
 
     public List<FindingRecord> getAllFindingRecords() {
@@ -311,10 +230,9 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         evidenceCapture.clearAll();
     }
 
-
     public void shutdown() {
         scanRunner.shutdown();
-        api.persistence().extensionData().setString("icarus_state", findings.serializeState());
+        autosaver.shutdown(); // final synchronous save of the registry + evidence index
     }
 
     public void restoreState(String stateJson) {
@@ -496,7 +414,5 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
             SwingUtilities.invokeLater(() -> showFindingsDialog(recordsToShow));
         }
     }
-
-
 
 }

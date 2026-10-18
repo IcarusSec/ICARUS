@@ -127,6 +127,11 @@ public class KnowledgeBaseTab {
             int selectedRow = table.getSelectedRow();
             if (selectedRow >= 0) {
                 String name = (String) tableModel.getValueAt(selectedRow, 0);
+                if (JOptionPane.showConfirmDialog(mainPanel, I18n.t("ui.kb.delete.confirm", name),
+                        I18n.t("ui.kb.btn.delete"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE)
+                        != JOptionPane.YES_OPTION) {
+                    return;
+                }
                 orchestrator.deleteKnowledgeBaseEntry(name);
                 refreshTable();
             }

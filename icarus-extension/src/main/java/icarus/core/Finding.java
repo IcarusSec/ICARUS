@@ -50,10 +50,66 @@ public final class Finding {
     public List<String> cweIds()  { return cweIds; }
 
     /**
+     * Metadata key holding the endpoint/host a finding is scoped to (e.g. {@code GET
+     * example.com/api/users}). {@link #path()} alone is often just a parameter path such as
+     * {@code query:id}, so without this two different endpoints sharing a parameter name
+     * collapsed into one registry record — the second scan silently overwrote the first
+     * endpoint's evidence. Kept in metadata (rather than a new field) so every existing
+     * rebuild site that copies metadata preserves it, and findings persisted before it existed
+     * keep their original hash (suppressions, retest statuses, evidence grouping).
+     */
+    public static final String META_SCOPE = "endpoint";
+
+    /**
+     * Metadata key pinning a finding's {@link #similarityHash()} across user edits. The hash is
+     * built from module/type/path and the editors change type (the title field IS the type), so
+     * renaming a finding used to give it a new identity: its screenshots split into a separate
+     * Evidence Manager group, its retest status was lost, and the registry kept the old record as
+     * a duplicate. An edited finding carries its original hash here instead.
+     */
+    public static final String META_IDENTITY = "identity";
+
+    /** Internal bookkeeping keys that shouldn't be printed in report metadata tables. */
+    public static boolean isInternalMeta(String key) {
+        return META_IDENTITY.equals(key);
+    }
+
+    /** True once a user edit pinned this finding's identity (see {@link #META_IDENTITY}). */
+    public boolean isUserEdited() {
+        String id = metadata.get(META_IDENTITY);
+        return id != null && !id.isBlank();
+    }
+
+    /**
      * Hash used for deduplication.
      */
     public String similarityHash() {
-        return module + "|" + type + "|" + path;
+        String pinned = metadata.get(META_IDENTITY);
+        if (pinned != null && !pinned.isBlank()) return pinned;
+        String scope = metadata.get(META_SCOPE);
+        String base = module + "|" + type + "|" + path;
+        return scope == null || scope.isBlank() ? base : base + "|" + scope;
+    }
+
+    /**
+     * {@code METHOD host/path} (query string dropped) for {@code request}, or {@code ""} when
+     * it has no usable target — the default scope ScanRunner stamps on active-scan findings.
+     */
+    public static String endpointScope(HttpRequest request) {
+        if (request == null) return "";
+        try {
+            String host = request.httpService() != null ? request.httpService().host() : "";
+            String p = request.pathWithoutQuery();
+            return (request.method() + " " + host + (p == null ? "" : p)).trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Host-level scope for issues that are a server configuration property, not per-URL. */
+    public static String hostScope(HttpRequest request) {
+        if (request == null || request.httpService() == null) return "";
+        return request.httpService().host();
     }
 
     /**
@@ -101,15 +157,27 @@ public final class Finding {
      */
     public Finding withoutMeta(String key) {
         if (!metadata.containsKey(key)) return this;
+        Builder builder = copyBuilder(key);
+        return builder.build();
+    }
+
+    /** Same finding with {@code key} set to {@code value}; returns {@code this} if already equal. */
+    public Finding withMeta(String key, String value) {
+        if (value == null || value.equals(metadata.get(key))) return this;
+        return copyBuilder(null).meta(key, value).build();
+    }
+
+    private Builder copyBuilder(String skipKey) {
         Builder builder = new Builder(module, type)
                 .description(description)
                 .severity(severity)
                 .category(category)
-                .path(path)
-                .evidence(evidence);
-        metadata.forEach((k, v) -> { if (!k.equals(key)) builder.meta(k, v); });
+                .path(path);
+        // Share the already-temp-file-backed evidence instead of copying it to disk again.
+        builder.evidence = evidence;
+        metadata.forEach((k, v) -> { if (!k.equals(skipKey)) builder.meta(k, v); });
         cweIds.forEach(builder::cwe);
-        return builder.build();
+        return builder;
     }
 
     // ── Builder ─────────────────────────────────────────────────
@@ -141,6 +209,8 @@ public final class Finding {
         public Builder evidence(HttpRequestResponse v) { this.evidence = v != null ? v.copyToTempFile() : null; return this; }
         public Builder meta(String key, String value)  { this.metadata.put(key, value); return this; }
         public Builder cwe(String cweId)      { if (!this.cweIds.contains(cweId)) this.cweIds.add(cweId); return this; }
+        /** Keeps {@code original}'s identity (dedup hash) even if this edit changes its type/path. */
+        public Builder keepIdentityOf(Finding original) { return meta(META_IDENTITY, original.similarityHash()); }
 
         public Finding build() {
             return new Finding(this);

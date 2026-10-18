@@ -78,6 +78,9 @@ public class SectionListPanel implements ResponsiveSection {
         @Override
         protected Transferable createTransferable(JComponent c) {
             sourceIndex = list.getSelectedIndex();
+            // No row under the drag (e.g. keyboard-initiated or empty-space drag): nothing to
+            // transfer. Returning null is the documented signal; getElementAt(-1) would throw.
+            if (sourceIndex < 0) return null;
             SectionNode row = model.getElementAt(sourceIndex);
             return new Transferable() {
                 @Override

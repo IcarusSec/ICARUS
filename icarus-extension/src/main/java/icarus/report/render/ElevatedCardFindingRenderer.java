@@ -159,9 +159,10 @@ public class ElevatedCardFindingRenderer implements FindingRenderer {
             html.append("  <div class=\"finding-evidence\" style=\"margin-top: 1.5rem;\">\n");
             html.append("    <h4>Evidence</h4>\n");
             for (EvidenceView ev : finding.evidence()) {
-                if (ev.imagePath() != null) {
+                String src = ev.htmlSrc();
+                if (src != null) {
                     html.append("    <div style=\"margin-bottom: 1rem; text-align: center;\">\n");
-                    html.append("      <img src=\"").append(ev.imagePath().getFileName().toString()).append("\" style=\"max-width: 100%; border-radius: 4px; border: 1px solid var(--border);\" />\n");
+                    html.append("      <img src=\"").append(src).append("\" style=\"max-width: 100%; border-radius: 4px; border: 1px solid var(--border);\" />\n");
                     if (ev.caption() != null && !ev.caption().isBlank()) {
                         html.append("      <p style=\"font-size: 0.85rem; color: var(--text-muted);\">").append(escape(ev.caption())).append("</p>\n");
                     }

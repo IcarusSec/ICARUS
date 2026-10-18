@@ -684,7 +684,14 @@ public final class PdfReportGenerator {
         for (Finding f : findings) {
             List<CapturedEvidence> group = evidenceByHash.getOrDefault(f.similarityHash(), List.of());
             String retestStatus = retest ? config.getString("retest.status." + f.similarityHash(), "") : "";
-            appendFindingCard(doc, index, f, group, writer, addBookmarks, retestStatus, capture, rtc);
+            try {
+                appendFindingCard(doc, index, f, group, writer, addBookmarks, retestStatus, capture, rtc);
+            } catch (RuntimeException e) {
+                // One malformed finding shouldn't cost the whole deliverable — note it in place
+                // and keep going (the card is added in a single doc.add, so nothing half-written).
+                api.logging().logToError("PDF: could not render finding #" + index + " '" + f.type() + "': " + e);
+                doc.add(new Paragraph("#" + index + ". " + f.type() + " — " + I18n.t("evidence.pdf.findings.evidence_error"), BODY_FONT));
+            }
             index++;
         }
     }
@@ -740,7 +747,7 @@ public final class PdfReportGenerator {
         }
 
         for (var entry : f.metadata().entrySet()) {
-            if (!entry.getKey().equalsIgnoreCase("grc_id")) {
+            if (!entry.getKey().equalsIgnoreCase("grc_id") && !Finding.isInternalMeta(entry.getKey())) {
                 addMetaRow(card, entry.getKey(), entry.getValue());
             }
         }

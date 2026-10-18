@@ -54,8 +54,10 @@ public class VerboseErrorDetector {
         // Java
         Pattern.compile("(?i)\\bjava\\.lang\\.\\w+Exception"),
         Pattern.compile("(?i)at java\\.base/"),
-        Pattern.compile("(?i)org\\.springframework\\.\\w+"),
-        Pattern.compile("(?i)org\\.apache\\.\\w+"),
+        // Qualified by an exception class or a stack frame — a bare "org.apache.xyz" also
+        // appears in license notices, docs pages and Maven coordinates.
+        Pattern.compile("(?i)(?:at |\\b)org\\.springframework\\.[\\w.$]*(?:Exception|Error)\\b|\\bat org\\.springframework\\.[\\w.$]+\\("),
+        Pattern.compile("(?i)(?:at |\\b)org\\.apache\\.[\\w.$]*(?:Exception|Error)\\b|\\bat org\\.apache\\.[\\w.$]+\\("),
 
         // Python
         Pattern.compile("(?i)Traceback \\(most recent call last\\):"),
@@ -64,23 +66,28 @@ public class VerboseErrorDetector {
 
         // PHP
         Pattern.compile("(?i)Fatal error: Uncaught"),
-        Pattern.compile("(?i)Fatal error:.*on line \\d+"),
-        Pattern.compile("(?i)Warning:.*on line \\d+"),
-        Pattern.compile("(?i)Notice:.*on line \\d+"),
+        // Same-line only and bounded: an unbounded ".*" on a minified single-line body both
+        // backtracks badly and drags the whole line into the finding description.
+        Pattern.compile("(?i)Fatal error:[^\\r\\n]{0,300}? on line \\d+"),
+        Pattern.compile("(?i)Warning:[^\\r\\n]{0,300}? on line \\d+"),
+        Pattern.compile("(?i)Notice:[^\\r\\n]{0,300}? on line \\d+"),
         Pattern.compile("(?i)PHP (?:Warning|Notice|Parse error):"),
-        Pattern.compile("(?i)\\bStack trace:\\b"),
-        Pattern.compile("(?i)\\bstack ?trace\\b"),
+        // PHP prints "Stack trace:" then "#0 ..." on the next line. The old "\\bStack trace:\\b"
+        // needed a word char right after the colon, so it never matched real PHP output; the
+        // bare "stack ?trace" alternative instead matched any page merely mentioning the words.
+        Pattern.compile("(?i)\\bStack trace:\\s*#\\d"),
 
         // Ruby
         Pattern.compile("(?i)\\w+\\.rb:\\d+:in"),
         Pattern.compile("(?i)NoMethodError:"),
 
         // Node.js / JavaScript
-        Pattern.compile("(?i)TypeError:.*"),
-        Pattern.compile("(?i)ReferenceError:.*"),
-        Pattern.compile("(?i)SyntaxError:.*"),
+        Pattern.compile("(?i)TypeError: [^\\r\\n]{1,200}"),
+        Pattern.compile("(?i)ReferenceError: [^\\r\\n]{1,200}"),
+        Pattern.compile("(?i)SyntaxError: [^\\r\\n]{1,200}"),
         Pattern.compile("(?i)UnhandledPromiseRejection"),
-        Pattern.compile("(?i)Caused by:"),
+        // Java/.NET chained cause — requires the class name, "Caused by:" alone is plain English.
+        Pattern.compile("(?i)Caused by: [\\w.$]+(?:Exception|Error)\\b"),
         Pattern.compile("(?i)at [^()]*\\([^()]*:\\d+:\\d+\\)"), // V8 stacktrace (linear: no nested quantifier — see java/redos)
 
         // C# / ASP.NET
@@ -89,14 +96,19 @@ public class VerboseErrorDetector {
         Pattern.compile("(?i)at System\\.Web\\.[a-zA-Z\\.]+"),
 
         // JWT / auth libraries
+        // Error/exception names only. The previous bare-word "jose" matched the first name
+        // (José/Jose) on any page, and "jsonwebtoken"/"jjwt" matched docs and package lists.
         Pattern.compile("(?i)\\bJsonWebTokenError\\b"),
-        Pattern.compile("(?i)\\bjsonwebtoken\\b"),
-        Pattern.compile("(?i)\\bjjwt\\b"),
-        Pattern.compile("(?i)\\bjose\\b"),
+        Pattern.compile("(?i)\\bio\\.jsonwebtoken\\.[\\w.$]*(?:Exception|Error)\\b"),
+        Pattern.compile("(?i)\\bjjwt[\\w.$]*(?:Exception|Error)\\b"),
+        Pattern.compile("(?i)\\bJOSE(?:Error|Exception)\\b"),
 
         // General / Web Servers
         Pattern.compile("(?i)Whitelabel Error Page")
     );
+
+    /** Longest matched excerpt kept for a finding description / evidence caption. */
+    private static final int MAX_MATCH_LENGTH = 240;
 
     /** Returns the matched string for reporting, or null if no match. */
     public static String getVerboseErrorMatch(String body) {
@@ -104,13 +116,18 @@ public class VerboseErrorDetector {
 
         for (Pattern p : DB_ERROR_PATTERNS) {
             var m = p.matcher(body);
-            if (m.find()) return "Database Error: " + m.group();
+            if (m.find()) return "Database Error: " + clip(m.group());
         }
         for (Pattern p : FRAMEWORK_AND_LANG_PATTERNS) {
             var m = p.matcher(body);
-            if (m.find()) return "Framework/Language Error: " + m.group();
+            if (m.find()) return "Framework/Language Error: " + clip(m.group());
         }
         return null;
+    }
+
+    private static String clip(String match) {
+        String oneLine = match.replaceAll("\\s+", " ").trim();
+        return oneLine.length() <= MAX_MATCH_LENGTH ? oneLine : oneLine.substring(0, MAX_MATCH_LENGTH) + "…";
     }
 
     /** `java -cp build_manual/libs/icarus-<version>.jar icarus.core.VerboseErrorDetector` — match + ReDoS self-check. */
@@ -118,6 +135,18 @@ public class VerboseErrorDetector {
         assert getVerboseErrorMatch("at fn (/srv/app/index.js:10:5)") != null : "valid V8 frame must still match";
         assert getVerboseErrorMatch("ORA-00933: something") != null;
         assert getVerboseErrorMatch("<html>ok</html>") == null;
+        assert getVerboseErrorMatch("PHP error\nStack trace:\n#0 /var/www/index.php(12)") != null : "PHP stack trace must match";
+        assert getVerboseErrorMatch("<p>Contact Jose for a stack trace of the org.apache license</p>") == null : "prose must not match";
+        assert getVerboseErrorMatch("Caused by: java.sql.SQLException: x") != null;
+        assert getVerboseErrorMatch("x".repeat(10) + "TypeError: " + "y".repeat(5000)).length() < 300 : "match excerpt must be bounded";
+        // Sentinel invariant: anything the full pass matches, the byte pre-filter must admit.
+        for (String sample : new String[]{"Stack trace:\n#0 a", "io.jsonwebtoken.ExpiredJwtException", "JOSEError", "Caused by: a.BError",
+                "at org.apache.catalina.core.X(Y.java:1)", "org.springframework.web.HttpMediaTypeNotSupportedException"}) {
+            assert getVerboseErrorMatch(sample) != null : "sample should match: " + sample;
+            // ByteArray needs the Burp runtime, so mirror mightContainVerboseError on a String.
+            String lower = sample.toLowerCase();
+            assert java.util.Arrays.stream(SENTINELS).anyMatch(lower::contains) : "sentinel pre-filter must admit: " + sample;
+        }
 
         // The V8 pattern must be linear: a crafted body that never completes the frame must
         // not backtrack exponentially. Was: (?:.*/)*.* — catastrophic on 'at  (' + many '/'.

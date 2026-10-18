@@ -402,8 +402,17 @@ public class ReportingSettingsTab {
         JFileChooser fc = new JFileChooser();
         fc.setSelectedFile(new File(currentProfile.name().toLowerCase().replace(" ", "-") + ".json"));
         if (fc.showSaveDialog(containerPanel) == JFileChooser.APPROVE_OPTION) {
+            File target = fc.getSelectedFile();
+            if (!target.getName().toLowerCase().endsWith(".json")) {
+                target = new File(target.getParentFile(), target.getName() + ".json");
+            }
+            if (target.exists() && JOptionPane.showConfirmDialog(containerPanel,
+                    target.getName() + " already exists. Overwrite?", "Confirm Overwrite",
+                    JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE) != JOptionPane.YES_OPTION) {
+                return;
+            }
             try {
-                Files.writeString(fc.getSelectedFile().toPath(), profileManager.exportJson(currentProfile.id()));
+                Files.writeString(target.toPath(), profileManager.exportJson(currentProfile.id()));
                 showToast("Exported.");
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(containerPanel, "Export failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);

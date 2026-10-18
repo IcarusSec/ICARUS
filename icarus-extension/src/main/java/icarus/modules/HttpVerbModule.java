@@ -31,6 +31,11 @@ public class HttpVerbModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "hv.enabled";
+    }
+
+    @Override
     public boolean sendsActivePayloads() {
         return true;
     }
@@ -178,6 +183,10 @@ public class HttpVerbModule implements IcarusModule {
             int status = result.status();
             String path = (result.evidence() != null && result.evidence().request() != null)
                     ? result.evidence().request().path() : "";
+            // Per-verb identity ("DELETE host/path"): every result type shares one module/type/
+            // path, so without it "PUT accepted" and "DELETE accepted" from the same scan
+            // collapsed into a single registry record showing only the last verb.
+            String scope = result.evidence() != null ? Finding.endpointScope(result.evidence().request()) : method;
 
             if (result.accepted()) {
                 findings.add(Finding.builder(name(), "ACCEPTED_METHOD")
@@ -186,6 +195,7 @@ public class HttpVerbModule implements IcarusModule {
                         .category(Category.HTTP_METHOD)
                         .path(path)
                         .evidence(result.evidence())
+                        .meta(Finding.META_SCOPE, scope)
                         .meta("method", method)
                         .meta("status", String.valueOf(status))
                         .build());
@@ -198,6 +208,7 @@ public class HttpVerbModule implements IcarusModule {
                                 .category(Category.HTTP_METHOD)
                                 .path(path)
                                 .evidence(result.evidence())
+                        .meta(Finding.META_SCOPE, scope)
                                 .meta("method", method)
                                 .build());
                     }
@@ -211,6 +222,7 @@ public class HttpVerbModule implements IcarusModule {
                         .category(Category.HTTP_METHOD)
                         .path(path)
                         .evidence(result.evidence())
+                        .meta(Finding.META_SCOPE, scope)
                         .build());
             }
 
@@ -224,6 +236,7 @@ public class HttpVerbModule implements IcarusModule {
                             .category(Category.HTTP_METHOD)
                             .path(path)
                             .evidence(result.evidence())
+                        .meta(Finding.META_SCOPE, scope)
                             .meta("method", method)
                             .build());
                 }
@@ -236,6 +249,7 @@ public class HttpVerbModule implements IcarusModule {
                         .category(Category.HTTP_METHOD)
                         .path(path)
                         .evidence(result.evidence())
+                        .meta(Finding.META_SCOPE, scope)
                         .meta("method", method)
                         .build());
             }
@@ -247,6 +261,7 @@ public class HttpVerbModule implements IcarusModule {
                         .category(Category.HTTP_METHOD)
                         .path(path)
                         .evidence(result.evidence())
+                        .meta(Finding.META_SCOPE, scope)
                         .meta("method", method)
                         .build());
             }

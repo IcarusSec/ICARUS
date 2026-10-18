@@ -40,6 +40,35 @@ public class EvidenceImageRenderer {
     private static final Color FIXED_COLOR = new Color(0x2f, 0x9e, 0x44);
     private static final Color NOT_FIXED_COLOR = new Color(0xe0, 0x3e, 0x3e);
 
+    /** Right-hand margin kept clear when fitting header text into the evidence banner. */
+    private static final int HEADER_RIGHT_MARGIN = 24;
+
+    /**
+     * Makes {@code text} fit on one banner line of {@code maxWidth} pixels in {@code g}'s current
+     * font: newlines/tabs collapse to spaces (drawString doesn't break lines — finding
+     * descriptions are often multi-paragraph and rendered as garbage or ran off the image) and
+     * anything wider is cut with an ellipsis. The full text still lives in the report body.
+     */
+    public static String fitHeaderText(Graphics2D g, String text, int maxWidth) {
+        if (text == null) return "";
+        String flat = text.replaceAll("\\s+", " ").trim();
+        FontMetrics fm = g.getFontMetrics();
+        if (maxWidth <= 0) return "";
+        if (fm.stringWidth(flat) <= maxWidth) return flat;
+        String ellipsis = "…";
+        int lo = 0, hi = flat.length();
+        while (lo < hi) { // longest prefix that still fits alongside the ellipsis
+            int mid = (lo + hi + 1) >>> 1;
+            if (fm.stringWidth(flat.substring(0, mid)) + fm.stringWidth(ellipsis) <= maxWidth) lo = mid; else hi = mid - 1;
+        }
+        return flat.substring(0, lo).stripTrailing() + ellipsis;
+    }
+
+    /** Space left on a banner line that starts at {@code x} in an image {@code imgWidth} wide. */
+    public static int headerRoom(int imgWidth, int x) {
+        return imgWidth - x - HEADER_RIGHT_MARGIN;
+    }
+
     /** FIXED/NOT_FIXED (Retest checkbox outcomes) get their own color in the evidence header's
      *  severity token; every other severity uses the color scheme's dim/muted text color. */
     public static Color severityTokenColor(String severity, EvidenceColorScheme cs) {
@@ -89,7 +118,7 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
         int titleX = capture.imageRenderer.drawHeaderLogo(g, 70);
         g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-        g.drawString("ICARUS  ·  " + title + capture.imageRenderer.projectNameSuffix(), titleX, 30);
+        g.drawString(fitHeaderText(g, "ICARUS  ·  " + title + capture.imageRenderer.projectNameSuffix(), headerRoom(imgWidth, titleX)), titleX, 30);
 
         g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
         g.setColor(severityTokenColor(severity, cs));
@@ -97,7 +126,7 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
         int severityWidth = g.getFontMetrics().stringWidth(severity);
 
         g.setColor(cs.dim());
-        g.drawString("  ·  " + desc, titleX + severityWidth, 55);
+        g.drawString(fitHeaderText(g, "  ·  " + desc, headerRoom(imgWidth, titleX + severityWidth)), titleX + severityWidth, 55);
 
         // Card-based UI metrics
         int padding = 20;
@@ -179,8 +208,8 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
         int titleX = drawHeaderLogo(g, 70);
         g.setColor(cs.titleText());
         g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 18));
-        g.drawString("ICARUS  ·  " + (title == null || title.isBlank() ? "External Tool Output" : title)
-                + projectNameSuffix(), titleX, 42);
+        g.drawString(fitHeaderText(g, "ICARUS  ·  " + (title == null || title.isBlank() ? "External Tool Output" : title)
+                + projectNameSuffix(), headerRoom(imgWidth, titleX)), titleX, 42);
 
         int cardWidth = imgWidth - padding * 2;
         int cardHeight = imgHeight - cardY - padding;

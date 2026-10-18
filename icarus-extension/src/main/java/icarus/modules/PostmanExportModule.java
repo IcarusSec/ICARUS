@@ -36,6 +36,11 @@ public class PostmanExportModule implements IcarusModule {
     }
 
     @Override
+    public String enabledConfigKey() {
+        return "export.enabled";
+    }
+
+    @Override
     public boolean includeInBulkScan() {
         // Exporting a request isn't a security test — it always "finds" something,
         // which would clutter results if it fired on every "Run All Modules".

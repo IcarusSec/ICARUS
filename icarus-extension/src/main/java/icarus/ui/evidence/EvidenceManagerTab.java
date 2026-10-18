@@ -699,12 +699,18 @@ public class EvidenceManagerTab {
                 JOptionPane.showMessageDialog(mainPanel, I18n.t("ui.evidence.dialog.move.no_finding"));
                 return;
             }
-            String[] labels = targets.stream().map(h -> findingLabel(h, groups)).toArray(String[]::new);
-            String choice = (String) JOptionPane.showInputDialog(mainPanel, I18n.t("ui.evidence.dialog.move.msg"),
-                    I18n.t("ui.evidence.dialog.move.title"), JOptionPane.PLAIN_MESSAGE, null, labels, labels[0]);
+            // Each option carries its own hash: two findings can share a display label (same
+            // severity/type/count on different endpoints), so matching the picked label string
+            // back to a hash with indexOf silently moved evidence onto the wrong finding.
+            record MoveTarget(String hash, String label) {
+                @Override public String toString() { return label; }
+            }
+            MoveTarget[] options = targets.stream()
+                    .map(h -> new MoveTarget(h, findingLabel(h, groups))).toArray(MoveTarget[]::new);
+            MoveTarget choice = (MoveTarget) JOptionPane.showInputDialog(mainPanel, I18n.t("ui.evidence.dialog.move.msg"),
+                    I18n.t("ui.evidence.dialog.move.title"), JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
             if (choice == null) return;
-            String targetHash = targets.get(java.util.List.of(labels).indexOf(choice));
-            Finding targetFinding = orchestrator.getFindingByHash(targetHash);
+            Finding targetFinding = orchestrator.getFindingByHash(choice.hash());
             if (targetFinding == null) return; 
             orchestrator.getEvidenceCapture().moveToFinding(ceRef[0], targetFinding);
             onChange.run();
@@ -924,8 +930,18 @@ public class EvidenceManagerTab {
             List<String> newCweIds = java.util.Arrays.stream(txtCwe.getText().split(","))
                     .map(String::strip).filter(s -> !s.isEmpty()).toList();
 
+            // Carry every other field over. This used to build the finding from module, title,
+            // severity and CWEs alone, so any edit here wiped the description, path,
+            // request/response evidence, category and metadata, and registered the stripped
+            // copy as a second finding next to the original.
             Finding.Builder builder = Finding.builder(current.module(), newTitle)
-                    .severity(newSeverity);
+                    .description(current.description())
+                    .severity(newSeverity)
+                    .category(current.category())
+                    .path(current.path())
+                    .evidence(current.evidence());
+            current.metadata().forEach(builder::meta);
+            builder.keepIdentityOf(current);
             newCweIds.forEach(builder::cwe);
             Finding updated = builder.build();
 

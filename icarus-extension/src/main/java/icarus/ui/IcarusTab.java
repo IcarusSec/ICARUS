@@ -43,6 +43,12 @@ public class IcarusTab {
     private final DefaultTableModel tableModel;
     private JTable resultsTable;
     private final DefaultListModel<String> auditModel;
+    private CardLayout resultsCards;
+    private JPanel resultsStack;
+    private CardLayout editorCards;
+    private JPanel editorStack;
+    private CardLayout auditCards;
+    private JPanel auditStack;
 
     public IcarusTab(MontoyaApi api, ModuleConfig config, List<IcarusModule> modules,
                      Orchestrator orchestrator, IcarusMcpServer mcpServer) {
@@ -110,11 +116,18 @@ public class IcarusTab {
             for (String log : orchestrator.getAuditLog()) {
                 auditModel.addElement(log);
             }
+            showCard(resultsCards, resultsStack, tableModel.getRowCount() > 0);
+            showCard(auditCards, auditStack, !auditModel.isEmpty());
         });
     }
 
     public Component getComponent() {
         return mainPanel;
+    }
+
+    private static void showCard(CardLayout cards, JPanel stack, boolean hasData) {
+        if (cards == null || stack == null) return;
+        cards.show(stack, hasData ? "data" : "empty");
     }
 
     private void buildUI() {
@@ -161,6 +174,7 @@ public class IcarusTab {
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 int[] viewRows = table.getSelectedRows();
+                showCard(editorCards, editorStack, viewRows.length > 0);
                 if (viewRows.length > 0) {
                     int modelRow = table.convertRowIndexToModel(viewRows[0]);
                     String hash = (String) tableModel.getValueAt(modelRow, 0);
@@ -183,12 +197,24 @@ public class IcarusTab {
             }
         });
 
+        editorCards = new CardLayout();
+        editorStack = new JPanel(editorCards);
+        editorStack.add(reqResSplit, "data");
+        editorStack.add(new EmptyState(I18n.t("ui.tab.results.empty.editors")), "empty");
+        editorCards.show(editorStack, "empty");
+
         JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         verticalSplit.setTopComponent(tableScroll);
-        verticalSplit.setBottomComponent(reqResSplit);
+        verticalSplit.setBottomComponent(editorStack);
         verticalSplit.setResizeWeight(0.4);
         verticalSplit.setBorder(null);
-        resultsPanel.add(verticalSplit, BorderLayout.CENTER);
+
+        resultsCards = new CardLayout();
+        resultsStack = new JPanel(resultsCards);
+        resultsStack.add(verticalSplit, "data");
+        resultsStack.add(new EmptyState(I18n.t("ui.tab.results.empty")), "empty");
+        resultsPanel.add(resultsStack, BorderLayout.CENTER);
+        showCard(resultsCards, resultsStack, tableModel.getRowCount() > 0);
 
         // Context menu for results table
         JPopupMenu popup = new JPopupMenu();
@@ -452,7 +478,12 @@ public class IcarusTab {
         auditScroll.setBorder(BorderFactory.createEmptyBorder());
         themeHelper.applyTheme(auditScroll);
 
-        auditPanel.add(auditScroll, BorderLayout.CENTER);
+        auditCards = new CardLayout();
+        auditStack = new JPanel(auditCards);
+        auditStack.add(auditScroll, "data");
+        auditStack.add(new EmptyState(I18n.t("ui.tab.audit.empty")), "empty");
+        auditPanel.add(auditStack, BorderLayout.CENTER);
+        showCard(auditCards, auditStack, !auditModel.isEmpty());
 
         icarus.ui.evidence.EvidenceManagerTab evidenceManagerTab = new icarus.ui.evidence.EvidenceManagerTab(orchestrator, config, api);
         

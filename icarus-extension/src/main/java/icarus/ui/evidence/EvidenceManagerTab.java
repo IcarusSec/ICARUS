@@ -33,6 +33,7 @@ public class EvidenceManagerTab {
     private Runnable onReload;
     /** Rebuilds the open finding's detail. Inclusion changes use this; caption edits must not. */
     private Runnable refreshDetailView = () -> {};
+    private JPanel evidenceListStack;
     /** A findings-registry refresh arrived while a detail text field had focus. Applied on focus loss. */
     private boolean registryReloadDeferred;
     private Runnable flushRegistryReload = () -> {};
@@ -140,6 +141,7 @@ public class EvidenceManagerTab {
                     }
                 }
                 masterList.repaint();
+                showEvidenceList(hashOrder.isEmpty());
                 return;
             }
 
@@ -163,18 +165,17 @@ public class EvidenceManagerTab {
             } finally {
                 suppressSelectionRefresh[0] = false;
             }
+            showEvidenceList(hashOrder.isEmpty());
         });
 
         Runnable refreshDetail = () -> icarus.core.DebugLog.timed("EvidenceManagerTab.refreshDetail", () -> {
             detailPanel.removeAll();
             String hash = masterList.getSelectedValue();
             if (hash == null) {
-                JLabel empty = new JLabel(I18n.t("ui.evidence.lbl.select_finding"));
-                empty.setHorizontalAlignment(SwingConstants.CENTER);
-                empty.setFont(UiMetrics.font(UiMetrics.Role.TITLE).deriveFont(Font.ITALIC));
-                empty.setForeground(new Color(150, 150, 150));
-                empty.setBorder(UiMetrics.pad(UiMetrics.XL, UiMetrics.MD, UiMetrics.MD, UiMetrics.MD));
-                detailPanel.add(empty);
+                String message = hashOrder.isEmpty()
+                        ? I18n.t("ui.evidence.empty.captured")
+                        : I18n.t("ui.evidence.empty.select");
+                detailPanel.add(new icarus.ui.EmptyState(message));
             } else {
                 List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
                 detailPanel.add(buildFindingHeader(hash, group, groups, refreshAllRef));
@@ -362,7 +363,11 @@ public class EvidenceManagerTab {
         JPanel masterListWrapper = new JPanel(new BorderLayout());
         masterListWrapper.putClientProperty("FlatLaf.style", "arc: 8;");
         masterListWrapper.setBorder(BorderFactory.createLineBorder(new Color(130, 130, 130, 60), 1, true));
-        masterListWrapper.add(masterScroll, BorderLayout.CENTER);
+        evidenceListStack = new JPanel(new CardLayout());
+        evidenceListStack.add(masterScroll, "list");
+        evidenceListStack.add(new icarus.ui.EmptyState(I18n.t("ui.evidence.empty.captured")), "empty");
+        masterListWrapper.add(evidenceListStack, BorderLayout.CENTER);
+        showEvidenceList(hashOrder.isEmpty());
         
         masterPanel.add(masterListWrapper, BorderLayout.CENTER);
 
@@ -822,6 +827,11 @@ public class EvidenceManagerTab {
         right.add(controls, BorderLayout.SOUTH);
         card.add(right, BorderLayout.CENTER);
         return card;
+    }
+
+    private void showEvidenceList(boolean empty) {
+        if (evidenceListStack == null) return;
+        ((CardLayout) evidenceListStack.getLayout()).show(evidenceListStack, empty ? "empty" : "list");
     }
 
     public void reload() {

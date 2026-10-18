@@ -22,6 +22,8 @@ public class KnowledgeBaseTab {
     private final DefaultTableModel tableModel;
     private final JTable table;
     private final ThemeHelper themeHelper;
+    private CardLayout kbCards;
+    private JPanel kbStack;
 
     public KnowledgeBaseTab(MontoyaApi api, Orchestrator orchestrator) {
         this.api = api;
@@ -57,7 +59,11 @@ public class KnowledgeBaseTab {
         scrollPane.setBorder(UiMetrics.page());
         themeHelper.applyTheme(scrollPane);
 
-        mainPanel.add(scrollPane, BorderLayout.CENTER);
+        kbCards = new CardLayout();
+        kbStack = new JPanel(kbCards);
+        kbStack.add(scrollPane, "data");
+        kbStack.add(new EmptyState(I18n.t("ui.kb.empty")), "empty");
+        mainPanel.add(kbStack, BorderLayout.CENTER);
 
         // Bottom Actions Panel
         JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
@@ -280,6 +286,7 @@ public class KnowledgeBaseTab {
                         entry.cwe()
                 });
             }
+            if (kbCards != null) kbCards.show(kbStack, tableModel.getRowCount() == 0 ? "empty" : "data");
         });
     }
 

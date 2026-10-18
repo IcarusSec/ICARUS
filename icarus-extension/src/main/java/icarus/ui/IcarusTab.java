@@ -415,52 +415,12 @@ public class IcarusTab {
             }
         });
 
-        JButton btnPreviewReport = new JButton(I18n.t("ui.tab.results.btn.preview"));
-        themeHelper.styleButton(btnPreviewReport);
-        btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
-
-        JButton btnGenerateReport = new JButton(I18n.t("ui.tab.results.btn.generate_html"));
-        btnGenerateReport.setBackground(new Color(255, 102, 51)); // Primary accent (ICARUS orange)
-        btnGenerateReport.setForeground(Color.WHITE);
-        btnGenerateReport.setFocusPainted(false);
-        // We keep themeHelper from overriding background by styling it partially.
-        // Wait, themeHelper.styleButton overrides background and foreground.
-        // We do it after themeHelper.styleButton.
-        themeHelper.styleButton(btnGenerateReport);
-        btnGenerateReport.setBackground(new Color(255, 102, 51));
-        btnGenerateReport.setForeground(Color.WHITE);
-        
-        btnGenerateReport.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel,
-                        I18n.t("ui.tab.results.error.no_evidence"));
-                return;
-            }
-            orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);
-        });
-
-        JButton btnExportPdf = new JButton(I18n.t("ui.tab.results.btn.export_pdf"));
-        themeHelper.styleButton(btnExportPdf);
-        btnExportPdf.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel,
-                        I18n.t("ui.tab.results.error.no_evidence"));
-                return;
-            }
-            orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
-        });
-
         dataActions.add(btnImportProxy);
         dataActions.add(btnPassiveLogs);
         dataActions.add(btnClearBtn);
         dataActions.add(btnWipeAll);
 
         reportActions.add(btnEvidenceManager);
-        reportActions.add(btnPreviewReport);
-        reportActions.add(btnGenerateReport);
-        reportActions.add(btnExportPdf);
 
         bottomBar.add(dataActions, BorderLayout.WEST);
         bottomBar.add(reportActions, BorderLayout.EAST);
@@ -504,6 +464,31 @@ public class IcarusTab {
         });
 
         mainPanel.add(tabs, BorderLayout.CENTER);
+        mainPanel.add(reportActionBar(), BorderLayout.SOUTH);
+    }
+
+    /** Preview, Generate HTML, and Export PDF, once, for every tab. */
+    private ReportActionBar reportActionBar() {
+        return new ReportActionBar(
+                button -> orchestrator.previewReport(mainPanel, button),
+                button -> {
+                    List<Finding> reportFindings = orchestrator.getReportableFindings();
+                    if (reportFindings.isEmpty()) {
+                        JOptionPane.showMessageDialog(mainPanel,
+                                I18n.t("ui.tab.results.error.no_evidence"));
+                        return;
+                    }
+                    orchestrator.generateHtmlReportInteractive(mainPanel, button, reportFindings);
+                },
+                button -> {
+                    List<Finding> reportFindings = orchestrator.getReportableFindings();
+                    if (reportFindings.isEmpty()) {
+                        JOptionPane.showMessageDialog(mainPanel,
+                                I18n.t("ui.tab.results.error.no_evidence"));
+                        return;
+                    }
+                    orchestrator.exportPdfReportInteractive(mainPanel, button, reportFindings);
+                });
     }
 
     /**

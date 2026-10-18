@@ -510,18 +510,6 @@ public class EvidenceManagerTab {
         tabs.addTab(I18n.t("ui.evidence.tab.report_details"), buildReportSectionsQuickEditPanel(initialRtc));
         mainPanel.add(tabs, BorderLayout.CENTER);
 
-        JButton btnPreview = new JButton(I18n.t("ui.tab.results.btn.preview"));
-        btnPreview.putClientProperty("FlatLaf.style", "arc: 8;");
-        btnPreview.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreview));
-
-        JButton btnGenerate = new JButton(I18n.t("ui.tab.results.btn.generate_html"));
-        btnGenerate.putClientProperty("FlatLaf.style", "arc: 8;");
-        btnGenerate.addActionListener(e -> orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerate, orchestrator.getReportableFindings()));
-
-        JButton btnExportPdf = new JButton(I18n.t("ui.tab.results.btn.export_pdf"));
-        btnExportPdf.putClientProperty("FlatLaf.style", "arc: 8;");
-        btnExportPdf.addActionListener(e -> orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, orchestrator.getReportableFindings()));
-
         JButton btnImportProject = new JButton(I18n.t("ui.evidence.btn.import_project"));
         btnImportProject.putClientProperty("FlatLaf.style", "arc: 8;");
         btnImportProject.addActionListener(e -> orchestrator.importProjectStateInteractive(mainPanel, btnImportProject, () -> refreshAllRef[0].run()));
@@ -539,10 +527,6 @@ public class EvidenceManagerTab {
         leftBtns.add(btnImportProject);
 
         JPanel rightBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-        rightBtns.add(btnPreview);
-        rightBtns.add(btnGenerate);
-        rightBtns.add(btnExportPdf);
-        rightBtns.add(Box.createRigidArea(new Dimension(16, 0)));
         rightBtns.add(btnClose);
 
         btnPanel.add(leftBtns, BorderLayout.WEST);

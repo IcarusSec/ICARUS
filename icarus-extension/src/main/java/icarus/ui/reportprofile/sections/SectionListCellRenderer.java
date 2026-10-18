@@ -80,7 +80,10 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
         String text = currentRow.params().get("title");
         if (text == null || text.isBlank()) text = SectionLabelFormatter.format(currentRow.id());
         int textX = TOGGLE_X1 + 10;
-        g2.drawString(text, textX, toggleY + toggleH - 2);
+        int reserved = currentRow.required() ? 28 : 8;
+        String shown = icarus.ui.TextFit.fit(this, text, textX + reserved);
+        g2.drawString(shown, textX, toggleY + toggleH - 2);
+        setToolTipText(text);
         
         // Required lock
         if (currentRow.required()) {

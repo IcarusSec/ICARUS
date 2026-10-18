@@ -44,6 +44,7 @@ public class KnowledgeBaseTab {
 
         table = new JTable(tableModel);
         themeHelper.styleTable(table);
+        TextFit.install(table);
         
         // Set proportional column widths
         table.getColumnModel().getColumn(0).setPreferredWidth(150); // Name

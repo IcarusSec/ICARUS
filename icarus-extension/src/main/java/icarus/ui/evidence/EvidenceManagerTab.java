@@ -85,7 +85,7 @@ public class EvidenceManagerTab {
             countLabel.setForeground(isSelected ? panel.getForeground() : new Color(130, 130, 130));
             countLabel.setFont(UiMetrics.font(UiMetrics.Role.CAPTION));
 
-            JLabel titleLabel = new JLabel(display.type());
+            icarus.ui.TextFit.Label titleLabel = new icarus.ui.TextFit.Label(display.type());
             titleLabel.setForeground(panel.getForeground());
             titleLabel.setFont(UiMetrics.font(UiMetrics.Role.EMPHASIS));
             // The row is a fixed height and the list assigns the width. Don't let an

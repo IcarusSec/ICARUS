@@ -149,6 +149,7 @@ public class IcarusTab {
         JTable table = new JTable(tableModel);
         this.resultsTable = table;
         themeHelper.styleTable(table);
+        TextFit.install(table);
 
         // Hide the Hash column
         table.removeColumn(table.getColumnModel().getColumn(0));
@@ -471,6 +472,7 @@ public class IcarusTab {
 
         JList<String> auditList = new JList<>(auditModel);
         auditList.setFont(UiMetrics.mono());
+        TextFit.install(auditList);
         auditList.setBackground(themeHelper.getBackgroundColor());
         auditList.setForeground(themeHelper.getForegroundColor());
 
@@ -530,6 +532,7 @@ public class IcarusTab {
 
         JTable table = new JTable(model);
         themeHelper.styleTable(table);
+        TextFit.install(table);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
         TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);

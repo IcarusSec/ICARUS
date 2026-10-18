@@ -134,6 +134,7 @@ public void showPhase1(Finding finding) {
         JList<KnowledgeBaseEntry> suggestNameList = new JList<>(suggestNameModel);
         suggestNameList.setCellRenderer((list, value, index, isSelected, cellHasFocus) ->
                 new JLabel(" " + value.name()) {{ setOpaque(true); setBackground(isSelected ? new Color(80, 80, 80) : EvidenceCapture.BG_COLOR); setForeground(EvidenceCapture.TEXT_COLOR); }});
+        icarus.ui.TextFit.install(suggestNameList);
         suggestNameWindow.add(new JScrollPane(suggestNameList));
         suggestNameWindow.setSize(360, 160);
 
@@ -200,6 +201,7 @@ public void showPhase1(Finding finding) {
         JList<CweRepository.Cwe> suggestList = new JList<>(suggestModel);
         suggestList.setCellRenderer((list, value, index, isSelected, cellHasFocus) ->
                 new JLabel(" " + value.label()) {{ setOpaque(true); setBackground(isSelected ? new Color(80, 80, 80) : EvidenceCapture.BG_COLOR); setForeground(EvidenceCapture.TEXT_COLOR); }});
+        icarus.ui.TextFit.install(suggestList);
         suggestWindow.add(new JScrollPane(suggestList));
         suggestWindow.setSize(360, 160);
 

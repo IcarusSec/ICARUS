@@ -1,5 +1,7 @@
 package icarus.ui.reportprofile.layout;
 
+import icarus.ui.UiMetrics;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
@@ -71,7 +73,7 @@ public final class ResponsiveContainer extends JPanel implements Scrollable {
             gridx = 0; gridy = sections.size() - 1;
             weightx = 1; fill = GridBagConstraints.HORIZONTAL;
             anchor = GridBagConstraints.NORTH;
-            insets = new Insets(0, 0, 20, 0);
+            insets = UiMetrics.gap(0, 0, UiMetrics.XL, 0);
         }});
         
         // Re-add glue at the bottom

@@ -100,7 +100,7 @@ public class ThemeHelper {
         button.setBackground(COLOR_PRIMARY_ACCENT);
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
-        button.setFont(button.getFont().deriveFont(Font.BOLD));
+        button.setFont(UiMetrics.font(UiMetrics.Role.EMPHASIS));
         return button;
     }
     
@@ -110,7 +110,7 @@ public class ThemeHelper {
     public JPanel createCardPanel() {
         JPanel panel = new JPanel();
         ui.applyThemeToComponent(panel);
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        panel.setBorder(UiMetrics.pad(UiMetrics.MD));
         return panel;
     }
 
@@ -120,7 +120,7 @@ public class ThemeHelper {
     public JLabel createHeaderLabel(String text) {
         JLabel label = new JLabel(text);
         label.setForeground(isDarkTheme() ? COLOR_NEUTRAL_SLATE_DARK : COLOR_PRIMARY_ACCENT);
-        label.setFont(label.getFont().deriveFont(Font.BOLD, 14f));
+        label.setFont(UiMetrics.font(UiMetrics.Role.TITLE));
         return label;
     }
     
@@ -137,7 +137,7 @@ public class ThemeHelper {
      */
     public Border createSectionBorder(String title) {
         Border line = new LineBorder(getBorderColor(), 1, true);
-        Border margin = new EmptyBorder(10, 10, 10, 10);
+        Border margin = UiMetrics.pad(UiMetrics.MD);
         Border titled = BorderFactory.createTitledBorder(line, title, 
                 javax.swing.border.TitledBorder.LEFT, 
                 javax.swing.border.TitledBorder.TOP,
@@ -151,7 +151,7 @@ public class ThemeHelper {
      */
     public void styleTextArea(JTextArea textArea) {
         ui.applyThemeToComponent(textArea);
-        textArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
+        textArea.setBorder(UiMetrics.pad(UiMetrics.SM));
     }
     
     /**

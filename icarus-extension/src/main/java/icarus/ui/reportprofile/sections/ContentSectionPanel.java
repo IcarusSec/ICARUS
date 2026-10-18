@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.components.ToggleSwitch;
 import icarus.ui.reportprofile.layout.Breakpoint;
 import icarus.ui.reportprofile.layout.ResponsiveSection;
@@ -40,7 +41,7 @@ public class ContentSectionPanel implements ResponsiveSection {
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL;
         g.anchor = GridBagConstraints.WEST;
-        g.weightx = 0; g.insets = new Insets(0, 0, 8, 24);
+        g.weightx = 0; g.insets = UiMetrics.gap(0, 0, UiMetrics.SM, UiMetrics.XL);
 
         g.gridx = 0;
         g.gridy = 0; pnlToggles.add(createTogglePanel("Attach evidence screenshots to findings", chkIncludeEvidence), g);
@@ -48,7 +49,7 @@ public class ContentSectionPanel implements ResponsiveSection {
         g.gridy = 2; pnlToggles.add(createTogglePanel("Include HTTP Request", chkIncludeReq), g);
         g.gridy = 3; pnlToggles.add(createTogglePanel("Include HTTP Response", chkIncludeRes), g);
 
-        g.insets = new Insets(0, 0, 8, 0);
+        g.insets = UiMetrics.gap(0, 0, UiMetrics.SM, 0);
         g.gridx = 1; g.gridy = 2; pnlToggles.add(createSpinnerPanel("Request max bytes", spinMaxReqBytes), g);
         g.gridy = 3; pnlToggles.add(createSpinnerPanel("Response max bytes", spinMaxResBytes), g);
 
@@ -83,7 +84,7 @@ public class ContentSectionPanel implements ResponsiveSection {
         GridBagConstraints g = new GridBagConstraints();
         g.fill = GridBagConstraints.HORIZONTAL;
         g.weightx = 1.0;
-        g.insets = new Insets(0, 0, 8, 8);
+        g.insets = UiMetrics.gap(0, 0, UiMetrics.SM, UiMetrics.SM);
 
         int cols = (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW) ? 1 : 2;
         int i = 0;
@@ -100,11 +101,11 @@ public class ContentSectionPanel implements ResponsiveSection {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
-        gbc.insets = new Insets(0, 0, 16, 16);
+        gbc.insets = UiMetrics.gap(0, 0, UiMetrics.LG, UiMetrics.LG);
 
         JPanel fieldsWrapper = new JPanel(new BorderLayout());
         JLabel fieldsLabel = new JLabel("Finding fields to include");
-        fieldsLabel.setFont(fieldsLabel.getFont().deriveFont(java.awt.Font.BOLD));
+        fieldsLabel.setFont(UiMetrics.font(UiMetrics.Role.EMPHASIS));
         fieldsWrapper.add(fieldsLabel, BorderLayout.NORTH);
         fieldsWrapper.add(pnlFields, BorderLayout.CENTER);
 

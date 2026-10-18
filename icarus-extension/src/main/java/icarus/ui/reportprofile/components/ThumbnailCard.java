@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.components;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.theme.FontLoader;
 import icarus.ui.reportprofile.theme.ThemeColors;
 
@@ -28,8 +29,8 @@ public final class ThumbnailCard extends JPanel {
         add(preview, BorderLayout.CENTER);
         
         JLabel title = new JLabel(label, SwingConstants.CENTER);
-        title.setFont(FontLoader.sans(Font.PLAIN, 12f));
-        title.setBorder(BorderFactory.createEmptyBorder(4, 0, 8, 0));
+        title.setFont(FontLoader.sans(Font.PLAIN, UiMetrics.font(UiMetrics.Role.BODY).getSize2D()));
+        title.setBorder(UiMetrics.pad(UiMetrics.XS, 0, UiMetrics.SM, 0));
         add(title, BorderLayout.SOUTH);
         
         addMouseListener(new MouseAdapter() {

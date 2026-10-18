@@ -444,7 +444,7 @@ public class IcarusTab {
         themeHelper.applyTheme(auditPanel);
 
         JList<String> auditList = new JList<>(auditModel);
-        auditList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        auditList.setFont(UiMetrics.mono());
         auditList.setBackground(themeHelper.getBackgroundColor());
         auditList.setForeground(themeHelper.getForegroundColor());
 
@@ -523,7 +523,7 @@ public class IcarusTab {
         dialog.setLayout(new BorderLayout());
 
         JPanel topBar = new JPanel(new BorderLayout(8, 0));
-        topBar.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        topBar.setBorder(UiMetrics.pad(UiMetrics.SM));
         topBar.add(new JLabel(I18n.t("ui.import.filter")), BorderLayout.WEST);
         topBar.add(filterField, BorderLayout.CENTER);
         themeHelper.applyTheme(topBar);

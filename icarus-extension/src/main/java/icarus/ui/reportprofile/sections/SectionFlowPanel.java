@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.layout.Breakpoint;
 import icarus.ui.reportprofile.layout.ResponsiveSection;
 
@@ -26,7 +27,7 @@ public class SectionFlowPanel implements ResponsiveSection {
         component.removeAll();
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.BOTH;
-        gbc.insets = new Insets(0, 0, 16, 16);
+        gbc.insets = UiMetrics.gap(0, 0, UiMetrics.LG, UiMetrics.LG);
 
         if (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW) {
             // Stacked

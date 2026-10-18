@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.components.ThumbnailCard;
 import icarus.ui.reportprofile.components.WireframeKind;
 import icarus.ui.reportprofile.layout.Breakpoint;
@@ -82,7 +83,7 @@ public class LayoutSectionPanel implements ResponsiveSection {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.weightx = 1.0;
         gbc.weighty = 1.0;
-        gbc.insets = new Insets(0, 0, 16, 16);
+        gbc.insets = UiMetrics.gap(0, 0, UiMetrics.LG, UiMetrics.LG);
         
         if (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW) {
             gbc.gridx = 0;

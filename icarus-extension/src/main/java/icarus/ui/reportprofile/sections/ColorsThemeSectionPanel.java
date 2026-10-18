@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.layout.Breakpoint;
 import icarus.ui.reportprofile.layout.ResponsiveSection;
 import icarus.ui.reportprofile.layout.WrapLayout;
@@ -47,7 +48,7 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
         bg.anchor = GridBagConstraints.WEST;
         bg.gridy = 0; badgesPanel.add(new JLabel("Severity Badge Colors"), bg);
         bg.gridy = 1; badgesPanel.add(badgesRow, bg);
-        bg.gridy = 2; bg.insets = new Insets(12, 0, 0, 0);
+        bg.gridy = 2; bg.insets = UiMetrics.gap(UiMetrics.MD, 0, 0, 0);
         badgesPanel.add(new JLabel("Retest Status Colors"), bg);
         bg.gridy = 3; bg.insets = new Insets(0, 0, 0, 0);
         badgesPanel.add(retestRow, bg);
@@ -82,7 +83,7 @@ public class ColorsThemeSectionPanel implements ResponsiveSection {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
-        gbc.insets = new Insets(0, 0, 16, 16);
+        gbc.insets = UiMetrics.gap(0, 0, UiMetrics.LG, UiMetrics.LG);
         
         if (bp == Breakpoint.COMPACT) {
             gbc.gridy = 0; gbc.gridx = 0; component.add(accentPanel, gbc);

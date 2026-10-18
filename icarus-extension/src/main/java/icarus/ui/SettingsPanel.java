@@ -71,7 +71,7 @@ public class SettingsPanel {
         // 1. General & Integrations
         JPanel pnlGeneralTab = new JPanel();
         pnlGeneralTab.setLayout(new BoxLayout(pnlGeneralTab, BoxLayout.Y_AXIS));
-        pnlGeneralTab.setBorder(new EmptyBorder(16, 16, 16, 16));
+        pnlGeneralTab.setBorder(UiMetrics.page());
         pnlGeneralTab.setBackground(themeHelper.getBackgroundColor());
         
         CardPanel cardGlobal = new CardPanel(I18n.t("settings.section.general_and_modules"), "shield");
@@ -81,7 +81,7 @@ public class SettingsPanel {
         pnlGlobalGrid.setOpaque(false);
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
+        gbc.weightx = 0; gbc.insets = UiMetrics.gap(0, 0, UiMetrics.SM, UiMetrics.LG);
         
         gbc.gridx = 0; gbc.gridy = 0; addCheckboxToGrid(pnlGlobalGrid, gbc, "ui.show_popups", I18n.t("settings.checkbox.show_popups"), false);
         gbc.gridx = 1; addCheckboxToGrid(pnlGlobalGrid, gbc, "verbose.enabled", I18n.t("settings.checkbox.verbose_mode"), true);
@@ -125,7 +125,7 @@ public class SettingsPanel {
 
         CardPanel cardMcp = new CardPanel(I18n.t("settings.section.mcp"), "cpu");
         JLabel mcpStatusBadge = new JLabel(mcpServer.isRunning() ? I18n.t("settings.mcp.status.active", "● ACTIVE") : I18n.t("settings.mcp.status.stopped", "● STOPPED"));
-        mcpStatusBadge.setFont(mcpStatusBadge.getFont().deriveFont(Font.BOLD));
+        mcpStatusBadge.setFont(UiMetrics.font(UiMetrics.Role.EMPHASIS));
         mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
         
         JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
@@ -220,15 +220,15 @@ public class SettingsPanel {
         pnlReset.add(btnReset);
 
         pnlGeneralTab.add(cardGlobal);
-        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlGeneralTab.add(cardWaf);
-        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlGeneralTab.add(cardAuto);
-        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlGeneralTab.add(cardMcp);
-        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlGeneralTab.add(cardEvidence);
-        pnlGeneralTab.add(Box.createVerticalStrut(16));
+        pnlGeneralTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlGeneralTab.add(pnlReset);
         pnlGeneralTab.add(Box.createVerticalGlue());
         settingsTabs.addTab(I18n.t("settings.subtab.general", "General & Integrations"), wrapInScroll(pnlGeneralTab));
@@ -236,7 +236,7 @@ public class SettingsPanel {
         // 2. Active Scanners
         JPanel pnlActiveTab = new JPanel();
         pnlActiveTab.setLayout(new BoxLayout(pnlActiveTab, BoxLayout.Y_AXIS));
-        pnlActiveTab.setBorder(new EmptyBorder(16, 16, 16, 16));
+        pnlActiveTab.setBorder(UiMetrics.page());
         pnlActiveTab.setBackground(themeHelper.getBackgroundColor());
 
         CardPanel cardPv = new CardPanel(I18n.t("settings.section.paramvalidator"), "adjustments-horizontal");
@@ -254,7 +254,7 @@ public class SettingsPanel {
         pnlPvCats.setOpaque(false);
         gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
+        gbc.weightx = 0; gbc.insets = UiMetrics.gap(0, 0, UiMetrics.SM, UiMetrics.LG);
         gbc.gridx = 0; gbc.gridy = 0; addCheckboxToGrid(pnlPvCats, gbc, "pv.structural", I18n.t("settings.checkbox.pv.structural"), true);
         gbc.gridx = 1; addCheckboxToGrid(pnlPvCats, gbc, "pv.boundary", I18n.t("settings.checkbox.pv.boundary"), true);
         gbc.gridx = 0; gbc.gridy = 1; addCheckboxToGrid(pnlPvCats, gbc, "pv.type_confusion", I18n.t("settings.checkbox.pv.type_confusion"), true);
@@ -287,7 +287,7 @@ public class SettingsPanel {
         List<JCheckBox> techBoxes = new ArrayList<>();
         gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.weightx = 0; gbc.insets = new Insets(0, 0, 8, 16);
+        gbc.weightx = 0; gbc.insets = UiMetrics.gap(0, 0, UiMetrics.SM, UiMetrics.LG);
         for (int i = 0; i < techs.length; i++) {
             gbc.gridx = i % 2; gbc.gridy = i / 2;
             techBoxes.add(addCheckboxToGrid(pnlPvTech, gbc, techs[i][0], I18n.t(techs[i][1]), true));
@@ -347,9 +347,9 @@ public class SettingsPanel {
         addCheckboxToForm(cardRl, "rl.bypass_query", I18n.t("settings.checkbox.rl.bypass_query"), true);
 
         pnlActiveTab.add(cardPv);
-        pnlActiveTab.add(Box.createVerticalStrut(16));
+        pnlActiveTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlActiveTab.add(cardHv);
-        pnlActiveTab.add(Box.createVerticalStrut(16));
+        pnlActiveTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlActiveTab.add(cardRl);
         pnlActiveTab.add(Box.createVerticalGlue());
         settingsTabs.addTab(I18n.t("settings.subtab.active", "Active Scanners"), wrapInScroll(pnlActiveTab));
@@ -357,7 +357,7 @@ public class SettingsPanel {
         // 3. Passive Scanners & Checks
         JPanel pnlPassiveTab = new JPanel();
         pnlPassiveTab.setLayout(new BoxLayout(pnlPassiveTab, BoxLayout.Y_AXIS));
-        pnlPassiveTab.setBorder(new EmptyBorder(16, 16, 16, 16));
+        pnlPassiveTab.setBorder(UiMetrics.page());
         pnlPassiveTab.setBackground(themeHelper.getBackgroundColor());
 
         CardPanel cardJwt = new CardPanel(I18n.t("settings.section.jwt"), "lock");
@@ -371,7 +371,7 @@ public class SettingsPanel {
         addCheckboxToForm(cardSh, "sh.redact_pii_values", I18n.t("settings.checkbox.sh.redact_pii_values"), false);
 
         pnlPassiveTab.add(cardJwt);
-        pnlPassiveTab.add(Box.createVerticalStrut(16));
+        pnlPassiveTab.add(Box.createVerticalStrut(UiMetrics.LG));
         pnlPassiveTab.add(cardSh);
         pnlPassiveTab.add(Box.createVerticalGlue());
         settingsTabs.addTab(I18n.t("settings.subtab.passive", "Passive Scanners"), wrapInScroll(pnlPassiveTab));
@@ -391,20 +391,20 @@ public class SettingsPanel {
         // No <html> wrapper: Burp disables HTML rendering in Swing labels, so it shows as literal markup.
         JLabel l = new JLabel(text);
         l.setForeground(UIManager.getColor("Label.disabledForeground"));
-        l.setFont(l.getFont().deriveFont(l.getFont().getSize2D() - 1f));
+        l.setFont(UiMetrics.font(UiMetrics.Role.CAPTION));
         return l;
     }
 
     private JLabel subHeader(String text) {
         JLabel l = new JLabel(text);
-        l.setFont(l.getFont().deriveFont(Font.BOLD));
+        l.setFont(UiMetrics.font(UiMetrics.Role.EMPHASIS));
         return l;
     }
 
     private JComponent createTabbedTextField(String key) {
         JPanel p = new JPanel(new BorderLayout());
         p.setOpaque(false);
-        p.setBorder(new EmptyBorder(8, 8, 8, 8));
+        p.setBorder(UiMetrics.pad(UiMetrics.SM));
         JTextField tf = new JTextField(config.getString(key, ""));
         themeHelper.applyTheme(tf);
         saveHooks.add(() -> config.set(key, tf.getText()));
@@ -586,7 +586,7 @@ public class SettingsPanel {
     private class CardPanel extends JPanel {
         public CardPanel(String title, String iconName) {
             setLayout(new GridBagLayout());
-            setBorder(new EmptyBorder(12, 14, 12, 14));
+            setBorder(UiMetrics.pad(UiMetrics.MD, UiMetrics.LG));
             setBackground(themeHelper.getContainerBackgroundColor());
             putClientProperty("FlatLaf.style", "arc: 12; borderWidth: 1; borderColor: $Component.borderColor");
             
@@ -594,7 +594,7 @@ public class SettingsPanel {
             header.setOpaque(false);
             
             JLabel lblTitle = new JLabel(title);
-            lblTitle.setFont(lblTitle.getFont().deriveFont(Font.BOLD, 14f));
+            lblTitle.setFont(UiMetrics.font(UiMetrics.Role.TITLE));
             if (iconName != null && !iconName.isEmpty()) {
                 lblTitle.setIcon(EvidenceUiHelpers.createIcon(iconName));
                 lblTitle.setIconTextGap(8);
@@ -605,7 +605,7 @@ public class SettingsPanel {
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.gridx = 0; gbc.gridy = 0;
             gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.insets = new Insets(0, 0, 12, 0); // space below header
+            gbc.insets = UiMetrics.gap(0, 0, UiMetrics.MD, 0);
             add(header, gbc);
         }
 
@@ -618,7 +618,7 @@ public class SettingsPanel {
             GridBagConstraints gbc = new GridBagConstraints();
             gbc.gridx = 0; gbc.gridy = getComponentCount();
             gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.insets = new Insets(0, 0, 8, 0);
+            gbc.insets = UiMetrics.gap(0, 0, UiMetrics.SM, 0);
             gbc.anchor = GridBagConstraints.NORTHWEST;
             add(comp, gbc);
         }

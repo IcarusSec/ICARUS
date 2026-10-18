@@ -30,6 +30,9 @@ public class EvidenceManagerTab {
     private final ModuleConfig config;
     private final MontoyaApi api;
     private Runnable onReload;
+    /** A findings-registry refresh arrived while a detail text field had focus. Applied on focus loss. */
+    private boolean registryReloadDeferred;
+    private Runnable flushRegistryReload = () -> {};
 
     private static final DataFlavor EVIDENCE_DRAG_FLAVOR = new DataFlavor(EvidenceCapture.CapturedEvidence.class, "ICARUS Evidence Card");
     private static final DataFlavor FINDING_DRAG_FLAVOR = new DataFlavor(String.class, "ICARUS Finding Hash");
@@ -202,7 +205,28 @@ public class EvidenceManagerTab {
             reload.run();
             if (evidenceStructureChanged[0]) refreshDetail.run();
         });
-        this.orchestrator.addListener(records -> this.reload());
+        // Registry updates (passive scan, autosave restore, an explicit updateFinding) used to
+        // call reload(), which always rebuilds the detail panel. Doing that while the title
+        // field is focused removes it, and focusLost then commits whatever prefix was typed.
+        // Unchanged evidence shape only needs a list repaint; a real shape change waits until
+        // the user leaves the field.
+        flushRegistryReload = () -> {
+            if (!registryReloadDeferred) return;
+            // Focus moved from the title to the caption (or the other way). Keep deferring
+            // until the user actually leaves the text fields, so neither edit is wiped.
+            if (detailTextFocused(detailPanel)) return;
+            registryReloadDeferred = false;
+            reload.run();
+            if (evidenceStructureChanged[0]) refreshDetail.run();
+        };
+        this.orchestrator.addListener(records -> {
+            if (detailTextFocused(detailPanel)) {
+                registryReloadDeferred = true;
+                return;
+            }
+            reload.run();
+            if (evidenceStructureChanged[0]) refreshDetail.run();
+        });
 
         JToolBar masterToolbar = new JToolBar();
         masterToolbar.setFloatable(false);
@@ -582,6 +606,13 @@ public class EvidenceManagerTab {
         return row;
     }
 
+    /** True while the user is typing in the title, CWE, or caption field of the open detail. */
+    private static boolean detailTextFocused(Component detailPanel) {
+        Component focus = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        return focus instanceof javax.swing.text.JTextComponent
+                && SwingUtilities.isDescendingFrom(focus, detailPanel);
+    }
+
     /**
      * Identity of the evidence list for reload purposes: finding hash plus screenshot path,
      * in display order. Caption text is deliberately not part of it.
@@ -709,6 +740,11 @@ public class EvidenceManagerTab {
             private void save() {
                 ceRef[0] = orchestrator.getEvidenceCapture().setCaption(ceRef[0], txtCaption.getText());
                 group.set(indexInGroup, ceRef[0]);
+            }
+        });
+        txtCaption.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (!e.isTemporary()) flushRegistryReload.run();
             }
         });
         right.add(captionPanel, BorderLayout.CENTER);
@@ -1018,12 +1054,20 @@ public class EvidenceManagerTab {
         };
 
         txtTitle.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) { save.run(); }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (e.isTemporary()) return;
+                save.run();
+                flushRegistryReload.run();
+            }
         });
         txtTitle.addActionListener(e -> save.run());
         comboSeverity.addActionListener(e -> save.run());
         txtCwe.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) { save.run(); }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (e.isTemporary()) return;
+                save.run();
+                flushRegistryReload.run();
+            }
         });
         txtCwe.addActionListener(e -> save.run());
 

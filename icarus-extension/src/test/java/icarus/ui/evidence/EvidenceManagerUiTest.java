@@ -11,13 +11,18 @@ import icarus.evidence.EvidenceCapture;
 import icarus.evidence.ReportGenerator;
 
 import javax.imageio.ImageIO;
+import javax.swing.JFrame;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.DefaultKeyboardFocusManager;
 import java.awt.Graphics2D;
+import java.awt.KeyboardFocusManager;
+import java.awt.event.FocusEvent;
 import java.awt.image.BufferedImage;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
@@ -35,6 +40,7 @@ public final class EvidenceManagerUiTest {
     public static void main(String[] args) throws Exception {
         captionKeepsFocusAcrossKeystrokes();
         removingEvidenceStillRefreshesTheDetail();
+        titleSurvivesRegistryRefreshWhileTyping();
         System.out.println("EvidenceManagerUiTest: all checks passed.");
     }
 
@@ -74,6 +80,72 @@ public final class EvidenceManagerUiTest {
             check(find(fx.tab.getUiComponent(), JTextArea.class).isEmpty(),
                     "removing a screenshot should rebuild the detail panel");
         });
+    }
+
+    /**
+     * A findings-registry notification (the listener StateAutosaver rides alongside, and the
+     * same one that fires on every passive-scan update) used to rebuild the detail panel.
+     * Removing the focused title field committed whatever prefix had been typed — "Se" of
+     * "Search parameter reflected EDITED" — and dropped the rest.
+     */
+    private static void titleSurvivesRegistryRefreshWhileTyping() throws Exception {
+        Fixture fx = Fixture.create("Search parameter reflected", "cap");
+        JFrame frame = new JFrame("evidence title focus");
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                frame.setSize(1100, 720);
+                frame.add(fx.tab.getUiComponent());
+                frame.setVisible(true);
+                JTextField title = textFields(fx).get(0);
+                focus(title);
+                check(KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == title,
+                        "title field did not take keyboard focus");
+                title.selectAll();
+                title.replaceSelection("Se");
+                int id = System.identityHashCode(title);
+
+                fx.orchestrator.updateFinding(fx.evidence.getCaptured().get(0).finding());
+
+                JTextField still = textFields(fx).get(0);
+                check(System.identityHashCode(still) == id, "registry refresh replaced the title field");
+                check("Se".equals(still.getText()), "title field was reset to '" + still.getText() + "'");
+                check("Search parameter reflected".equals(fx.evidence.getCaptured().get(0).finding().type()),
+                        "partial title was committed early: " + fx.evidence.getCaptured().get(0).finding().type());
+
+                still.setCaretPosition(still.getText().length());
+                still.replaceSelection("arch parameter reflected EDITED");
+                check("Search parameter reflected EDITED".equals(still.getText()),
+                        "could not finish typing, field is '" + still.getText() + "'");
+
+                JTextArea caption = find(fx.tab.getUiComponent(), JTextArea.class).get(0);
+                // Permanent focus loss is what commits the title. Dispatch it explicitly so the
+                // check doesn't depend on which OS window currently owns the display.
+                still.dispatchEvent(new FocusEvent(still, FocusEvent.FOCUS_LOST, false, caption));
+                check("Search parameter reflected EDITED".equals(fx.evidence.getCaptured().get(0).finding().type()),
+                        "committed title was '" + fx.evidence.getCaptured().get(0).finding().type() + "'");
+            });
+        } finally {
+            SwingUtilities.invokeAndWait(frame::dispose);
+        }
+    }
+
+    /** Gives {@code target} keyboard focus even when the native window is not the active OS window. */
+    private static void focus(Component target) {
+        KeyboardFocusManager current = KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        if (!(current instanceof ForcingFocusManager)) {
+            KeyboardFocusManager.setCurrentKeyboardFocusManager(new ForcingFocusManager());
+        }
+        ((ForcingFocusManager) KeyboardFocusManager.getCurrentKeyboardFocusManager()).force(target);
+    }
+
+    private static final class ForcingFocusManager extends DefaultKeyboardFocusManager {
+        void force(Component target) {
+            setGlobalFocusOwner(target);
+        }
+    }
+
+    private static java.util.List<JTextField> textFields(Fixture fx) {
+        return find(fx.tab.getUiComponent(), JTextField.class).stream().filter(Component::isShowing).toList();
     }
 
     static void check(boolean condition, String message) {

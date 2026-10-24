@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" id="meta-desc" content="Design a penetration test report template in the browser and export it for ICARUS. Nothing is uploaded.">
+  <title>ICARUS report template builder</title>
+  <link rel="icon" href="assets/favicon.svg">
+  <link rel="stylesheet" href="assets/app.css">
+  <style id="report-style"></style>
+  <!--
+    Static ICARUS report template builder.
+    Asset paths are relative so GitHub Pages can serve this folder at /ICARUS/.
+    Donation links and the BApp listing URL live in assets/config.js.
+  -->
+</head>
+<body>
+  <a class="skip" href="#main" data-i18n="skip">Skip to content</a>
+  <header class="site-header no-print">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path fill="currentColor" d="M3 22c6.2-1.6 10.2-7.4 13-14.5C18.8 14.6 22.8 20.4 29 22c-6.2-1-10-3.2-13-7.6C13 18.8 9.2 21 3 22z"/>
+      </svg>
+      <div>
+        <p class="eyebrow" data-i18n="eyebrow">ICARUS</p>
+        <h1 data-i18n="title">Report template builder</h1>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="lang" role="group" data-i18n-aria="langGroup" aria-label="Language">
+        <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-set-lang="pt-BR" aria-pressed="false">PT</button>
+      </div>
+      <a id="repo-link" href="https://github.com/IcarusSec/ICARUS" data-i18n="repo">GitHub</a>
+      <a id="docs-link" href="https://github.com/IcarusSec/ICARUS/tree/main/docs" data-i18n="docs">Docs</a>
+      <a id="bapp-link" href="https://portswigger.net/bappstore" data-i18n="bappHome">BApp Store</a>
+    </div>
+  </header>
+  <p id="status" class="status no-print" role="status"></p>
+  <noscript><p class="noscript">This builder needs JavaScript. It still runs entirely in your browser; nothing is uploaded.</p></noscript>
+  <main id="main">
+    <div class="layout">
+      <form id="editor" class="editor no-print" autocomplete="off">
+        <p class="lede" data-i18n="lede">Pick a starter, turn sections on, set your branding, and export. The page stays in this browser: no account and no upload.</p>
+
+        <div class="card">
+          <div class="field">
+            <label for="template-name" data-i18n="templateName">Template name</label>
+            <input id="template-name" type="text" maxlength="120">
+          </div>
+          <p class="hint" data-i18n="templateNameHint"></p>
+          <h2 id="starters-heading" data-i18n="starters">Starter templates</h2>
+          <div id="starters" class="starters" role="group" aria-labelledby="starters-heading"></div>
+        </div>
+
+        <div class="card">
+          <h2 id="sections-heading" data-i18n="sections">Sections</h2>
+          <p class="hint" data-i18n="sectionsHelp"></p>
+          <ul id="section-list" class="section-list" aria-labelledby="sections-heading"></ul>
+          <div id="section-editor" class="editor-panel"></div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="branding">Branding</h2>
+          <p class="hint" data-i18n="brandingHelp"></p>
+          <div class="grid-2">
+            <div class="field">
+              <label for="company" data-i18n="company">Company name</label>
+              <input id="company" type="text" maxlength="160">
+            </div>
+            <div class="field">
+              <label for="document-title" data-i18n="documentTitle">Document title</label>
+              <input id="document-title" type="text" maxlength="180">
+            </div>
+          </div>
+          <div class="field">
+            <label for="logo-file" data-i18n="logo">Logo</label>
+            <div class="logo-row">
+              <input id="logo-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp">
+              <img id="logo-preview" alt="" hidden>
+              <button type="button" class="btn btn-small" id="remove-logo" hidden data-i18n="removeLogo">Remove logo</button>
+            </div>
+            <p class="hint" data-i18n="logoHelp"></p>
+          </div>
+          <div class="presets" role="group" data-i18n-aria="presets" aria-label="Color presets">
+            <button type="button" class="btn btn-small" data-preset="icarus" data-i18n="presetIcarus">ICARUS</button>
+            <button type="button" class="btn btn-small" data-preset="navy" data-i18n="presetNavy">Navy</button>
+            <button type="button" class="btn btn-small" data-preset="forest" data-i18n="presetForest">Forest</button>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label id="primary-label" for="primary-hex" data-i18n="primary">Primary color</label>
+              <div class="color-row">
+                <input id="primary" type="color" value="#FF6633" aria-labelledby="primary-label">
+                <input id="primary-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off">
+              </div>
+            </div>
+            <div class="field">
+              <label id="secondary-label" for="secondary-hex" data-i18n="secondary">Secondary color</label>
+              <div class="color-row">
+                <input id="secondary" type="color" value="#6E6E6E" aria-labelledby="secondary-label">
+                <input id="secondary-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off">
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="content-lang" data-i18n="contentLang">Report language</label>
+            <select id="content-lang">
+              <option value="en">English</option>
+              <option value="pt-BR">Português (Brasil)</option>
+            </select>
+            <p class="hint" data-i18n="contentLangHelp"></p>
+          </div>
+          <details>
+            <summary data-i18n="details">Names used in the preview</summary>
+            <p class="hint" data-i18n="detailsHelp"></p>
+            <div class="grid-2">
+              <div class="field"><label for="author" data-i18n="author">Author</label><input id="author" type="text" maxlength="160"></div>
+              <div class="field"><label for="reviewer" data-i18n="reviewer">Reviewer</label><input id="reviewer" type="text" maxlength="160"></div>
+              <div class="field"><label for="approver" data-i18n="approver">Approver</label><input id="approver" type="text" maxlength="160"></div>
+              <div class="field"><label for="classification" data-i18n="classification">Classification</label><input id="classification" type="text" maxlength="80"></div>
+              <div class="field"><label for="environment" data-i18n="environment">Environment</label><input id="environment" type="text" maxlength="160"></div>
+              <div class="field"><label for="period" data-i18n="period">Assessment period</label><input id="period" type="text" maxlength="160"></div>
+              <div class="field"><label for="method" data-i18n="method">Method</label><input id="method" type="text" maxlength="160"></div>
+              <div class="field"><label for="team" data-i18n="team">Team</label><input id="team" type="text" maxlength="160"></div>
+              <div class="field"><label for="component" data-i18n="component">Target or component</label><input id="component" type="text" maxlength="200"></div>
+              <div class="field"><label for="requester" data-i18n="requester">Requester</label><input id="requester" type="text" maxlength="160"></div>
+              <div class="field"><label for="owner" data-i18n="owner">Owner</label><input id="owner" type="text" maxlength="160"></div>
+              <div class="field"><label for="project" data-i18n="project">Project</label><input id="project" type="text" maxlength="160"></div>
+              <div class="field"><label for="version" data-i18n="version">Version</label><input id="version" type="text" maxlength="40"></div>
+              <div class="field"><label for="date" data-i18n="date">Date</label><input id="date" type="text" maxlength="40"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <fieldset>
+            <legend data-i18n="severity">Severity scale</legend>
+            <p class="hint" data-i18n="severityHelp"></p>
+            <label class="choice"><input type="radio" name="scale" value="cvss"><span><strong data-i18n="scaleCvss">CVSS</strong><small data-i18n="scaleCvssHint"></small></span></label>
+            <label class="choice"><input type="radio" name="scale" value="simple"><span><strong data-i18n="scaleSimple">Qualitative</strong><small data-i18n="scaleSimpleHint"></small></span></label>
+            <label class="choice"><input type="radio" name="scale" value="four"><span><strong data-i18n="scaleFour">Four levels</strong><small data-i18n="scaleFourHint"></small></span></label>
+          </fieldset>
+          <details>
+            <summary data-i18n="severityColors">Severity colors</summary>
+            <p class="hint" data-i18n="severityColorsHelp"></p>
+            <div class="sev-grid" id="sev-colors">
+              <div class="field"><label id="lab-CRITICAL" for="sev-hex-CRITICAL" data-i18n="sevCritical">Critical</label><div class="color-row"><input id="sev-CRITICAL" type="color" data-sev="CRITICAL" aria-labelledby="lab-CRITICAL"><input id="sev-hex-CRITICAL" data-sev-hex="CRITICAL" type="text" maxlength="7" spellcheck="false"></div></div>
+              <div class="field"><label id="lab-HIGH" for="sev-hex-HIGH" data-i18n="sevHigh">High</label><div class="color-row"><input id="sev-HIGH" type="color" data-sev="HIGH" aria-labelledby="lab-HIGH"><input id="sev-hex-HIGH" data-sev-hex="HIGH" type="text" maxlength="7" spellcheck="false"></div></div>
+              <div class="field"><label id="lab-MEDIUM" for="sev-hex-MEDIUM" data-i18n="sevMedium">Medium</label><div class="color-row"><input id="sev-MEDIUM" type="color" data-sev="MEDIUM" aria-labelledby="lab-MEDIUM"><input id="sev-hex-MEDIUM" data-sev-hex="MEDIUM" type="text" maxlength="7" spellcheck="false"></div></div>
+              <div class="field"><label id="lab-LOW" for="sev-hex-LOW" data-i18n="sevLow">Low</label><div class="color-row"><input id="sev-LOW" type="color" data-sev="LOW" aria-labelledby="lab-LOW"><input id="sev-hex-LOW" data-sev-hex="LOW" type="text" maxlength="7" spellcheck="false"></div></div>
+              <div class="field"><label id="lab-INFO" for="sev-hex-INFO" data-i18n="sevInfo">Info</label><div class="color-row"><input id="sev-INFO" type="color" data-sev="INFO" aria-labelledby="lab-INFO"><input id="sev-hex-INFO" data-sev-hex="INFO" type="text" maxlength="7" spellcheck="false"></div></div>
+              <div class="field"><label id="lab-FIXED" for="sev-hex-FIXED" data-i18n="sevFixed">Fixed</label><div class="color-row"><input id="sev-FIXED" type="color" data-sev="FIXED" aria-labelledby="lab-FIXED"><input id="sev-hex-FIXED" data-sev-hex="FIXED" type="text" maxlength="7" spellcheck="false"></div></div>
+              <div class="field"><label id="lab-NOT_FIXED" for="sev-hex-NOT_FIXED" data-i18n="sevNotFixed">Not fixed</label><div class="color-row"><input id="sev-NOT_FIXED" type="color" data-sev="NOT_FIXED" aria-labelledby="lab-NOT_FIXED"><input id="sev-hex-NOT_FIXED" data-sev-hex="NOT_FIXED" type="text" maxlength="7" spellcheck="false"></div></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="contentHeading">Report content</h2>
+          <p class="hint" data-i18n="contentHelp"></p>
+          <div class="checks">
+            <label><input id="pol-evidence" type="checkbox" data-policy="includeEvidence"> <span data-i18n="policyEvidence">Evidence images</span></label>
+            <label><input id="pol-request" type="checkbox" data-policy="includeHttpRequest"> <span data-i18n="policyRequest">HTTP request</span></label>
+            <label><input id="pol-response" type="checkbox" data-policy="includeHttpResponse"> <span data-i18n="policyResponse">HTTP response</span></label>
+            <label><input id="pol-toc" type="checkbox" data-policy="includeTocBookmarks"> <span data-i18n="policyToc">PDF bookmarks</span></label>
+          </div>
+          <p class="hint" data-i18n="fieldLegend">Finding fields</p>
+          <div class="checks" id="field-checks">
+            <label><input type="checkbox" data-field="DESCRIPTION"> <span data-i18n="fieldDescription">Description</span></label>
+            <label><input type="checkbox" data-field="IMPACT"> <span data-i18n="fieldImpact">Impact</span></label>
+            <label><input type="checkbox" data-field="REMEDIATION"> <span data-i18n="fieldRemediation">Remediation</span></label>
+            <label><input type="checkbox" data-field="WHERE"> <span data-i18n="fieldWhere">Where</span></label>
+            <label><input type="checkbox" data-field="WHY"> <span data-i18n="fieldWhy">Why it matters</span></label>
+            <label><input type="checkbox" data-field="HOW"> <span data-i18n="fieldHow">How</span></label>
+            <label><input type="checkbox" data-field="WHEN"> <span data-i18n="fieldWhen">When</span></label>
+            <label><input type="checkbox" data-field="EVIDENCE"> <span data-i18n="fieldEvidence">Evidence</span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="export">Export</h2>
+          <p class="hint" data-i18n="exportHelp"></p>
+          <div class="export-bar">
+            <button type="button" class="btn btn-primary" id="btn-json" data-i18n="exportJson">Download JSON</button>
+            <button type="button" class="btn" id="btn-html" data-i18n="exportHtml">Download HTML</button>
+            <button type="button" class="btn" id="btn-print" data-i18n="exportPrint">Print / PDF</button>
+            <button type="button" class="btn" id="btn-md" data-i18n="exportMd">Download Markdown</button>
+            <button type="button" class="btn" id="btn-import" data-i18n="importJson">Import JSON</button>
+          </div>
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+          <details>
+            <summary data-i18n="howTitle">Using the JSON in ICARUS</summary>
+            <ol>
+              <li data-i18n="burp1"></li>
+              <li data-i18n="burp2"></li>
+              <li data-i18n="burp3"></li>
+              <li data-i18n="burp4"></li>
+              <li data-i18n="burp5"></li>
+              <li data-i18n="burp6"></li>
+              <li data-i18n="burp7"></li>
+              <li data-i18n="burp8"></li>
+            </ol>
+          </details>
+        </div>
+      </form>
+
+      <section class="preview-wrap" aria-labelledby="preview-label">
+        <div class="preview-bar no-print">
+          <h2 id="preview-label" data-i18n="preview">Preview</h2>
+          <p data-i18n="previewNote"></p>
+          <button type="button" class="btn only-narrow" id="close-preview" data-i18n="showEditor">Back to editor</button>
+        </div>
+        <article id="preview"></article>
+      </section>
+    </div>
+  </main>
+  <button type="button" id="open-preview" class="preview-fab only-narrow no-print" data-i18n="showPreview">Preview</button>
+  <footer class="site-footer no-print">
+    <p id="footer-note"><span data-i18n="footerNote"></span></p>
+    <div id="support" hidden>
+      <p><span data-i18n="support">Support the project</span> <span id="support-links"></span></p>
+    </div>
+  </footer>
+  <dialog id="confirm" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="dialog-actions">
+        <button type="submit" class="btn" value="cancel" id="confirm-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" value="ok" id="confirm-ok">Replace</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="assets/config.js"></script>
+  <script src="assets/i18n.js"></script>
+  <script src="assets/profile.js"></script>
+  <script src="assets/templates.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

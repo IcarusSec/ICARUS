@@ -32,3 +32,7 @@ Findings marked as "Fixed" will have their evidence images automatically stamped
 Reports can be exported in two formats directly from the Evidence Manager:
 1. **Interactive HTML:** A single-file, highly responsive HTML document containing embedded Base64 images and interactive tables. Great for sharing via email or Slack.
 2. **Professional PDF:** A strictly formatted, paginated PDF generated natively offline via OpenPDF. It features a Table of Contents, page-break-safe finding cards, and vector-crisp text.
+
+## Template builder
+
+Profiles are JSON documents with `schemaVersion` `1` (`ReportProfile`: sections, branding, themes, cover and finding renderers). A static builder in this `docs/` folder edits that same file in the browser and can also download an HTML or Markdown layout preview. Open [the builder](../index.html), export JSON, then use **ICARUS → Reporting → Import**. Logos in the builder are for the preview; Burp reads a file path, so attach the image again after import.

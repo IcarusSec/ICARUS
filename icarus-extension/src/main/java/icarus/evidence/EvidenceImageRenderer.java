@@ -37,6 +37,15 @@ public class EvidenceImageRenderer {
      *  just shows the first ~1200 lines instead of crashing. */
     public static final int MAX_IMAGE_HEIGHT = 30000;
 
+    /** Tallest a request/response evidence screenshot is allowed to be, in pixels.
+     *  "Force 1920x1080" already pinned the canvas here; with that option off the height
+     *  used to follow the body line count all the way to {@link #MAX_IMAGE_HEIGHT}, so a
+     *  pretty-printed JSON response of thousands of lines came out tens of thousands of
+     *  pixels tall. Both settings now stay within this viewport. {@link #drawColumnLines}
+     *  clips the overflow and draws a "··· N more lines truncated ···" marker. Only the
+     *  image is capped — the stored HTTP body is not shortened. */
+    public static final int MAX_VIEWPORT_HEIGHT = 1080;
+
     private static final Color FIXED_COLOR = new Color(0x2f, 0x9e, 0x44);
     private static final Color NOT_FIXED_COLOR = new Color(0xe0, 0x3e, 0x3e);
 
@@ -90,12 +99,14 @@ public BufferedImage renderTextToImage(String req, String res, String title, Str
 
         int contentLines = Math.max(reqLines.length, resLines.length);
         int calculatedHeight = (85 + 54) + contentLines * LINE_HEIGHT + 20;
-        
+
         int imgHeight;
         if (force1080) {
-            imgHeight = 1080;
+            imgHeight = MAX_VIEWPORT_HEIGHT;
         } else {
-            imgHeight = Math.min(MAX_IMAGE_HEIGHT, Math.max(300, calculatedHeight));
+            // Short bodies still shrink to fit. A large pretty-printed JSON body must not
+            // grow past the viewport just because Force 1920x1080 is unchecked.
+            imgHeight = Math.min(MAX_VIEWPORT_HEIGHT, Math.max(300, calculatedHeight));
         }
 
         EvidenceColorScheme cs = EvidenceColorScheme.get(config.getString("evidence.colorscheme", "Catppuccin"));

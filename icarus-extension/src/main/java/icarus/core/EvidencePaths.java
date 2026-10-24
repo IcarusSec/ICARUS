@@ -65,7 +65,7 @@ public final class EvidencePaths {
      */
     public static Path reserveEvidenceFile(Path dir, String prefix, String findingType) throws java.io.IOException {
         Files.createDirectories(dir);
-        String safeType = (findingType == null ? "finding" : findingType).replaceAll("[^a-zA-Z0-9.-]", "_");
+        String safeType = slugFindingTitle(findingType);
         String stem = prefix + "-" + safeType + "-" + System.currentTimeMillis();
         for (int n = 0; ; n++) {
             Path candidate = dir.resolve(n == 0 ? stem + ".png" : stem + "-" + n + ".png").normalize();
@@ -75,6 +75,17 @@ public final class EvidencePaths {
                 // try the next suffix
             }
         }
+    }
+
+    /**
+     * Slug used in an evidence filename. Leading and trailing whitespace is removed before
+     * other characters are replaced, so {@code " Tall JSON"} becomes {@code Tall_JSON} rather
+     * than {@code _Tall_JSON}. A whitespace-only title matches an empty title (an empty slug).
+     * Only a null title uses the {@code finding} fallback. This does not change the stored title.
+     */
+    static String slugFindingTitle(String findingType) {
+        if (findingType == null) return "finding";
+        return findingType.strip().replaceAll("[^a-zA-Z0-9.-]", "_");
     }
 
     /**

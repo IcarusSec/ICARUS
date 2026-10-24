@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.layout.Breakpoint;
 import icarus.ui.reportprofile.layout.ResponsiveSection;
 import icarus.ui.reportprofile.layout.WrapLayout;
@@ -36,7 +37,7 @@ public class ToolbarPanel implements ResponsiveSection {
         g.fill = GridBagConstraints.HORIZONTAL;
         g.anchor = GridBagConstraints.WEST;
         g.gridy = 0; component.add(profileRow, g);
-        g.gridy = 1; g.insets = new Insets(2, 0, 0, 0);
+        g.gridy = 1; g.insets = UiMetrics.gap(UiMetrics.XS / 2, 0, 0, 0);
         component.add(actionRow, g);
     }
 

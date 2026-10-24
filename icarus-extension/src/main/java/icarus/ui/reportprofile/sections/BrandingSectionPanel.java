@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.layout.Breakpoint;
 import icarus.ui.reportprofile.layout.ResponsiveSection;
 import icarus.ui.reportprofile.layout.WrapLayout;
@@ -66,7 +67,7 @@ public class BrandingSectionPanel implements ResponsiveSection {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.weightx = 1.0;
-        gbc.insets = new Insets(0, 0, 16, 16);
+        gbc.insets = UiMetrics.gap(0, 0, UiMetrics.LG, UiMetrics.LG);
 
         int cols = (bp == Breakpoint.COMPACT || bp == Breakpoint.NARROW) ? 1 : 2;
         JPanel[] panels = {pnlDocTitle, pnlClassification, pnlAuthor, pnlReviewer,

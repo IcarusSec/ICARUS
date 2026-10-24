@@ -35,7 +35,7 @@ public final class ToastNotification {
         toast.setFocusableWindowState(false);
 
         JPanel panel = new JPanel();
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 16, 10, 16));
+        panel.setBorder(UiMetrics.pad(UiMetrics.MD, UiMetrics.LG));
 
         boolean translucent = isTranslucencySupported();
         if (translucent) {

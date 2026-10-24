@@ -183,7 +183,7 @@ public class ReportingSettingsTab {
         // own view so its Scrollable impl (tracksViewportWidth = true) is honored
         // -- otherwise an intermediate wrapper is laid out at its unbounded
         // preferred width and the breakpoint never sees the real viewport width.
-        responsiveContainer.setBorder(new EmptyBorder(16, 16, 16, 16));
+        responsiveContainer.setBorder(UiMetrics.page());
         responsiveContainer.setOpaque(false);
         return responsiveContainer;
     }
@@ -496,14 +496,14 @@ public class ReportingSettingsTab {
     private class CardPanel extends JPanel {
         CardPanel(String title, String iconName) {
             setLayout(new GridBagLayout());
-            setBorder(new EmptyBorder(12, 14, 12, 14));
+            setBorder(UiMetrics.pad(UiMetrics.MD, UiMetrics.LG));
             setBackground(themeHelper.getContainerBackgroundColor());
             putClientProperty("FlatLaf.style", "arc: 12; borderWidth: 1; borderColor: $Component.borderColor");
 
             JPanel header = new JPanel(new BorderLayout(0, 8));
             header.setOpaque(false);
             JLabel lbl = new JLabel(title);
-            lbl.setFont(lbl.getFont().deriveFont(Font.BOLD, 14f));
+            lbl.setFont(UiMetrics.font(UiMetrics.Role.TITLE));
             Icon ico = EvidenceUiHelpers.createIcon(iconName);
             if (ico != null) { lbl.setIcon(ico); lbl.setIconTextGap(8); }
             header.add(lbl, BorderLayout.NORTH);
@@ -512,7 +512,7 @@ public class ReportingSettingsTab {
             GridBagConstraints g = new GridBagConstraints();
             g.gridx = 0; g.gridy = 0;
             g.weightx = 1.0; g.fill = GridBagConstraints.HORIZONTAL;
-            g.insets = new Insets(0, 0, 10, 0);
+            g.insets = UiMetrics.gap(0, 0, UiMetrics.MD, 0);
             add(header, g);
         }
 
@@ -525,7 +525,7 @@ public class ReportingSettingsTab {
             GridBagConstraints g = new GridBagConstraints();
             g.gridx = 0; g.gridy = getComponentCount();
             g.weightx = 1.0; g.fill = GridBagConstraints.HORIZONTAL;
-            g.insets = new Insets(0, 0, 6, 0);
+            g.insets = UiMetrics.gap(0, 0, UiMetrics.SM, 0);
             g.anchor = GridBagConstraints.NORTHWEST;
             add(comp, g);
         }
@@ -552,7 +552,7 @@ public class ReportingSettingsTab {
         Icon ic = EvidenceUiHelpers.createIcon(icon);
         if (ic != null) b.setIcon(ic);
         b.setFocusPainted(false);
-        b.setMargin(new Insets(4, 10, 4, 10));
+        b.setMargin(UiMetrics.gap(UiMetrics.XS, UiMetrics.MD, UiMetrics.XS, UiMetrics.MD));
         b.addActionListener(al);
         return b;
     }
@@ -562,7 +562,7 @@ public class ReportingSettingsTab {
         JButton b = new JButton(EvidenceUiHelpers.createIcon(icon));
         b.setToolTipText(tooltip);
         b.setFocusPainted(false);
-        b.setMargin(new Insets(4, 6, 4, 6));
+        b.setMargin(UiMetrics.gap(UiMetrics.XS, UiMetrics.SM, UiMetrics.XS, UiMetrics.SM));
         b.addActionListener(al);
         return b;
     }
@@ -581,7 +581,7 @@ public class ReportingSettingsTab {
         btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
         JLabel hex = new JLabel("#------");
-        hex.setFont(hex.getFont().deriveFont(Font.PLAIN, 11f));
+        hex.setFont(UiMetrics.font(UiMetrics.Role.CAPTION));
 
         btn.addActionListener(e -> {
             Color c = JColorChooser.showDialog(panel, "Pick Color", btn.getBackground());

@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.sections;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.components.VariableChipRow;
 import icarus.ui.reportprofile.layout.Breakpoint;
 import icarus.ui.reportprofile.layout.ResponsiveSection;
@@ -23,7 +24,7 @@ public class DetailPane implements ResponsiveSection {
     private final Pattern tokenPattern = Pattern.compile("\\{\\{[a-z_]+\\}\\}");
     
     public DetailPane() {
-        bodyWell.setFont(FontLoader.mono(13f));
+        bodyWell.setFont(FontLoader.mono(UiMetrics.font(UiMetrics.Role.BODY).getSize2D()));
         chipRow = new VariableChipRow(token -> {
             try {
                 bodyWell.requestFocusInWindow();
@@ -42,7 +43,7 @@ public class DetailPane implements ResponsiveSection {
         // wraps instead of staying one clipped row.
         JPanel chipWrapper = new JPanel(new BorderLayout(0, 2));
         JLabel helperLabel = new JLabel("Body supports Markdown. Click a token to insert it at the cursor.");
-        helperLabel.setFont(helperLabel.getFont().deriveFont(java.awt.Font.ITALIC, 11f));
+        helperLabel.setFont(UiMetrics.font(UiMetrics.Role.CAPTION).deriveFont(java.awt.Font.ITALIC));
         chipWrapper.add(helperLabel, BorderLayout.NORTH);
         chipWrapper.add(chipRow, BorderLayout.CENTER);
         topPanel.add(chipWrapper, BorderLayout.SOUTH);
@@ -56,7 +57,7 @@ public class DetailPane implements ResponsiveSection {
 
         JPanel bodyWrapper = new JPanel(new BorderLayout());
         JLabel bodyLabel = new JLabel("Body");
-        bodyLabel.setBorder(BorderFactory.createEmptyBorder(6, 0, 0, 0));
+        bodyLabel.setBorder(UiMetrics.pad(UiMetrics.SM, 0, 0, 0));
         bodyWrapper.add(bodyLabel, BorderLayout.NORTH);
         bodyWrapper.add(scrollPane, BorderLayout.CENTER);
                 
@@ -79,7 +80,7 @@ public class DetailPane implements ResponsiveSection {
         
         Style tokenStyle = doc.addStyle("token", defaultStyle);
         StyleConstants.setForeground(tokenStyle, ThemeColors.current().accent());
-        StyleConstants.setFontFamily(tokenStyle, FontLoader.mono(12f).getFamily());
+        StyleConstants.setFontFamily(tokenStyle, FontLoader.mono(UiMetrics.font(UiMetrics.Role.BODY).getSize2D()).getFamily());
         
         doc.addDocumentListener(new DocumentListener() {
             @Override public void insertUpdate(DocumentEvent e) { highlightTokens(); }

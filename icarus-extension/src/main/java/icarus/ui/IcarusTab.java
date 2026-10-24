@@ -43,6 +43,12 @@ public class IcarusTab {
     private final DefaultTableModel tableModel;
     private JTable resultsTable;
     private final DefaultListModel<String> auditModel;
+    private CardLayout resultsCards;
+    private JPanel resultsStack;
+    private CardLayout editorCards;
+    private JPanel editorStack;
+    private CardLayout auditCards;
+    private JPanel auditStack;
 
     public IcarusTab(MontoyaApi api, ModuleConfig config, List<IcarusModule> modules,
                      Orchestrator orchestrator, IcarusMcpServer mcpServer) {
@@ -110,11 +116,18 @@ public class IcarusTab {
             for (String log : orchestrator.getAuditLog()) {
                 auditModel.addElement(log);
             }
+            showCard(resultsCards, resultsStack, tableModel.getRowCount() > 0);
+            showCard(auditCards, auditStack, !auditModel.isEmpty());
         });
     }
 
     public Component getComponent() {
         return mainPanel;
+    }
+
+    private static void showCard(CardLayout cards, JPanel stack, boolean hasData) {
+        if (cards == null || stack == null) return;
+        cards.show(stack, hasData ? "data" : "empty");
     }
 
     private void buildUI() {
@@ -136,6 +149,7 @@ public class IcarusTab {
         JTable table = new JTable(tableModel);
         this.resultsTable = table;
         themeHelper.styleTable(table);
+        TextFit.install(table);
 
         // Hide the Hash column
         table.removeColumn(table.getColumnModel().getColumn(0));
@@ -161,6 +175,7 @@ public class IcarusTab {
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 int[] viewRows = table.getSelectedRows();
+                showCard(editorCards, editorStack, viewRows.length > 0);
                 if (viewRows.length > 0) {
                     int modelRow = table.convertRowIndexToModel(viewRows[0]);
                     String hash = (String) tableModel.getValueAt(modelRow, 0);
@@ -183,12 +198,24 @@ public class IcarusTab {
             }
         });
 
+        editorCards = new CardLayout();
+        editorStack = new JPanel(editorCards);
+        editorStack.add(reqResSplit, "data");
+        editorStack.add(new EmptyState(I18n.t("ui.tab.results.empty.editors")), "empty");
+        editorCards.show(editorStack, "empty");
+
         JSplitPane verticalSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         verticalSplit.setTopComponent(tableScroll);
-        verticalSplit.setBottomComponent(reqResSplit);
+        verticalSplit.setBottomComponent(editorStack);
         verticalSplit.setResizeWeight(0.4);
         verticalSplit.setBorder(null);
-        resultsPanel.add(verticalSplit, BorderLayout.CENTER);
+
+        resultsCards = new CardLayout();
+        resultsStack = new JPanel(resultsCards);
+        resultsStack.add(verticalSplit, "data");
+        resultsStack.add(new EmptyState(I18n.t("ui.tab.results.empty")), "empty");
+        resultsPanel.add(resultsStack, BorderLayout.CENTER);
+        showCard(resultsCards, resultsStack, tableModel.getRowCount() > 0);
 
         // Context menu for results table
         JPopupMenu popup = new JPopupMenu();
@@ -388,52 +415,12 @@ public class IcarusTab {
             }
         });
 
-        JButton btnPreviewReport = new JButton(I18n.t("ui.tab.results.btn.preview"));
-        themeHelper.styleButton(btnPreviewReport);
-        btnPreviewReport.addActionListener(e -> orchestrator.previewReport(mainPanel, btnPreviewReport));
-
-        JButton btnGenerateReport = new JButton(I18n.t("ui.tab.results.btn.generate_html"));
-        btnGenerateReport.setBackground(new Color(255, 102, 51)); // Primary accent (ICARUS orange)
-        btnGenerateReport.setForeground(Color.WHITE);
-        btnGenerateReport.setFocusPainted(false);
-        // We keep themeHelper from overriding background by styling it partially.
-        // Wait, themeHelper.styleButton overrides background and foreground.
-        // We do it after themeHelper.styleButton.
-        themeHelper.styleButton(btnGenerateReport);
-        btnGenerateReport.setBackground(new Color(255, 102, 51));
-        btnGenerateReport.setForeground(Color.WHITE);
-        
-        btnGenerateReport.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel,
-                        I18n.t("ui.tab.results.error.no_evidence"));
-                return;
-            }
-            orchestrator.generateHtmlReportInteractive(mainPanel, btnGenerateReport, reportFindings);
-        });
-
-        JButton btnExportPdf = new JButton(I18n.t("ui.tab.results.btn.export_pdf"));
-        themeHelper.styleButton(btnExportPdf);
-        btnExportPdf.addActionListener(e -> {
-            List<Finding> reportFindings = orchestrator.getReportableFindings();
-            if (reportFindings.isEmpty()) {
-                JOptionPane.showMessageDialog(mainPanel,
-                        I18n.t("ui.tab.results.error.no_evidence"));
-                return;
-            }
-            orchestrator.exportPdfReportInteractive(mainPanel, btnExportPdf, reportFindings);
-        });
-
         dataActions.add(btnImportProxy);
         dataActions.add(btnPassiveLogs);
         dataActions.add(btnClearBtn);
         dataActions.add(btnWipeAll);
 
         reportActions.add(btnEvidenceManager);
-        reportActions.add(btnPreviewReport);
-        reportActions.add(btnGenerateReport);
-        reportActions.add(btnExportPdf);
 
         bottomBar.add(dataActions, BorderLayout.WEST);
         bottomBar.add(reportActions, BorderLayout.EAST);
@@ -444,7 +431,8 @@ public class IcarusTab {
         themeHelper.applyTheme(auditPanel);
 
         JList<String> auditList = new JList<>(auditModel);
-        auditList.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        auditList.setFont(UiMetrics.mono());
+        TextFit.install(auditList);
         auditList.setBackground(themeHelper.getBackgroundColor());
         auditList.setForeground(themeHelper.getForegroundColor());
 
@@ -452,7 +440,12 @@ public class IcarusTab {
         auditScroll.setBorder(BorderFactory.createEmptyBorder());
         themeHelper.applyTheme(auditScroll);
 
-        auditPanel.add(auditScroll, BorderLayout.CENTER);
+        auditCards = new CardLayout();
+        auditStack = new JPanel(auditCards);
+        auditStack.add(auditScroll, "data");
+        auditStack.add(new EmptyState(I18n.t("ui.tab.audit.empty")), "empty");
+        auditPanel.add(auditStack, BorderLayout.CENTER);
+        showCard(auditCards, auditStack, !auditModel.isEmpty());
 
         icarus.ui.evidence.EvidenceManagerTab evidenceManagerTab = new icarus.ui.evidence.EvidenceManagerTab(orchestrator, config, api);
         
@@ -471,6 +464,31 @@ public class IcarusTab {
         });
 
         mainPanel.add(tabs, BorderLayout.CENTER);
+        mainPanel.add(reportActionBar(), BorderLayout.SOUTH);
+    }
+
+    /** Preview, Generate HTML, and Export PDF, once, for every tab. */
+    private ReportActionBar reportActionBar() {
+        return new ReportActionBar(
+                button -> orchestrator.previewReport(mainPanel, button),
+                button -> {
+                    List<Finding> reportFindings = orchestrator.getReportableFindings();
+                    if (reportFindings.isEmpty()) {
+                        JOptionPane.showMessageDialog(mainPanel,
+                                I18n.t("ui.tab.results.error.no_evidence"));
+                        return;
+                    }
+                    orchestrator.generateHtmlReportInteractive(mainPanel, button, reportFindings);
+                },
+                button -> {
+                    List<Finding> reportFindings = orchestrator.getReportableFindings();
+                    if (reportFindings.isEmpty()) {
+                        JOptionPane.showMessageDialog(mainPanel,
+                                I18n.t("ui.tab.results.error.no_evidence"));
+                        return;
+                    }
+                    orchestrator.exportPdfReportInteractive(mainPanel, button, reportFindings);
+                });
     }
 
     /**
@@ -499,6 +517,7 @@ public class IcarusTab {
 
         JTable table = new JTable(model);
         themeHelper.styleTable(table);
+        TextFit.install(table);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
         TableRowSorter<DefaultTableModel> sorter = new TableRowSorter<>(model);
@@ -523,7 +542,7 @@ public class IcarusTab {
         dialog.setLayout(new BorderLayout());
 
         JPanel topBar = new JPanel(new BorderLayout(8, 0));
-        topBar.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        topBar.setBorder(UiMetrics.pad(UiMetrics.SM));
         topBar.add(new JLabel(I18n.t("ui.import.filter")), BorderLayout.WEST);
         topBar.add(filterField, BorderLayout.CENTER);
         themeHelper.applyTheme(topBar);

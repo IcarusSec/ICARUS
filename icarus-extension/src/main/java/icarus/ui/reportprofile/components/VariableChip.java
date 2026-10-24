@@ -1,5 +1,6 @@
 package icarus.ui.reportprofile.components;
 
+import icarus.ui.UiMetrics;
 import icarus.ui.reportprofile.theme.FontLoader;
 import icarus.ui.reportprofile.theme.ThemeColors;
 
@@ -17,7 +18,7 @@ public final class VariableChip extends JComponent {
 
     public VariableChip(String text, Consumer<String> onClick) {
         this.text = text;
-        setFont(FontLoader.mono(12f));
+        setFont(FontLoader.mono(UiMetrics.font(UiMetrics.Role.BODY).getSize2D()));
         FontMetrics fm = getFontMetrics(getFont());
         this.W = fm.stringWidth(text) + 16;
         this.H = fm.getHeight() + 8;

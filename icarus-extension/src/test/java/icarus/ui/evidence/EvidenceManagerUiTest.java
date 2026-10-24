@@ -49,6 +49,7 @@ public final class EvidenceManagerUiTest {
         removingEvidenceStillRefreshesTheDetail();
         titleSurvivesRegistryRefreshWhileTyping();
         longTitleStaysInsideTheWindow();
+        addToReportIsOneLabeledClick();
         System.out.println("EvidenceManagerUiTest: all checks passed.");
     }
 
@@ -204,6 +205,40 @@ public final class EvidenceManagerUiTest {
         check(squashed.contains("trailingwordsstayinthereport"), "PDF report dropped the end of the title");
     }
 
+    /**
+     * A captured finding joins the report with one labeled click, and every evidence
+     * step button shows plain text (tooltips may still carry the longer hint).
+     */
+    private static void addToReportIsOneLabeledClick() throws Exception {
+        Fixture fx = Fixture.create("Captured finding", "cap", false);
+        SwingUtilities.invokeAndWait(() -> {
+            List<JButton> buttons = find(fx.tab.getUiComponent(), JButton.class);
+            check(!buttons.isEmpty(), "evidence tab has no buttons");
+            for (JButton button : buttons) {
+                boolean hasText = button.getText() != null && !button.getText().isBlank();
+                boolean hasTip = button.getToolTipText() != null && !button.getToolTipText().isBlank();
+                // Combo-box arrows are empty chrome. An evidence action is icon-only when it
+                // explains itself only through a tooltip or an icon.
+                if (!hasText && (hasTip || button.getIcon() != null)) {
+                    check(false, "icon-only button tooltip='" + button.getToolTipText() + "'");
+                }
+            }
+            JButton add = buttons.stream()
+                    .filter(b -> I18n.t("ui.evidence.btn.add_to_report").equals(b.getText()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Add to report button missing"));
+            check(add.isEnabled(), "Add to report should be enabled while the screenshot is excluded");
+            check(!fx.evidence.isIncluded(fx.evidence.getCaptured().get(0)), "fixture should start excluded");
+            add.doClick();
+            check(fx.evidence.isIncluded(fx.evidence.getCaptured().get(0)), "one click did not include the screenshot");
+            JButton after = find(fx.tab.getUiComponent(), JButton.class).stream()
+                    .filter(b -> I18n.t("ui.evidence.btn.in_report").equals(b.getText()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("button did not switch to In report"));
+            check(!after.isEnabled(), "In report should not ask for another click");
+        });
+    }
+
     private static Rectangle boundsIn(Component root, Component c) {
         Point p = SwingUtilities.convertPoint(c, 0, 0, root);
         return new Rectangle(p.x, p.y, c.getWidth(), c.getHeight());
@@ -266,6 +301,10 @@ public final class EvidenceManagerUiTest {
         }
 
         static Fixture create(String title, String caption) throws Exception {
+            return create(title, caption, true);
+        }
+
+        static Fixture create(String title, String caption, boolean included) throws Exception {
             MontoyaApi api = (MontoyaApi) stub(MontoyaApi.class);
             ModuleConfig config = new ModuleConfig();
             I18n.initialize(config);
@@ -285,7 +324,7 @@ public final class EvidenceManagerUiTest {
                     .severity(Severity.MEDIUM)
                     .path("query:q")
                     .build();
-            evidence.restoreCaptured(new EvidenceCapture.CapturedEvidence(finding, imagePath, img, caption), true);
+            evidence.restoreCaptured(new EvidenceCapture.CapturedEvidence(finding, imagePath, img, caption), included);
             orchestrator.updateFinding(finding);
             Fixture[] holder = new Fixture[1];
             SwingUtilities.invokeAndWait(() -> {

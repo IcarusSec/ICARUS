@@ -83,6 +83,7 @@ public class FindingsReviewDialog {
 
         // Modernize table
         table.setRowHeight(24);
+        icarus.ui.TextFit.install(table);
         table.putClientProperty("FlatLaf.style", "showHorizontalLines: true; showVerticalLines: false; alternateRowColor: $Table.alternateRowColor");
         table.getTableHeader().putClientProperty("FlatLaf.style", "hoverBackground: $Table.hoverBackground");
         

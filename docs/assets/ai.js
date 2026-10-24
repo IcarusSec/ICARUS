@@ -1,192 +1,122 @@
 /**
- * Client-side AI assist for the ICARUS template builder.
- *
- * This module builds a prompt and checks a pasted answer. It does not call a
- * network API and it does not read API keys. A later provider can register
- * with registerProvider({ id, label, complete }) where complete(prompt)
- * returns a Promise of the model text. Nothing in this file ships a provider.
- *
+ * Builds a prompt that describes the free-form page schema and checks a pasted answer.
+ * No network calls and no API keys. A provider can register later with registerProvider.
  * Part of ICARUS, MIT License.
  */
 (function (root, factory) {
-  var profile = (root && root.IcarusProfile) || (typeof require === "function" ? require("./profile.js") : null);
-  var api = factory(profile);
+  var canvas = (root && root.IcarusCanvas) || (typeof require === "function" ? require("./canvas.js") : null);
+  var api = factory(canvas);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.IcarusAI = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function (P) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (C) {
   var providers = [];
 
   function registerProvider(provider) {
-    if (!provider || typeof provider.complete !== "function" || !provider.id) {
-      throw new Error("provider");
-    }
+    if (!provider || typeof provider.complete !== "function" || !provider.id) throw new Error("provider");
     providers = providers.filter(function (item) { return item.id !== provider.id; });
     providers.push({ id: String(provider.id), label: String(provider.label || provider.id), complete: provider.complete });
   }
 
-  function listProviders() {
-    return providers.map(function (item) { return { id: item.id, label: item.label }; });
+  function exampleCover() {
+    var profile = C.profileFromDoc(C.starterDoc("swiss"));
+    profile.name = "Swiss poster example";
+    profile.sections.nodes = profile.sections.nodes.slice(0, 1);
+    return profile;
   }
 
   function buildPrompt(profile) {
-    var json = typeof profile === "string" ? profile : JSON.stringify(profile, null, 2);
+    var current = typeof profile === "string" ? profile : JSON.stringify(profile, null, 2);
+    var example = JSON.stringify(exampleCover(), null, 2);
     return [
-      "You are editing an ICARUS ReportProfile for a penetration-test report.",
-      "Return one JSON object and nothing else. No commentary.",
+      "You design ICARUS report covers. Return one JSON object and nothing else. No markdown fences, no commentary.",
       "",
-      "Schema rules:",
-      '- schemaVersion must stay "1".',
-      "- Keep id, name, locale, builtIn false, coverRenderer (GRADIENT_HERO, HEADER_BAND, or NONE), and findingRenderer (ELEVATED_CARD or TABULAR).",
-      "- sections.nodes is an ordered list. Do not include a node whose id is COVER. Cover is coverRenderer.",
-      "- Each node has id, enabled, order, required, rendererKey, and params.",
-      "- params values are strings. Markdown sections use params.title and params.content.",
-      "- A required node must stay enabled. Do not delete a node with required true.",
-      "- Custom blocks are nodes with rendererKey CUSTOM_BLOCK.",
-      "- A custom block's params.blockType is chart, table, drawing, image, or callout.",
-      "- params.spec is a JSON string, not an object. Unknown block types may stay, but do not invent a second schema.",
-      "- chart spec: {\"type\":\"chart\",\"chart\":\"bar|pie|line\",\"binding\":\"findingsBySeverity|static\",\"title\":\"...\",\"categories\":[{\"key\":\"HIGH\",\"label\":\"High\",\"value\":0,\"color\":\"#D9711F\"}]}",
-      "- binding findingsBySeverity means the report fills values from real findings. Leave those values at 0.",
-      "- table spec: {\"type\":\"table\",\"mode\":\"findings|static\",\"title\":\"...\",\"columns\":[{\"key\":\"title\",\"label\":\"Finding\"}],\"rows\":[]}",
-      "- findings mode ignores rows. Column keys may be title, severity, path, cwe, description, impact, remediation.",
-      "- drawing spec: {\"type\":\"drawing\",\"width\":520,\"height\":220,\"shapes\":[...],\"svg\":\"\"}. shapes use rect, ellipse, line, arrow, text, freehand.",
-      "- image spec: {\"type\":\"image\",\"dataUrl\":null,\"alt\":\"\",\"caption\":\"\",\"widthMm\":120}. dataUrl is a data:image png, jpeg, gif, or webp URL, or null.",
-      "- callout spec: {\"type\":\"callout\",\"tone\":\"info|warning|note\",\"title\":\"...\",\"text\":\"...\"}.",
-      "- Placeholders such as {{author}}, {{project}}, {{finding_count}}, and {{finding_types}} must stay written as tokens.",
-      "- The builder object may be copied through. Do not put secrets in it.",
-      "- Hex colors are #RRGGBB.",
+      "The file is a ReportProfile with schemaVersion \"1\". Burp imports it from Reporting → Import.",
+      "Put every designed page in sections.nodes. Do not invent a second format.",
       "",
-      "Current profile:",
-      json
+      "Each page node:",
+      "- id: \"page:\" plus a short name",
+      "- enabled: true",
+      "- order: 1, 2, 3... with the cover first",
+      "- required: true if the team must not delete that page",
+      "- rendererKey: \"CANVAS_PAGE\"",
+      "- params.title: page name",
+      "- params.role: \"cover\" or \"interior\"",
+      "- params.spec: a STRING of JSON, not an object. The string is {\"background\":\"#FFFFFF\",\"elements\":[...]}",
+      "",
+      "The page is A4: 210 mm wide, 297 mm tall. Element x and y are millimetres from the top-left. w and h are the width and height in millimetres. rotation is degrees. z paints later numbers on top.",
+      "",
+      "Element types: text, shape, image, line, chart, table.",
+      "",
+      "text: {\"type\":\"text\",\"x\":10,\"y\":20,\"w\":120,\"h\":18,\"z\":2,\"text\":\"Hello {{client}}\",\"font\":\"sans\",\"size\":28,\"weight\":700,\"align\":\"left\",\"color\":\"#111111\",\"lineHeight\":1,\"letterSpacing\":0,\"blend\":\"normal\"}",
+      "font is sans (Inter), serif (Source Serif), or mono (JetBrains Mono). size is points. weight is 400 or 700.",
+      "blend \"difference\" with color \"#FFFFFF\" flips the text: white on a black shape, black on the white page. Use that when a title crosses a color block. Put the text at a higher z than the block.",
+      "",
+      "shape: {\"type\":\"shape\",\"shape\":\"rect\",\"x\":0,\"y\":0,\"w\":210,\"h\":150,\"z\":1,\"fill\":\"#111111\",\"stroke\":\"\",\"strokeWidth\":0}",
+      "shape is rect, ellipse, triangle, polygon, or parallelogram. points are pairs from 0 to 1 inside the box. A downward triangle is [[0,0],[1,0],[0.5,1]]. A parallelogram is [[0.2,0],[1,0],[0.8,1],[0,1]].",
+      "",
+      "image: {\"type\":\"image\",\"x\":40,\"y\":50,\"w\":22,\"h\":140,\"z\":2,\"src\":\"\",\"slot\":\"\",\"clip\":\"rect\",\"grayscale\":true,\"tint\":\"#A3205A\",\"tintOpacity\":0.6}",
+      "clip is rect, ellipse, triangle, or parallelogram. tint is a #RRGGBB wash. slot \"clientLogo\" is filled from the client logo in Burp. Leave src empty for that slot.",
+      "",
+      "line: {\"type\":\"line\",\"x1\":10,\"y1\":0,\"x2\":105,\"y2\":90,\"stroke\":\"#C4A15A\",\"strokeWidth\":0.35,\"arrow\":false,\"z\":3}",
+      "",
+      "chart: {\"type\":\"chart\",\"chart\":\"bar\",\"binding\":\"findingsBySeverity\",\"x\":14,\"y\":60,\"w\":180,\"h\":60,\"z\":2}",
+      "binding findingsBySeverity is filled from real findings. Do not hard-code those counts.",
+      "",
+      "table: {\"type\":\"table\",\"mode\":\"findings\",\"x\":14,\"y\":130,\"w\":180,\"h\":100,\"z\":2,\"columns\":[{\"key\":\"title\",\"label\":\"Finding\"},{\"key\":\"severity\",\"label\":\"Severity\"},{\"key\":\"path\",\"label\":\"Path\"}]}",
+      "",
+      "Variables, written exactly like this and chosen from this list: {{report_title}} {{project}} {{client}} {{tester}} {{date}} {{version}} {{classification}} {{finding_count}} {{count_critical}} {{count_high}} {{count_medium}} {{count_low}} {{count_info}} {{page}} {{pages}}.",
+      "coverRenderer must be \"NONE\" when the cover is a canvas page. Keep locale, branding, and the theme objects.",
+      "locked:true means the person who uses the template should not move that element.",
+      "Colors are #RRGGBB. Unknown element types may stay in the file; they are skipped when the report is drawn.",
+      "",
+      "Worked example. A black top half and a huge white title that crosses into the white bottom half, so the lower part of the title turns black:",
+      example,
+      "",
+      "Now edit this profile. Keep pages the user did not ask to change.",
+      current
     ].join("\n");
   }
 
   function extractJson(text) {
     var raw = String(text || "").trim();
-    if (!raw) return { ok: false, error: "empty" };
+    if (!raw) return { ok: false, error: "Paste the model's answer first." };
     var fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(raw);
     if (fenced) raw = fenced[1].trim();
     var start = raw.indexOf("{");
     var end = raw.lastIndexOf("}");
-    if (start === -1 || end <= start) return { ok: false, error: "no-object" };
+    if (start === -1 || end <= start) return { ok: false, error: "No JSON object was found in the answer." };
     try {
       return { ok: true, value: JSON.parse(raw.slice(start, end + 1)) };
     } catch (err) {
-      return { ok: false, error: "json", detail: err.message };
+      return { ok: false, error: "That text is not valid JSON. " + err.message };
     }
-  }
-
-  function validate(data) {
-    var errors = [];
-    if (!data || typeof data !== "object" || Array.isArray(data)) {
-      return { ok: false, errors: ["The answer is not a JSON object."] };
-    }
-    if (data.schemaVersion != null && String(data.schemaVersion) !== "1" && String(data.schemaVersion) !== "2") {
-      errors.push("schemaVersion must be \"1\". This file says \"" + String(data.schemaVersion) + "\".");
-    }
-    if (!data.sections || !Array.isArray(data.sections.nodes)) {
-      errors.push("sections.nodes must be an array.");
-    } else {
-      var seen = {};
-      data.sections.nodes.forEach(function (node, index) {
-        var where = "Section " + (index + 1);
-        if (!node || typeof node !== "object") {
-          errors.push(where + " is not an object.");
-          return;
-        }
-        if (!node.id || typeof node.id !== "string") errors.push(where + " is missing an id.");
-        else if (node.id === "COVER") errors.push("COVER is not a section node. Use coverRenderer.");
-        else if (seen[node.id]) errors.push("Duplicate section id " + node.id + ".");
-        else seen[node.id] = true;
-        if (node.rendererKey === "CUSTOM_BLOCK" || (typeof node.id === "string" && node.id.indexOf("block:") === 0)) {
-          var params = node.params || {};
-          var type = String(params.blockType || "");
-          if (["chart", "table", "drawing", "image", "callout"].indexOf(type) === -1 && !/^[a-z][a-z0-9_-]{0,30}$/.test(type)) {
-            errors.push(where + " has a blockType ICARUS cannot store.");
-          }
-          if (typeof params.spec !== "string" || !params.spec.trim()) {
-            errors.push(where + " needs params.spec as a JSON string.");
-          } else {
-            try { JSON.parse(params.spec); } catch (err) { errors.push(where + " has a spec that is not valid JSON."); }
-          }
-        }
-      });
-    }
-    if (data.coverRenderer && ["GRADIENT_HERO", "HEADER_BAND", "NONE"].indexOf(data.coverRenderer) === -1) {
-      errors.push("coverRenderer must be GRADIENT_HERO, HEADER_BAND, or NONE.");
-    }
-    if (data.findingRenderer && ["ELEVATED_CARD", "TABULAR"].indexOf(data.findingRenderer) === -1) {
-      errors.push("findingRenderer must be ELEVATED_CARD or TABULAR.");
-    }
-    ["pdfTheme", "htmlTheme"].forEach(function (key) {
-      var theme = data[key];
-      if (!theme) return;
-      ["primaryHex", "secondaryHex", "textHex", "headingHex"].forEach(function (field) {
-        if (theme[field] && !/^#[0-9a-fA-F]{6}$/.test(String(theme[field]))) {
-          errors.push(key + "." + field + " must be a #RRGGBB color.");
-        }
-      });
-    });
-    return { ok: errors.length === 0, errors: errors };
   }
 
   function parseResponse(text) {
     var extracted = extractJson(text);
-    if (!extracted.ok) {
-      var message = extracted.error === "empty"
-        ? "Paste the model's JSON answer first."
-        : extracted.error === "json"
-          ? "That text is not valid JSON" + (extracted.detail ? " (" + extracted.detail + ")." : ".")
-          : "No JSON object was found in the answer.";
-      return { ok: false, errors: [message] };
-    }
-    var checked = validate(extracted.value);
-    if (!checked.ok) return { ok: false, errors: checked.errors, value: extracted.value };
-    try {
-      var state = P.fromReportProfile(extracted.value);
-      return { ok: true, errors: [], profile: extracted.value, state: state };
-    } catch (err) {
-      return { ok: false, errors: ["The JSON matches the shape but could not be loaded (" + err.message + ")."] };
-    }
+    if (!extracted.ok) return { ok: false, errors: [extracted.error], warnings: [], doc: null };
+    var checked = C.validateProfile(extracted.value);
+    return checked;
   }
 
   function selfCheck() {
-    var errors = [];
-    function assert(cond, msg) { if (!cond) errors.push(msg); }
-    var state = P.makeTemplate({ name: "AI", locale: "en" });
-    var prompt = buildPrompt(P.toReportProfile(state));
-    assert(prompt.indexOf("schemaVersion") !== -1, "prompt mentions schema");
-    assert(prompt.indexOf("CUSTOM_BLOCK") !== -1, "prompt mentions blocks");
-    assert(prompt.indexOf("findingsBySeverity") !== -1, "prompt mentions binding");
-    var profile = P.toReportProfile(state);
-    var fenced = "Sure:\n```json\n" + JSON.stringify(profile) + "\n```";
-    var parsed = parseResponse(fenced);
-    assert(parsed.ok, "fenced import " + (parsed.errors || []).join("; "));
-    var bad = parseResponse("{");
-    assert(!bad.ok && bad.errors.length, "bad json explains");
-    var unknown = JSON.parse(JSON.stringify(profile));
-    unknown.sections.nodes.push({
-      id: "block:nope",
-      enabled: true,
-      order: 99,
-      required: false,
-      rendererKey: "CUSTOM_BLOCK",
-      params: { title: "Nope", blockType: "hologram", spec: "{\"type\":\"hologram\"}" }
-    });
-    var kept = parseResponse(JSON.stringify(unknown));
-    assert(kept.ok, "unknown block still imports");
-    assert(kept.state.sections.some(function (section) { return section.block && section.block.type === "hologram"; }), "unknown type preserved");
-    var broken = parseResponse("{\"schemaVersion\":\"9\",\"sections\":{\"nodes\":[]}}");
-    assert(!broken.ok && broken.errors.some(function (line) { return line.indexOf("schemaVersion") !== -1; }), "version error");
-    assert(listProviders().length === 0, "no provider by default");
-    return errors;
+    var prompt = buildPrompt(C.profileFromDoc(C.starterDoc("triangles")));
+    if (prompt.indexOf("CANVAS_PAGE") === -1 || prompt.indexOf("difference") === -1) throw new Error("prompt");
+    if (prompt.indexOf("Graphic") === -1) throw new Error("example");
+    var bad = parseResponse("hello");
+    if (bad.ok || bad.errors[0].indexOf("No JSON") === -1) throw new Error("bad paste");
+    var good = parseResponse(JSON.stringify(C.profileFromDoc(C.starterDoc("swiss"))));
+    if (!good.ok) throw new Error(good.errors.join("; "));
+    var broken = parseResponse('{"schemaVersion":"1","sections":{"nodes":[{"id":"page:a","rendererKey":"CANVAS_PAGE","params":{"title":"A","spec":"{nope"}}]}}');
+    if (broken.ok || !broken.errors.length) throw new Error("broken");
+    return "ai ok";
   }
 
   return {
     registerProvider: registerProvider,
-    listProviders: listProviders,
+    listProviders: function () { return providers.map(function (item) { return { id: item.id, label: item.label }; }); },
     buildPrompt: buildPrompt,
     extractJson: extractJson,
-    validate: validate,
     parseResponse: parseResponse,
     selfCheck: selfCheck
   };

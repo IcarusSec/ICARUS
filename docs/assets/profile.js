@@ -32,6 +32,8 @@
   };
   var CATALOG = [
     { id: "COVER", kind: "cover" },
+    { id: "CONFIDENTIALITY", kind: "markdown" },
+    { id: "TABLE_OF_CONTENTS", kind: "toc" },
     { id: "EXECUTIVE_SUMMARY", kind: "markdown" },
     { id: "ASSESSMENT_SCOPE", kind: "markdown" },
     { id: "METHODOLOGY", kind: "markdown" },
@@ -39,11 +41,17 @@
     { id: "VULNERABILITY_SUMMARY", kind: "table" },
     { id: "FINDINGS", kind: "detail" },
     { id: "REMEDIATION", kind: "markdown" },
-    { id: "APPENDIX", kind: "markdown" }
+    { id: "APPENDIX", kind: "markdown" },
+    { id: "SIGNATURE", kind: "markdown" }
   ];
+  var BLOCK_TYPES = ["chart", "table", "drawing", "image", "callout"];
+  var STYLE_ROLES = ["coverTitle", "coverMeta", "heading", "body", "table", "findingTitle"];
+  var FONT_IDS = ["helvetica", "georgia", "palatino", "segoe", "courier"];
   var TITLES = {
     en: {
       COVER: "Cover",
+      CONFIDENTIALITY: "Confidentiality",
+      TABLE_OF_CONTENTS: "Contents",
       EXECUTIVE_SUMMARY: "Executive summary",
       ASSESSMENT_SCOPE: "Scope",
       METHODOLOGY: "Methodology",
@@ -53,6 +61,7 @@
       FINDINGS: "Finding detail",
       REMEDIATION: "Remediation",
       APPENDIX: "Appendix",
+      SIGNATURE: "Approval",
       DOCUMENT_CONTROL: "Document control",
       REVISION_HISTORY: "Revision history",
       ACCESS_PROFILES: "Access profiles",
@@ -60,6 +69,8 @@
     },
     "pt-BR": {
       COVER: "Capa",
+      CONFIDENTIALITY: "Confidencialidade",
+      TABLE_OF_CONTENTS: "Sumário",
       EXECUTIVE_SUMMARY: "Sumário executivo",
       ASSESSMENT_SCOPE: "Escopo",
       METHODOLOGY: "Metodologia",
@@ -69,6 +80,7 @@
       FINDINGS: "Detalhe dos achados",
       REMEDIATION: "Remediação",
       APPENDIX: "Apêndice",
+      SIGNATURE: "Aprovação",
       DOCUMENT_CONTROL: "Controle do documento",
       REVISION_HISTORY: "Histórico de revisões",
       ACCESS_PROFILES: "Perfis de acesso",
@@ -155,8 +167,10 @@
 
   function kindOf(id) {
     if (id === "COVER") return "cover";
+    if (id === "TABLE_OF_CONTENTS") return "toc";
     if (id === "VULNERABILITY_SUMMARY") return "table";
     if (id === "FINDINGS") return "detail";
+    if (String(id || "").indexOf("block:") === 0) return "block";
     return "markdown";
   }
 
@@ -184,17 +198,23 @@
   function defaultBody(id, locale) {
     var br = pt(locale);
     var map = br ? {
+      CONFIDENTIALITY: "Este documento é **{{classification}}**. Destina-se a {{requester}} e a {{owner}}. Não circule sem autorização de {{approver}} ou de {{author}}.\n\nAs evidências descrevem fraquezas reais de {{component}}. Trate o arquivo com o mesmo cuidado do ambiente **{{environment}}**.",
+      TABLE_OF_CONTENTS: "",
       EXECUTIVE_SUMMARY: "Este relatório reúne o resultado da avaliação de **{{component}}**, solicitada por {{requester}} e realizada por {{author}} no ambiente **{{environment}}** ({{assessment_period}}).\n\nForam registrados **{{finding_count}}** achados: {{finding_types}}.",
       ASSESSMENT_SCOPE: "## Dentro do escopo\n\n- Alvo: {{component}}\n- Ambiente: {{environment}}\n- Período: {{assessment_period}}\n\n## Fora do escopo\n\n- Negação de serviço\n- Engenharia social\n- Sistemas de terceiros que não pertençam a {{owner}}",
       METHODOLOGY: "O trabalho seguiu o método **{{method}}**, com validação manual das falhas antes de registrá-las.\n\n1. Mapeamento\n2. Testes de autenticação, acesso e entrada\n3. Análise de impacto e recomendações",
       REMEDIATION: "## Prioridade\n\n1. Corrigir achados críticos e altos primeiro.\n2. Encaixar os médios no ciclo atual.\n3. Tratar baixos e informativos como hardening.\n\nDepois do deploy em {{environment}}, peça um reteste.",
-      APPENDIX: "## Referências\n\n- OWASP Top 10\n- NIST National Vulnerability Database\n- CWE\n\nClassificação: {{classification}}. Versão {{version}}. Data: {{date}}."
+      APPENDIX: "## Referências\n\n- OWASP Top 10\n- NIST National Vulnerability Database\n- CWE\n\nClassificação: {{classification}}. Versão {{version}}. Data: {{date}}.",
+      SIGNATURE: "Preparado por {{author}}.\n\nRevisado por {{reviewer}}.\n\nAprovado por {{approver}}.\n\nData: {{date}}. Versão {{version}}. Projeto {{project}}."
     } : {
+      CONFIDENTIALITY: "This document is **{{classification}}**. It is meant for {{requester}} and {{owner}}. Do not circulate it without approval from {{approver}} or {{author}}.\n\nThe evidence describes real weaknesses in {{component}}. Handle the file with the same care as the **{{environment}}** environment.",
+      TABLE_OF_CONTENTS: "",
       EXECUTIVE_SUMMARY: "This report records the assessment of **{{component}}**, requested by {{requester}} and performed by {{author}} in **{{environment}}** during {{assessment_period}}.\n\n**{{finding_count}}** findings were recorded: {{finding_types}}.",
       ASSESSMENT_SCOPE: "## In scope\n\n- Target: {{component}}\n- Environment: {{environment}}\n- Window: {{assessment_period}}\n\n## Out of scope\n\n- Denial of service\n- Social engineering\n- Third-party systems not owned by {{owner}}",
       METHODOLOGY: "Work followed the **{{method}}** method. Findings were validated by hand before they were recorded.\n\n1. Mapping\n2. Authentication, access, and input testing\n3. Impact analysis and recommendations",
       REMEDIATION: "## Priority\n\n1. Fix critical and high findings first.\n2. Schedule medium findings into the current cycle.\n3. Track low and info items as hardening.\n\nAfter the fix is deployed to {{environment}}, request a retest.",
-      APPENDIX: "## References\n\n- OWASP Top 10\n- NIST National Vulnerability Database\n- CWE\n\nClassification: {{classification}}. Version {{version}}. Date: {{date}}."
+      APPENDIX: "## References\n\n- OWASP Top 10\n- NIST National Vulnerability Database\n- CWE\n\nClassification: {{classification}}. Version {{version}}. Date: {{date}}.",
+      SIGNATURE: "Prepared by {{author}}.\n\nReviewed by {{reviewer}}.\n\nApproved by {{approver}}.\n\nDate: {{date}}. Version {{version}}. Project {{project}}."
     };
     return map[id] || "";
   }
@@ -267,11 +287,317 @@
     };
   }
 
+  function blankStyle(extra) {
+    var style = {
+      fontFamily: "helvetica",
+      fontSize: 11,
+      weight: "regular",
+      italic: false,
+      underline: false,
+      color: "#1A1A1A",
+      align: "left",
+      spaceBefore: 0,
+      spaceAfter: 3,
+      lineHeight: 1.45
+    };
+    if (extra) Object.keys(extra).forEach(function (key) { style[key] = extra[key]; });
+    return style;
+  }
+
+  function defaultStyles() {
+    return {
+      coverTitle: blankStyle({ fontSize: 26, weight: "bold", spaceAfter: 4, lineHeight: 1.15 }),
+      coverMeta: blankStyle({ fontSize: 11, color: "#4A5568", spaceBefore: 1, spaceAfter: 1, lineHeight: 1.4 }),
+      heading: blankStyle({ fontSize: 16, weight: "bold", spaceBefore: 1, spaceAfter: 3, lineHeight: 1.25 }),
+      body: blankStyle({ fontSize: 11, align: "left" }),
+      table: blankStyle({ fontSize: 10, spaceBefore: 1, spaceAfter: 3, lineHeight: 1.35 }),
+      findingTitle: blankStyle({ fontSize: 13, weight: "bold", spaceBefore: 1, spaceAfter: 2, lineHeight: 1.3 })
+    };
+  }
+
+  function normalizeStyle(raw) {
+    var base = blankStyle();
+    var src = raw && typeof raw === "object" ? raw : {};
+    var family = String(src.fontFamily || base.fontFamily);
+    base.fontFamily = FONT_IDS.indexOf(family) !== -1 ? family : "helvetica";
+    var size = Number(src.fontSize);
+    base.fontSize = size >= 8 && size <= 48 ? Math.round(size) : base.fontSize;
+    base.weight = src.weight === "bold" ? "bold" : "regular";
+    base.italic = !!src.italic;
+    base.underline = !!src.underline;
+    base.color = hex(src.color, base.color);
+    var align = String(src.align || "left");
+    base.align = align === "center" || align === "right" || align === "justify" ? align : "left";
+    var before = Number(src.spaceBefore);
+    var after = Number(src.spaceAfter);
+    base.spaceBefore = before >= 0 && before <= 40 ? before : 0;
+    base.spaceAfter = after >= 0 && after <= 40 ? after : 3;
+    var leading = Number(src.lineHeight);
+    base.lineHeight = leading >= 1 && leading <= 2.2 ? Math.round(leading * 100) / 100 : 1.45;
+    return base;
+  }
+
+  function normalizeStyles(raw) {
+    var styles = defaultStyles();
+    var src = raw && typeof raw === "object" ? raw : {};
+    STYLE_ROLES.forEach(function (role) {
+      styles[role] = normalizeStyle(Object.assign({}, styles[role], src[role] || {}));
+    });
+    return styles;
+  }
+
+  function defaultPage() {
+    return { marginTop: 16, marginRight: 16, marginBottom: 16, marginLeft: 16, showHeader: true, showFooter: true, showPageNumbers: true };
+  }
+
+  function normalizePage(raw) {
+    var page = defaultPage();
+    var src = raw && typeof raw === "object" ? raw : {};
+    ["marginTop", "marginRight", "marginBottom", "marginLeft"].forEach(function (key) {
+      var n = Number(src[key]);
+      if (n >= 8 && n <= 40) page[key] = Math.round(n);
+    });
+    if (typeof src.showHeader === "boolean") page.showHeader = src.showHeader;
+    if (typeof src.showFooter === "boolean") page.showFooter = src.showFooter;
+    if (typeof src.showPageNumbers === "boolean") page.showPageNumbers = src.showPageNumbers;
+    return page;
+  }
+
+  function defaultLogoBox() {
+    return {
+      cover: { x: 16, y: 16, w: 36, h: 14 },
+      header: { show: true, align: "left", w: 24, h: 8 }
+    };
+  }
+
+  function normalizeLogoBox(raw) {
+    var box = defaultLogoBox();
+    var src = raw && typeof raw === "object" ? raw : {};
+    ["x", "y", "w", "h"].forEach(function (key) {
+      var n = Number(src.cover && src.cover[key]);
+      if (n >= 0 && n <= 200) box.cover[key] = Math.round(n * 10) / 10;
+    });
+    if (box.cover.w < 8) box.cover.w = 8;
+    if (box.cover.h < 6) box.cover.h = 6;
+    if (src.header && typeof src.header === "object") {
+      if (typeof src.header.show === "boolean") box.header.show = src.header.show;
+      if (src.header.align === "center" || src.header.align === "right") box.header.align = src.header.align;
+      var w = Number(src.header.w);
+      var h = Number(src.header.h);
+      if (w >= 8 && w <= 80) box.header.w = Math.round(w);
+      if (h >= 4 && h <= 30) box.header.h = Math.round(h);
+    }
+    return box;
+  }
+
+  function pdfFontName(family) {
+    if (family === "georgia" || family === "palatino") return "Times";
+    if (family === "courier") return "Courier";
+    return "Helvetica";
+  }
+
+  function fontStack(family) {
+    if (family === "georgia") return "Georgia, 'Iowan Old Style', 'Times New Roman', serif";
+    if (family === "palatino") return "Palatino, 'Palatino Linotype', 'Book Antiqua', serif";
+    if (family === "segoe") return "'Segoe UI', system-ui, sans-serif";
+    if (family === "courier") return "'Courier New', Courier, monospace";
+    return "Helvetica, Arial, sans-serif";
+  }
+
+  function mmToPt(mm) {
+    return Math.round((Number(mm) || 0) * 72 / 25.4 * 10) / 10;
+  }
+
+  function defaultBlockTitle(type, locale) {
+    var br = pt(locale);
+    if (type === "chart") return br ? "Achados por severidade" : "Findings by severity";
+    if (type === "table") return br ? "Tabela" : "Table";
+    if (type === "drawing") return br ? "Diagrama" : "Diagram";
+    if (type === "image") return br ? "Imagem" : "Image";
+    if (type === "callout") return br ? "Nota" : "Note";
+    return br ? "Bloco" : "Block";
+  }
+
+  function defaultCategories() {
+    return SEVERITY_ORDER.map(function (name) {
+      return { key: name, label: name.charAt(0) + name.slice(1).toLowerCase(), value: 0, color: SEVERITY_COLORS[name] };
+    });
+  }
+
+  function cleanBlockType(type) {
+    var value = String(type || "").toLowerCase();
+    if (BLOCK_TYPES.indexOf(value) !== -1) return value;
+    if (/^[a-z][a-z0-9_-]{0,30}$/.test(value)) return value;
+    return "unknown";
+  }
+
+  function normalizeBlock(spec) {
+    spec = spec && typeof spec === "object" ? spec : {};
+    var type = cleanBlockType(spec.type || spec.blockType);
+    var title = String(spec.title || "").slice(0, 180);
+    if (type === "chart") {
+      var chart = spec.chart === "pie" || spec.chart === "line" ? spec.chart : "bar";
+      var binding = spec.binding === "static" ? "static" : "findingsBySeverity";
+      var categories = Array.isArray(spec.categories) ? spec.categories.slice(0, 12).map(function (item, index) {
+        var key = String(item && item.key || ("item-" + (index + 1))).slice(0, 40);
+        var value = Number(item && item.value);
+        return {
+          key: key,
+          label: String(item && item.label || key).slice(0, 40),
+          value: value >= 0 && value <= 10000 ? value : 0,
+          color: hex(item && item.color, SEVERITY_COLORS[key] || "#6E6E6E")
+        };
+      }) : [];
+      if (!categories.length) categories = defaultCategories();
+      return { type: "chart", chart: chart, binding: binding, title: title, categories: categories };
+    }
+    if (type === "table") {
+      var mode = spec.mode === "static" ? "static" : "findings";
+      var columns = Array.isArray(spec.columns) ? spec.columns.slice(0, 8).map(function (col, index) {
+        return {
+          key: String(col && col.key || ("c" + index)).slice(0, 40),
+          label: String(col && col.label || col.key || ("Column " + (index + 1))).slice(0, 60)
+        };
+      }) : [];
+      if (!columns.length) {
+        columns = [
+          { key: "title", label: "Finding" },
+          { key: "severity", label: "Severity" },
+          { key: "path", label: "Path" }
+        ];
+      }
+      var rows = [];
+      if (Array.isArray(spec.rows)) {
+        rows = spec.rows.slice(0, 40).map(function (row) {
+          var cells = Array.isArray(row) ? row : [];
+          return columns.map(function (_, index) { return String(cells[index] == null ? "" : cells[index]).slice(0, 400); });
+        });
+      }
+      return { type: "table", mode: mode, title: title, columns: columns, rows: rows };
+    }
+    if (type === "drawing") {
+      var shapes = Array.isArray(spec.shapes) ? spec.shapes.slice(0, 80).map(normalizeShape).filter(Boolean) : [];
+      var svg = typeof spec.svg === "string" ? spec.svg.slice(0, 80000) : "";
+      var width = Number(spec.width);
+      var height = Number(spec.height);
+      return {
+        type: "drawing",
+        title: title,
+        width: width >= 40 && width <= 800 ? Math.round(width) : 520,
+        height: height >= 40 && height <= 600 ? Math.round(height) : 220,
+        shapes: shapes,
+        svg: svg
+      };
+    }
+    if (type === "image") {
+      return {
+        type: "image",
+        title: title,
+        alt: String(spec.alt || "").slice(0, 180),
+        caption: String(spec.caption || "").slice(0, 240),
+        widthMm: (function () {
+          var n = Number(spec.widthMm);
+          return n >= 20 && n <= 170 ? Math.round(n) : 120;
+        })(),
+        dataUrl: sanitizeLogo(spec.dataUrl)
+      };
+    }
+    if (type === "callout") {
+      var tone = spec.tone === "warning" || spec.tone === "note" ? spec.tone : "info";
+      return { type: "callout", tone: tone, title: title, text: String(spec.text || "").slice(0, 4000) };
+    }
+    return { type: type, title: title, unsupported: true };
+  }
+
+  function normalizeShape(shape) {
+    if (!shape || typeof shape !== "object") return null;
+    var type = String(shape.type || "");
+    if (["rect", "ellipse", "line", "arrow", "text", "freehand"].indexOf(type) === -1) return null;
+    var stroke = hex(shape.stroke, "#1A1A1A");
+    var fill = shape.fill ? hex(shape.fill, "#E8EEF8") : "";
+    function num(value, min, max, fallback) {
+      var n = Number(value);
+      if (!(n >= min && n <= max)) return fallback;
+      return Math.round(n * 10) / 10;
+    }
+    if (type === "text") {
+      return { type: "text", x: num(shape.x, 0, 800, 8), y: num(shape.y, 0, 600, 20), text: String(shape.text || "").slice(0, 160), fill: fill || "#1A1A1A", size: num(shape.size, 8, 48, 14) };
+    }
+    if (type === "freehand") {
+      var points = Array.isArray(shape.points) ? shape.points.slice(0, 400).map(function (point) {
+        return [num(point && point[0], 0, 800, 0), num(point && point[1], 0, 600, 0)];
+      }) : [];
+      if (points.length < 2) return null;
+      return { type: "freehand", points: points, stroke: stroke };
+    }
+    if (type === "line" || type === "arrow") {
+      return {
+        type: type,
+        x1: num(shape.x1, 0, 800, 8),
+        y1: num(shape.y1, 0, 600, 8),
+        x2: num(shape.x2, 0, 800, 80),
+        y2: num(shape.y2, 0, 600, 40),
+        stroke: stroke
+      };
+    }
+    return {
+      type: type,
+      x: num(shape.x, 0, 800, 8),
+      y: num(shape.y, 0, 600, 8),
+      w: num(shape.w, 2, 800, 40),
+      h: num(shape.h, 2, 600, 24),
+      fill: fill,
+      stroke: stroke
+    };
+  }
+
+  function blockFromParams(params) {
+    params = params || {};
+    var parsed = {};
+    if (typeof params.spec === "string" && params.spec.trim()) {
+      try { parsed = JSON.parse(params.spec); } catch (err) { parsed = { type: "unknown", unsupported: true, invalid: true }; }
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) parsed = {};
+    if (!parsed.type) parsed.type = params.blockType || "unknown";
+    if (!parsed.title && params.title) parsed.title = params.title;
+    var block = normalizeBlock(parsed);
+    if (parsed.invalid) block.invalid = true;
+    return block;
+  }
+
+  function makeBlock(spec) {
+    spec = spec || {};
+    var block = normalizeBlock(spec);
+    if (spec.title) block.title = String(spec.title).slice(0, 180);
+    var id = typeof spec.id === "string" && spec.id.indexOf("block:") === 0 ? spec.id : "block:" + uid().slice(5, 17);
+    return {
+      id: id,
+      kind: "block",
+      enabled: spec.enabled !== false,
+      required: !!spec.required,
+      rendererKey: "CUSTOM_BLOCK",
+      coverStyle: "GRADIENT_HERO",
+      params: { title: block.title || defaultBlockTitle(block.type), content: "" },
+      block: block
+    };
+  }
+
+  function tocMarkdown(state) {
+    var lines = [];
+    (state.sections || []).forEach(function (section) {
+      if (!section || !(section.enabled || section.required)) return;
+      if (section.id === "COVER" || section.id === "TABLE_OF_CONTENTS" || section.kind === "toc") return;
+      lines.push("- " + sectionTitle(state, section));
+    });
+    return lines.join("\n");
+  }
+
   function makeTemplate(spec) {
     spec = spec || {};
     var locale = normalizeLocale(spec.locale);
     var scale = normalizeScale(spec.severityScale);
     var enabled = Array.isArray(spec.enabled) ? spec.enabled : CATALOG.map(function (item) { return item.id; });
+    var required = Array.isArray(spec.required) ? spec.required : [];
     var custom = spec.sections || {};
     var sections = CATALOG.map(function (item) {
       var fromSpec = custom[item.id] || {};
@@ -279,11 +605,12 @@
       if (content == null) {
         content = item.id === "RISK_RATING" ? legendFor(scale, locale) : defaultBody(item.id, locale);
       }
+      var isRequired = required.indexOf(item.id) !== -1 || !!fromSpec.required;
       return {
         id: item.id,
         kind: item.kind,
-        enabled: enabled.indexOf(item.id) !== -1,
-        required: false,
+        enabled: isRequired || enabled.indexOf(item.id) !== -1,
+        required: isRequired,
         rendererKey: item.id,
         coverStyle: spec.coverStyle === "HEADER_BAND" ? "HEADER_BAND" : "GRADIENT_HERO",
         params: {
@@ -307,6 +634,9 @@
       contentPolicy: defaultPolicy(spec.contentPolicy),
       fields: defaultFields(locale, spec.fields),
       sections: sections,
+      styles: normalizeStyles(spec.styles),
+      page: normalizePage(spec.page),
+      logoBox: normalizeLogoBox(spec.logoBox),
       logoDataUrl: null,
       selectedId: "EXECUTIVE_SUMMARY"
     };
@@ -323,13 +653,22 @@
       var given = state.colors && state.colors.severity ? state.colors.severity[name] : "";
       severity[name] = hex(given, SEVERITY_COLORS[name]);
     });
+    var styles = normalizeStyles(state.styles);
+    var page = normalizePage(state.page);
     var nodes = [];
     (state.sections || []).forEach(function (section) {
       if (!section || section.id === "COVER") return;
       var params = {};
       var title = section.params && section.params.title ? String(section.params.title) : "";
       if (title) params.title = title;
-      if (kindOf(section.id) === "markdown") {
+      if (section.kind === "block" || section.rendererKey === "CUSTOM_BLOCK") {
+        var block = normalizeBlock(section.block || {});
+        if (!params.title) params.title = block.title || defaultBlockTitle(block.type, state.locale);
+        params.blockType = block.type;
+        params.spec = JSON.stringify(block);
+      } else if (section.kind === "toc" || section.id === "TABLE_OF_CONTENTS") {
+        params.content = tocMarkdown(state);
+      } else if (kindOf(section.id) === "markdown" || section.kind === "markdown") {
         params.content = section.params && section.params.content ? String(section.params.content) : "";
       }
       nodes.push({
@@ -337,7 +676,7 @@
         enabled: !!(section.enabled || section.required),
         order: nodes.length + 1,
         required: !!section.required,
-        rendererKey: section.rendererKey || section.id,
+        rendererKey: section.kind === "block" ? "CUSTOM_BLOCK" : (section.rendererKey || section.id),
         params: params
       });
     });
@@ -384,20 +723,20 @@
       pdfTheme: {
         primaryHex: primary,
         secondaryHex: secondary,
-        textHex: "#1A1A1A",
-        headingHex: primary,
+        textHex: styles.body.color,
+        headingHex: styles.heading.color,
         tableHeaderHex: mixWhite(primary, 0.85),
         severityHex: severity,
-        fontStack: "Helvetica",
-        baseFontSize: state.findingLayout === "TABULAR" ? 9 : 10,
+        fontStack: pdfFontName(styles.body.fontFamily),
+        baseFontSize: Math.max(8, Math.min(16, styles.body.fontSize)),
         pageBox: {
           pageSize: "A4",
-          marginTop: 50.0,
-          marginBottom: 40.0,
-          marginLeft: 40.0,
-          marginRight: 40.0,
-          showHeader: true,
-          showFooter: true
+          marginTop: mmToPt(page.marginTop),
+          marginBottom: mmToPt(page.marginBottom),
+          marginLeft: mmToPt(page.marginLeft),
+          marginRight: mmToPt(page.marginRight),
+          showHeader: page.showHeader,
+          showFooter: page.showFooter
         }
       },
       htmlTheme: {
@@ -405,10 +744,10 @@
         secondaryHex: secondary,
         backgroundHex: "#FFFFFF",
         cardBackgroundHex: "#F7F7F7",
-        textHex: "#1A1A1A",
+        textHex: styles.body.color,
         borderHex: "#DDDDDD",
         severityHex: severity,
-        fontStack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        fontStack: fontStack(styles.body.fontFamily),
         dark: false
       },
       builder: {
@@ -416,11 +755,15 @@
         templateId: state.templateId || null,
         companyName: str(fields.companyName),
         logoDataUrl: sanitizeLogo(state.logoDataUrl),
+        logoBox: normalizeLogoBox(state.logoBox),
+        coverRequired: !!(cover && cover.required),
+        styles: styles,
+        page: page,
         severityScale: normalizeScale(state.severityScale),
         sectionOrder: (state.sections || []).map(function (section) { return section.id; }),
         selectedId: state.selectedId || null,
         fields: fields,
-        note: "Ignored by ICARUS. Import this file from ICARUS → Reporting → Import. schemaVersion 1 is a ReportProfile. Reattach logos inside Burp; companyLogoPath is a disk path, not this preview image."
+        note: "Ignored by ICARUS except where a field is also copied above. Custom blocks are section nodes with rendererKey CUSTOM_BLOCK. Import this file from ICARUS → Reporting → Import. schemaVersion 1 stays a ReportProfile. Reattach logos inside Burp; companyLogoPath is a disk path, not this preview image."
       }
     };
   }
@@ -429,7 +772,7 @@
     if (!data || typeof data !== "object" || !data.sections || !Array.isArray(data.sections.nodes)) {
       throw new Error("sections");
     }
-    if (data.schemaVersion != null && String(data.schemaVersion) !== "1") {
+    if (data.schemaVersion != null && String(data.schemaVersion) !== "1" && String(data.schemaVersion) !== "2") {
       throw new Error("schema");
     }
     var builder = data.builder && typeof data.builder === "object" ? data.builder : {};
@@ -473,24 +816,28 @@
       var id = String(node.id);
       if (sections.some(function (section) { return section.id === id; })) return;
       var params = node.params && typeof node.params === "object" ? node.params : {};
+      var rendererKey = typeof node.rendererKey === "string" && node.rendererKey ? node.rendererKey : id;
+      var isBlock = rendererKey === "CUSTOM_BLOCK" || id.indexOf("block:") === 0;
+      var block = isBlock ? blockFromParams(params) : null;
       sections.push({
         id: id,
-        kind: kindOf(id),
-        enabled: node.enabled !== false,
+        kind: isBlock ? "block" : kindOf(id),
+        enabled: node.enabled !== false || !!node.required,
         required: !!node.required,
-        rendererKey: typeof node.rendererKey === "string" && node.rendererKey ? node.rendererKey : id,
+        rendererKey: isBlock ? "CUSTOM_BLOCK" : rendererKey,
         coverStyle: coverStyle,
+        block: block,
         params: {
-          title: typeof params.title === "string" && params.title ? params.title : titleFor(id, locale),
-          content: typeof params.content === "string" ? params.content : ""
+          title: typeof params.title === "string" && params.title ? params.title : (isBlock ? (block.title || defaultBlockTitle(block.type, locale)) : titleFor(id, locale)),
+          content: isBlock ? "" : (typeof params.content === "string" ? params.content : "")
         }
       });
     });
     var cover = {
       id: "COVER",
       kind: "cover",
-      enabled: data.coverRenderer !== "NONE",
-      required: false,
+      enabled: data.coverRenderer !== "NONE" || !!builder.coverRequired,
+      required: !!builder.coverRequired,
       rendererKey: "COVER",
       coverStyle: coverStyle,
       params: { title: titleFor("COVER", locale), content: "" }
@@ -512,7 +859,8 @@
       sections = [cover].concat(sections);
     }
     var hasRisk = sections.some(function (section) { return isRiskId(section.id); });
-    CATALOG.forEach(function (item) {
+    var explicitOrder = Array.isArray(builder.sectionOrder) && builder.sectionOrder.length > 0;
+    if (!explicitOrder) CATALOG.forEach(function (item) {
       if (item.id === "RISK_RATING" && hasRisk) return;
       if (sections.some(function (section) { return section.id === item.id; })) return;
       sections.push({
@@ -551,9 +899,49 @@
       contentPolicy: defaultPolicy(data.content || {}),
       fields: fields,
       sections: sections,
+      styles: builder.styles ? normalizeStyles(builder.styles) : stylesFromTheme(theme, pdf),
+      page: builder.page ? normalizePage(builder.page) : pageFromPdf(pdf.pageBox),
+      logoBox: normalizeLogoBox(builder.logoBox),
       logoDataUrl: sanitizeLogo(builder.logoDataUrl),
       selectedId: selected
     };
+  }
+
+  function stylesFromTheme(theme, pdf) {
+    var styles = defaultStyles();
+    styles.body.color = hex(theme.textHex || pdf.textHex, styles.body.color);
+    styles.heading.color = hex(theme.headingHex || pdf.headingHex, styles.heading.color);
+    styles.coverTitle.color = styles.heading.color;
+    var size = Number(pdf.baseFontSize);
+    if (size >= 8 && size <= 16) styles.body.fontSize = Math.round(size);
+    var font = String(pdf.fontStack || "");
+    if (/times/i.test(font)) styles.body.fontFamily = "georgia";
+    else if (/courier/i.test(font)) styles.body.fontFamily = "courier";
+    else styles.body.fontFamily = "helvetica";
+    STYLE_ROLES.forEach(function (role) {
+      if (role !== "body") styles[role].fontFamily = styles.body.fontFamily;
+      styles[role] = normalizeStyle(styles[role]);
+    });
+    styles.body = normalizeStyle(styles.body);
+    return styles;
+  }
+
+  function pageFromPdf(box) {
+    var page = defaultPage();
+    if (!box || typeof box !== "object") return page;
+    function mm(pt, fallback) {
+      var n = Number(pt);
+      if (!(n > 0)) return fallback;
+      var value = Math.round(n * 25.4 / 72);
+      return value >= 8 && value <= 40 ? value : fallback;
+    }
+    page.marginTop = mm(box.marginTop, page.marginTop);
+    page.marginBottom = mm(box.marginBottom, page.marginBottom);
+    page.marginLeft = mm(box.marginLeft, page.marginLeft);
+    page.marginRight = mm(box.marginRight, page.marginRight);
+    if (typeof box.showHeader === "boolean") page.showHeader = box.showHeader;
+    if (typeof box.showFooter === "boolean") page.showFooter = box.showFooter;
+    return page;
   }
 
   function buildVars(state) {
@@ -606,10 +994,14 @@
       }
       if (section.kind === "cover" || section.id === "COVER") {
         parts.push(coverHtml(state, docLevel, text));
+      } else if (section.kind === "block" || section.rendererKey === "CUSTOM_BLOCK") {
+        parts.push(blockHtml(state, section, sectionLevel));
       } else if (section.kind === "table" || section.id === "VULNERABILITY_SUMMARY") {
         parts.push(tableHtml(state, section, sectionLevel, text));
       } else if (section.kind === "detail" || section.id === "FINDINGS") {
         parts.push(detailHtml(state, section, sectionLevel, text));
+      } else if (section.kind === "toc" || section.id === "TABLE_OF_CONTENTS") {
+        parts.push(tocHtml(state, section, sectionLevel));
       } else {
         var body = section.params && section.params.content ? String(section.params.content) : "";
         if (!body.trim()) return;
@@ -681,6 +1073,20 @@
         return;
       }
       var body = section.params && section.params.content ? String(section.params.content).trim() : "";
+      if (section.kind === "block" || section.rendererKey === "CUSTOM_BLOCK") {
+        lines.push("## " + sectionTitle(state, section));
+        lines.push("");
+        lines.push(blockMarkdown(section));
+        lines.push("");
+        return;
+      }
+      if (section.kind === "toc" || section.id === "TABLE_OF_CONTENTS") {
+        lines.push("## " + sectionTitle(state, section));
+        lines.push("");
+        lines.push(tocMarkdown(state));
+        lines.push("");
+        return;
+      }
       if (!body) return;
       lines.push("## " + sectionTitle(state, section));
       lines.push("");
@@ -692,6 +1098,72 @@
     lines.push(text.footer);
     lines.push("");
     return lines.join("\n");
+  }
+
+  function styleCss(style) {
+    var s = normalizeStyle(style);
+    return "font-family:" + fontStack(s.fontFamily) +
+      ";font-size:" + s.fontSize + "pt;font-weight:" + (s.weight === "bold" ? "700" : "400") +
+      ";font-style:" + (s.italic ? "italic" : "normal") +
+      ";text-decoration:" + (s.underline ? "underline" : "none") +
+      ";color:" + s.color + ";text-align:" + s.align +
+      ";line-height:" + s.lineHeight +
+      ";margin-top:" + s.spaceBefore + "mm;margin-bottom:" + s.spaceAfter + "mm";
+  }
+
+  function severityCounts(state) {
+    var counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
+    sampleFindings(state && state.locale).forEach(function (finding) {
+      if (counts[finding.severity] != null) counts[finding.severity] += 1;
+    });
+    return counts;
+  }
+
+  function tocHtml(state, section, level) {
+    var heading = tag(level);
+    var items = [];
+    (state.sections || []).forEach(function (item) {
+      if (!item || !(item.enabled || item.required)) return;
+      if (item.id === "COVER" || item.id === section.id) return;
+      items.push("<li>" + esc(sectionTitle(state, item)) + "</li>");
+    });
+    return '<section class="block toc" data-section="' + esc(section.id) + '"><' + heading +
+      ' class="section-title" data-role="heading" data-section="' + esc(section.id) + '">' +
+      esc(sectionTitle(state, section)) + "</" + heading + '><ol class="toc-list" data-role="body" data-section="' +
+      esc(section.id) + '">' + items.join("") + "</ol></section>";
+  }
+
+  function blockHtml(state, section, level) {
+    var heading = tag(level);
+    var inner = "";
+    var api = root && root.IcarusBlocks;
+    if (api && typeof api.renderInner === "function") inner = api.renderInner(section, state);
+    else inner = '<p class="block-note">' + esc(sectionTitle(state, section)) + "</p>";
+    return '<section class="block custom-block" data-role="block" data-section="' + esc(section.id) + '"><' + heading +
+      ' class="section-title" data-role="heading" data-section="' + esc(section.id) + '">' +
+      esc(sectionTitle(state, section)) + "</" + heading + ">" + inner + "</section>";
+  }
+
+  function blockMarkdown(section) {
+    var block = section.block || blockFromParams(section.params || {});
+    if (BLOCK_TYPES.indexOf(block.type) === -1) {
+      return "_Unsupported block (" + String(block.type || "unknown").replace(/[^a-z0-9_-]/gi, "") + ") omitted._";
+    }
+    if (block.invalid) return "_This block could not be read._";
+    if (block.type === "callout") return "> " + String(block.text || "").replace(/\n/g, "\n> ");
+    if (block.type === "chart") {
+      return "_Chart (" + block.chart + (block.binding === "findingsBySeverity" ? ", findings by severity" : ", static values") + ")._";
+    }
+    if (block.type === "image") {
+      return block.dataUrl ? "![" + mdCell(block.alt || block.title || "image") + "](" + block.dataUrl + ")" : "_Image_";
+    }
+    if (block.type === "drawing") return "_Diagram._";
+    var head = "| " + block.columns.map(function (col) { return mdCell(col.label); }).join(" | ") + " |";
+    var rule = "| " + block.columns.map(function () { return "---"; }).join(" | ") + " |";
+    var rows = (block.rows || []).map(function (row) {
+      return "| " + block.columns.map(function (_, index) { return mdCell(row[index]); }).join(" | ") + " |";
+    });
+    return [head, rule].concat(rows).join("\n");
   }
 
   function coverHtml(state, level, text) {
@@ -1104,6 +1576,13 @@
       ".report a{color:#9a3412}",
       ".report .sample-flag{display:inline-block;margin:0 0 0.35rem;padding:0.05rem 0.45rem;border-radius:999px;background:#f4e3d4;color:#7c2d12;font-size:0.72rem;font-weight:700;letter-spacing:0.04em;text-transform:uppercase}",
       ".report .report-foot{margin-top:1.8rem;padding-top:0.7rem;border-top:1px solid #e0dbd3;color:#5c564c;font-size:0.8rem}",
+      ".report .custom-block svg{width:100%;height:auto;display:block}",
+      ".report .callout{border:1px solid #d7e2f5;border-left-width:4px;border-radius:8px;padding:0.7rem 0.85rem;background:#f5f8fd;margin:0.4rem 0 0.8rem}",
+      ".report .callout.warning{border-color:#f0d7a6;background:#fff8ee}",
+      ".report .callout.note{border-color:#e4e0d8;background:#faf9f6}",
+      ".report .block-note{color:#5c564c;font-size:0.85rem}",
+      ".report .toc-list{margin:0.3rem 0 0.8rem;padding-left:1.2rem}",
+      ".report .diagram{width:100%;background:#fbfbfc;border:1px solid #e6e8ee;border-radius:8px}",
       "@page{size:A4;margin:14mm}",
       "@media print{.report .cover-hero,.report .cover-band .band,.report .sev,.report .count-pill,.report th{print-color-adjust:exact;-webkit-print-color-adjust:exact}}"
     ].join("\n");
@@ -1274,12 +1753,51 @@
     assert(toReportProfile(state).coverRenderer === "NONE", "cover off");
     assert(inkOn("#B38F00") === "#1a1a1a", "gold ink");
     assert(inkOn("#CC2E2E") === "#ffffff", "red ink");
+    var block = makeBlock({ type: "chart", chart: "bar", binding: "findingsBySeverity", title: "Findings by severity" });
+    var withBlock = makeTemplate({ name: "Blocks", locale: "en", enabled: ["COVER", "EXECUTIVE_SUMMARY"] });
+    withBlock.sections.splice(1, 0, block);
+    withBlock.sections.forEach(function (section) { if (section.id === "COVER") section.required = true; });
+    withBlock.styles.heading.align = "center";
+    withBlock.styles.body.fontSize = 12;
+    var exported = toReportProfile(withBlock);
+    var blockNode = exported.sections.nodes.filter(function (node) { return node.rendererKey === "CUSTOM_BLOCK"; })[0];
+    assert(blockNode && blockNode.params.blockType === "chart", "block type exported");
+    assert(blockNode.params.spec.indexOf("findingsBySeverity") !== -1, "binding exported");
+    assert(exported.sections.nodes.every(function (node) { return node.id !== "COVER"; }), "cover still not a node");
+    assert(exported.pdfTheme.fontStack === "Helvetica", "pdf font");
+    assert(exported.pdfTheme.baseFontSize === 12, "body size mapped");
+    assert(exported.pdfTheme.textHex === withBlock.styles.body.color, "text color mapped");
+    var imported = fromReportProfile(exported);
+    var backBlock = imported.sections.filter(function (section) { return section.kind === "block"; })[0];
+    assert(backBlock && backBlock.block.binding === "findingsBySeverity", "block roundtrip");
+    assert(imported.sections.filter(function (section) { return section.id === "COVER"; })[0].required === true, "cover required");
+    assert(imported.styles.heading.align === "center", "align roundtrip");
+    var classic = fromReportProfile({
+      schemaVersion: "1",
+      name: "Legacy",
+      locale: "en",
+      coverRenderer: "GRADIENT_HERO",
+      findingRenderer: "ELEVATED_CARD",
+      sections: { nodes: [
+        { id: "EXECUTIVE_SUMMARY", enabled: true, order: 1, required: true, rendererKey: "EXECUTIVE_SUMMARY", params: { title: "Summary", content: "Still here" } },
+        { id: "block:mystery", enabled: true, order: 2, required: false, rendererKey: "CUSTOM_BLOCK", params: { title: "Mystery", blockType: "hologram", spec: "{\"type\":\"hologram\"}" } },
+        { id: "block:broken", enabled: true, order: 3, required: false, rendererKey: "CUSTOM_BLOCK", params: { title: "Broken", blockType: "chart", spec: "{not json" } }
+      ] }
+    });
+    assert(classic.sections.some(function (section) { return section.id === "EXECUTIVE_SUMMARY" && section.required && section.params.content === "Still here"; }), "legacy section kept");
+    var mystery = classic.sections.filter(function (section) { return section.id === "block:mystery"; })[0];
+    assert(mystery && mystery.block.type === "hologram" && mystery.block.unsupported, "unknown block kept");
+    var broken = classic.sections.filter(function (section) { return section.id === "block:broken"; })[0];
+    assert(broken && broken.block.invalid, "bad spec marked");
+    assert(blockMarkdown(mystery).indexOf("Unsupported block") !== -1, "unknown block degrades in markdown");
     return errors;
   }
 
   return {
     SPEC: SPEC,
     CATALOG: CATALOG,
+    BLOCK_TYPES: BLOCK_TYPES,
+    STYLE_ROLES: STYLE_ROLES,
     PRESETS: PRESETS,
     SEVERITY_ALL: SEVERITY_ALL,
     SEVERITY_COLORS: SEVERITY_COLORS,
@@ -1288,10 +1806,19 @@
     titleFor: titleFor,
     legendFor: legendFor,
     makeTemplate: makeTemplate,
+    makeBlock: makeBlock,
+    normalizeBlock: normalizeBlock,
+    normalizeStyles: normalizeStyles,
+    normalizePage: normalizePage,
+    normalizeLogoBox: normalizeLogoBox,
+    styleCss: styleCss,
+    fontStack: fontStack,
+    severityCounts: severityCounts,
     toReportProfile: toReportProfile,
     fromReportProfile: fromReportProfile,
     renderReport: renderReport,
     renderMarkdown: renderMarkdown,
+    fillText: function (state, text) { return interpolate(text, buildVars(state)); },
     toHtmlDocument: toHtmlDocument,
     toMarkdown: toMarkdown,
     reportCss: reportCss,

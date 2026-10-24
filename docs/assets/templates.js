@@ -11,8 +11,23 @@
   var all = P.CATALOG.map(function (item) { return item.id; });
   var quick = ["COVER", "EXECUTIVE_SUMMARY", "ASSESSMENT_SCOPE", "RISK_RATING", "VULNERABILITY_SUMMARY", "FINDINGS", "REMEDIATION"];
 
+  function withChart(state, title) {
+    var chart = P.makeBlock({
+      type: "chart",
+      chart: "bar",
+      binding: "findingsBySeverity",
+      title: title
+    });
+    var at = 0;
+    state.sections.forEach(function (section, index) {
+      if (section.id === "VULNERABILITY_SUMMARY") at = index;
+    });
+    state.sections.splice(at, 0, chart);
+    return state;
+  }
+
   return [
-    P.makeTemplate({
+    withChart(P.makeTemplate({
       id: "web-app",
       name: "Web application pentest",
       locale: "en",
@@ -21,6 +36,7 @@
       findingLayout: "ELEVATED_CARD",
       severityScale: "cvss",
       enabled: all,
+      required: ["COVER", "CONFIDENTIALITY", "EXECUTIVE_SUMMARY", "FINDINGS", "RISK_RATING"],
       fields: {
         companyName: "Example Security",
         documentTitle: "Web Application Penetration Test",
@@ -58,7 +74,7 @@
           content: "## References\n\n- OWASP Top 10\n- OWASP Web Security Testing Guide\n- OWASP Application Security Verification Standard\n- NIST National Vulnerability Database\n- CWE (Common Weakness Enumeration)\n\n## Document control\n\n- Classification: {{classification}}\n- Author: {{author}}\n- Reviewer: {{reviewer}}\n- Approver: {{approver}}\n- Version: {{version}}\n- Date: {{date}}\n- Project: {{project}}"
         }
       }
-    }),
+    }), "Findings by severity"),
     P.makeTemplate({
       id: "internal-network",
       name: "Internal network assessment",
@@ -68,6 +84,7 @@
       findingLayout: "TABULAR",
       severityScale: "cvss",
       enabled: all,
+      required: ["COVER", "CONFIDENTIALITY", "TABLE_OF_CONTENTS", "EXECUTIVE_SUMMARY", "FINDINGS"],
       fields: {
         companyName: "Example Security",
         documentTitle: "Internal Network Assessment",
@@ -115,6 +132,7 @@
       findingLayout: "ELEVATED_CARD",
       severityScale: "cvss",
       enabled: quick,
+      required: ["COVER", "EXECUTIVE_SUMMARY", "FINDINGS"],
       contentPolicy: {
         includeEvidence: true,
         includeHttpRequest: false,

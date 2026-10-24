@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" id="meta-desc" content="Design a penetration test report template in the browser and export it for ICARUS. Nothing is uploaded.">
+  <title>ICARUS report template builder</title>
+  <link rel="icon" href="assets/favicon.svg">
+  <link rel="stylesheet" href="assets/app.css">
+</head>
+<body>
+  <a class="skip" href="#artboard">Skip to the page</a>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M3 22c6.2-1.6 10.2-7.4 13-14.5C18.8 14.6 22.8 20.4 29 22c-6.2-1-10-3.2-13-7.6C13 18.8 9.2 21 3 22z"/></svg>
+      <div>
+        <p class="eyebrow">ICARUS</p>
+        <label class="sr" for="template-name" data-i18n="templateName">Template name</label>
+        <input id="template-name" class="name" type="text" maxlength="120" autocomplete="off">
+      </div>
+    </div>
+    <div class="top-tools">
+      <button type="button" id="undo" class="icon-btn" disabled data-i18n-title="undo" aria-label="Undo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7H4v4"/><path d="M4 11a8 8 0 1 1 2 5"/></svg>
+      </button>
+      <button type="button" id="redo" class="icon-btn" disabled data-i18n-title="redo" aria-label="Redo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 7h4v4"/><path d="M20 11a8 8 0 1 0-2 5"/></svg>
+      </button>
+      <div class="zoom" role="group" aria-label="Zoom">
+        <button type="button" id="zoom-out" class="icon-btn" aria-label="Zoom out">−</button>
+        <button type="button" id="zoom-label" class="zoom-label">100%</button>
+        <button type="button" id="zoom-in" class="icon-btn" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-fit" class="text-btn" data-i18n="fit">Fit</button>
+      </div>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-set-lang="pt-BR" aria-pressed="false">PT</button>
+      </div>
+    </div>
+    <div class="top-actions">
+      <label class="starter-pick">
+        <span class="sr" data-i18n="starters">Starter templates</span>
+        <select id="starter"></select>
+      </label>
+      <button type="button" id="ai-open" class="text-btn" data-i18n="aiExport">AI prompt</button>
+      <button type="button" id="ai-import-open" class="text-btn" data-i18n="aiImport">Import from AI</button>
+      <label class="text-btn file-btn">
+        <span data-i18n="importAction">Import</span>
+        <input id="import-file" type="file" accept="application/json,.json">
+      </label>
+      <div class="export-wrap">
+        <button type="button" id="export-open" class="primary" data-i18n="exportBtn">Export</button>
+        <div id="export-menu" class="menu" hidden>
+          <button type="button" data-export="json" data-i18n="exportJson">JSON for ICARUS</button>
+          <button type="button" data-export="html" data-i18n="exportHtml">HTML</button>
+          <button type="button" data-export="md" data-i18n="exportMd">Markdown</button>
+          <button type="button" data-export="print" data-i18n="printPdf">Print / PDF</button>
+        </div>
+      </div>
+    </div>
+  </header>
+  <p id="status" class="status" role="status"></p>
+  <nav class="mobile-tabs" aria-label="Panels">
+    <button type="button" data-mobile="pages" data-i18n="mobilePages">Pages</button>
+    <button type="button" data-mobile="canvas" data-i18n="mobileCanvas" aria-pressed="true">Canvas</button>
+    <button type="button" data-mobile="style" data-i18n="mobileStyle">Style</button>
+  </nav>
+  <div class="workspace" id="workspace" data-mobile="canvas">
+    <aside class="pane pane-left" aria-label="Pages">
+      <div class="pane-head">
+        <h2 data-i18n="pages">Pages</h2>
+      </div>
+      <ul id="page-list" class="page-list"></ul>
+      <div class="pane-head sub">
+        <h2 data-i18n="addBlock">Add</h2>
+      </div>
+      <div id="palette" class="palette"></div>
+    </aside>
+    <main class="canvas-wrap" id="artboard">
+      <div id="stack" class="stack"></div>
+    </main>
+    <aside class="pane pane-right" aria-label="Properties">
+      <div class="tabs" role="tablist">
+        <button type="button" data-tab="style" aria-selected="true" data-i18n="styleTab">Style</button>
+        <button type="button" data-tab="page" data-i18n="pageTab">Page</button>
+        <button type="button" data-tab="document" data-i18n="documentTab">Document</button>
+      </div>
+      <div id="inspector" class="inspector"></div>
+    </aside>
+  </div>
+  <footer class="site-foot">
+    <p data-i18n="footerNote">ICARUS is free software, for authorized testing only.</p>
+    <p id="support" class="support" hidden></p>
+    <p class="foot-links">
+      <a id="repo-link" href="https://github.com/IcarusSec/ICARUS">GitHub</a>
+      <a id="docs-link" href="https://github.com/IcarusSec/ICARUS/tree/main/docs">Docs</a>
+      <a id="bapp-link" href="https://portswigger.net/bappstore">BApp Store</a>
+    </p>
+  </footer>
+
+  <dialog id="ai-dialog">
+    <form method="dialog" class="dialog-card">
+      <header>
+        <h2 data-i18n="aiExport">AI prompt</h2>
+        <button type="submit" class="icon-btn" aria-label="Close">×</button>
+      </header>
+      <p class="hint" data-i18n="aiHelp"></p>
+      <textarea id="ai-prompt" readonly></textarea>
+      <div class="dialog-actions">
+        <button type="button" id="ai-copy" class="text-btn" data-i18n="copyPrompt">Copy prompt</button>
+        <button type="button" id="ai-download" class="primary" data-i18n="downloadPrompt">Download</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="ai-import-dialog">
+    <form method="dialog" class="dialog-card">
+      <header>
+        <h2 data-i18n="aiImport">Import from AI</h2>
+        <button type="submit" class="icon-btn" aria-label="Close">×</button>
+      </header>
+      <p class="hint" data-i18n="aiHelp"></p>
+      <label class="sr" for="ai-answer" data-i18n="pasteAnswer">Paste the JSON answer</label>
+      <textarea id="ai-answer"></textarea>
+      <ul id="ai-errors" class="errors"></ul>
+      <div class="dialog-actions">
+        <button type="button" id="ai-apply" class="primary" data-i18n="applyAnswer">Apply</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="confirm-dialog">
+    <form method="dialog" class="dialog-card narrow">
+      <header><h2 id="confirm-title"></h2></header>
+      <p id="confirm-body"></p>
+      <div class="dialog-actions">
+        <button type="submit" class="text-btn" value="cancel" data-i18n="cancel">Cancel</button>
+        <button type="submit" class="primary" id="confirm-ok" value="ok"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="assets/config.js"></script>
+  <script src="assets/profile.js"></script>
+  <script src="assets/blocks.js"></script>
+  <script src="assets/ai.js"></script>
+  <script src="assets/templates.js"></script>
+  <script src="assets/i18n.js"></script>
+  <script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 # ICARUS - Enterprise API Security Assessment Framework
 
-Welcome to the official documentation for **ICARUS**, a next-generation security testing extension for Burp Suite. 
+Welcome to the official documentation for **ICARUS**, a next-generation security testing extension for Burp Suite.
+
+> **Report template builder:** [design a profile in the browser](index.html) and export JSON for **ICARUS → Reporting → Import**. On GitHub Pages this file's folder is served as the site, and `index.html` is the home page. 
 
 ## Documentation Structure
 

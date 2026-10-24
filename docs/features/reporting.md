@@ -32,3 +32,9 @@ Findings marked as "Fixed" will have their evidence images automatically stamped
 Reports can be exported in two formats directly from the Evidence Manager:
 1. **Interactive HTML:** A single-file, highly responsive HTML document containing embedded Base64 images and interactive tables. Great for sharing via email or Slack.
 2. **Professional PDF:** A strictly formatted, paginated PDF generated natively offline via OpenPDF. It features a Table of Contents, page-break-safe finding cards, and vector-crisp text.
+
+## Template builder
+
+Profiles are JSON documents with `schemaVersion` `1` (`ReportProfile`: sections, branding, themes, cover and finding renderers). A static builder in this `docs/` folder edits that same file in the browser on an A4 canvas and can download HTML, Markdown, or a print layout. Open [the builder](../index.html), export JSON, then use **ICARUS → Reporting → Import**. Logos in the builder are for the preview; Burp reads a file path, so attach the image again after import.
+
+A section with `required: true` stays enabled. The builder can also insert custom blocks as nodes whose `rendererKey` is `CUSTOM_BLOCK`. `params.blockType` is `chart`, `table`, `drawing`, `image`, or `callout`, and `params.spec` is a JSON string. A chart with `"binding": "findingsBySeverity"` is filled from findings when a report is generated. An unknown block type is kept in the file and skipped at render time, so older profiles still import. Per-element fonts and alignment live in the ignored `builder` object; the colors, body size, PDF font name, and page margins that Burp already understands are copied into `pdfTheme` and `htmlTheme`.

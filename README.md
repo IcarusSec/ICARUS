@@ -147,6 +147,16 @@ For a deep dive into ICARUS's capabilities, check out our official documentation
 
 *(See the `docs/` folder for complete technical architecture and module guides).*
 
+## 📝 Report template builder
+
+Design a pentest report template in the browser. The studio is a page list, an A4 canvas, and a style panel: fonts, size, color, bold, italic, underline, alignment, and spacing. Pages can be marked required so a later user of the template cannot turn them off. Charts, tables, diagrams, images, and callouts can be dropped into the flow. Nothing is uploaded. Drafts stay in the browser.
+
+- **Open it:** [`docs/index.html`](docs/index.html). After GitHub Pages is enabled (Settings → Pages → Deploy from branch → `main` → `/docs`), the site is <https://icarussec.github.io/ICARUS/>.
+- **Use it in Burp:** export JSON, then in Burp open **ICARUS → Reporting → Import**. The file is a report profile (`schemaVersion` 1), the same format as **Reporting → Export**. Custom blocks are section nodes with `rendererKey` `CUSTOM_BLOCK`.
+- **HTML, Markdown, and print** follow the A4 canvas, with sample findings. Print the page, or the downloaded HTML, to PDF from the browser.
+- **AI assist** copies a prompt you can paste into any model, then checks the JSON you paste back. The page does not call an AI API.
+- **Donation links** stay hidden until the placeholders in [`docs/assets/config.js`](docs/assets/config.js) are replaced. That file is also where the BApp listing URL goes once the extension is on the store.
+
 ---
 
 ## 🛠 Usage Guidelines

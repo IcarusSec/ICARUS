@@ -30,6 +30,9 @@ public class EvidenceManagerTab {
     private final ModuleConfig config;
     private final MontoyaApi api;
     private Runnable onReload;
+    /** A findings-registry refresh arrived while a detail text field had focus. Applied on focus loss. */
+    private boolean registryReloadDeferred;
+    private Runnable flushRegistryReload = () -> {};
 
     private static final DataFlavor EVIDENCE_DRAG_FLAVOR = new DataFlavor(EvidenceCapture.CapturedEvidence.class, "ICARUS Evidence Card");
     private static final DataFlavor FINDING_DRAG_FLAVOR = new DataFlavor(String.class, "ICARUS Finding Hash");
@@ -81,6 +84,9 @@ public class EvidenceManagerTab {
             JLabel titleLabel = new JLabel(display.type());
             titleLabel.setForeground(panel.getForeground());
             titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 13f));
+            // The row is a fixed height and the list assigns the width. Don't let an
+            // unbroken title report a preferred width of thousands of pixels.
+            titleLabel.setMinimumSize(new Dimension(0, 0));
 
             JPanel leftPanel = new JPanel(new BorderLayout(8, 0));
             leftPanel.setOpaque(false);
@@ -106,24 +112,53 @@ public class EvidenceManagerTab {
         detailScroll.setBorder(BorderFactory.createEmptyBorder());
 
         Runnable[] refreshAllRef = new Runnable[1];
+        // Set while reload() is rewriting the list model, so the selection listener doesn't
+        // rebuild the detail panel once per intermediate selection (clear, then reselect).
+        boolean[] suppressSelectionRefresh = {false};
+        // True when the latest reload changed which screenshots exist, or their order.
+        // A caption edit swaps the record in place and must not set this.
+        boolean[] evidenceStructureChanged = {true};
 
         Runnable reload = () -> icarus.core.DebugLog.timed(
                 "EvidenceManagerTab.reload (" + orchestrator.getEvidenceCapture().getCaptured().size() + " captured)",
                 () -> {
+            List<EvidenceCapture.CapturedEvidence> captured = orchestrator.getEvidenceCapture().getCaptured();
+            boolean sameStructure = evidenceStructureKeys(captured).equals(evidenceStructureKeys(hashOrder, groups));
+            evidenceStructureChanged[0] = !sameStructure;
+            if (sameStructure) {
+                // Keep the list instances the open cards already hold, and only swap in the
+                // new records (new caption text, same screenshot). Rebuilding the detail
+                // panel here would remove the caption field mid-keystroke and drop focus.
+                int cursor = 0;
+                for (String hash : hashOrder) {
+                    List<EvidenceCapture.CapturedEvidence> existing = groups.get(hash);
+                    for (int i = 0; i < existing.size(); i++, cursor++) {
+                        existing.set(i, captured.get(cursor));
+                    }
+                }
+                masterList.repaint();
+                return;
+            }
+
             String selectedHash = masterList.getSelectedValue();
             hashOrder.clear();
             groups.clear();
-            for (var ce : orchestrator.getEvidenceCapture().getCaptured()) {
+            for (var ce : captured) {
                 String hash = ce.finding().similarityHash();
                 if (!groups.containsKey(hash)) hashOrder.add(hash);
                 groups.computeIfAbsent(hash, h -> new ArrayList<>()).add(ce);
             }
-            masterModel.clear();
-            hashOrder.forEach(masterModel::addElement);
-            if (selectedHash != null && hashOrder.contains(selectedHash)) {
-                masterList.setSelectedValue(selectedHash, true);
-            } else if (!hashOrder.isEmpty()) {
-                masterList.setSelectedIndex(0);
+            suppressSelectionRefresh[0] = true;
+            try {
+                masterModel.clear();
+                hashOrder.forEach(masterModel::addElement);
+                if (selectedHash != null && hashOrder.contains(selectedHash)) {
+                    masterList.setSelectedValue(selectedHash, true);
+                } else if (!hashOrder.isEmpty()) {
+                    masterList.setSelectedIndex(0);
+                }
+            } finally {
+                suppressSelectionRefresh[0] = false;
             }
         });
 
@@ -158,15 +193,43 @@ public class EvidenceManagerTab {
         });
 
         masterList.addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) refreshDetail.run();
+            if (suppressSelectionRefresh[0] || e.getValueIsAdjusting()) return;
+            refreshDetail.run();
         });
 
         refreshAllRef[0] = () -> { reload.run(); refreshDetail.run(); };
         refreshAllRef[0].run();
         this.onReload = refreshAllRef[0];
 
-        this.orchestrator.getEvidenceCapture().addChangeListener(this::reload);
-        this.orchestrator.addListener(records -> this.reload());
+        // Caption (and include-toggle) edits notify this listener on every change. Rebuild the
+        // detail panel only when the screenshot list actually changed shape; otherwise the
+        // caption text area is removed and recreated and keyboard focus dies after one character.
+        this.orchestrator.getEvidenceCapture().addChangeListener(() -> {
+            reload.run();
+            if (evidenceStructureChanged[0]) refreshDetail.run();
+        });
+        // Registry updates (passive scan, autosave restore, an explicit updateFinding) used to
+        // call reload(), which always rebuilds the detail panel. Doing that while the title
+        // field is focused removes it, and focusLost then commits whatever prefix was typed.
+        // Unchanged evidence shape only needs a list repaint; a real shape change waits until
+        // the user leaves the field.
+        flushRegistryReload = () -> {
+            if (!registryReloadDeferred) return;
+            // Focus moved from the title to the caption (or the other way). Keep deferring
+            // until the user actually leaves the text fields, so neither edit is wiped.
+            if (detailTextFocused(detailPanel)) return;
+            registryReloadDeferred = false;
+            reload.run();
+            if (evidenceStructureChanged[0]) refreshDetail.run();
+        };
+        this.orchestrator.addListener(records -> {
+            if (detailTextFocused(detailPanel)) {
+                registryReloadDeferred = true;
+                return;
+            }
+            reload.run();
+            if (evidenceStructureChanged[0]) refreshDetail.run();
+        });
 
         JToolBar masterToolbar = new JToolBar();
         masterToolbar.setFloatable(false);
@@ -546,6 +609,38 @@ public class EvidenceManagerTab {
         return row;
     }
 
+    /** True while the user is typing in the title, CWE, or caption field of the open detail. */
+    private static boolean detailTextFocused(Component detailPanel) {
+        Component focus = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        return focus instanceof javax.swing.text.JTextComponent
+                && SwingUtilities.isDescendingFrom(focus, detailPanel);
+    }
+
+    /**
+     * Identity of the evidence list for reload purposes: finding hash plus screenshot path,
+     * in display order. Caption text is deliberately not part of it.
+     */
+    private static List<String> evidenceStructureKeys(List<EvidenceCapture.CapturedEvidence> captured) {
+        List<String> keys = new ArrayList<>(captured.size());
+        for (EvidenceCapture.CapturedEvidence ce : captured) {
+            keys.add(ce.finding().similarityHash() + "\0" + ce.imagePath());
+        }
+        return keys;
+    }
+
+    private static List<String> evidenceStructureKeys(List<String> hashOrder,
+                                                      Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
+        List<String> keys = new ArrayList<>();
+        for (String hash : hashOrder) {
+            List<EvidenceCapture.CapturedEvidence> group = groups.get(hash);
+            if (group == null) continue;
+            for (EvidenceCapture.CapturedEvidence ce : group) {
+                keys.add(ce.finding().similarityHash() + "\0" + ce.imagePath());
+            }
+        }
+        return keys;
+    }
+
     private void syncGroupsToCapture(List<String> hashOrder, Map<String, List<EvidenceCapture.CapturedEvidence>> groups) {
         List<EvidenceCapture.CapturedEvidence> flat = new ArrayList<>();
         for (String hash : hashOrder) flat.addAll(groups.get(hash));
@@ -648,6 +743,11 @@ public class EvidenceManagerTab {
             private void save() {
                 ceRef[0] = orchestrator.getEvidenceCapture().setCaption(ceRef[0], txtCaption.getText());
                 group.set(indexInGroup, ceRef[0]);
+            }
+        });
+        txtCaption.addFocusListener(new java.awt.event.FocusAdapter() {
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (!e.isTemporary()) flushRegistryReload.run();
             }
         });
         right.add(captionPanel, BorderLayout.CENTER);
@@ -895,7 +995,13 @@ public class EvidenceManagerTab {
         header.add(titleLbl, gbc);
         
         gbc.gridx = 1; gbc.weightx = 1.0; gbc.gridwidth = 3;
-        JTextField txtTitle = new JTextField(current.type());
+        // Column count, not the string, sets the preferred width. A title of several
+        // hundred characters (or one long unbroken token) would otherwise make this
+        // field, and the caption buttons pinned to the card's right edge, wider than
+        // the window. The document still holds the full title; HTML/PDF reports read
+        // Finding.type(), not the visible slice.
+        JTextField txtTitle = new JTextField(current.type(), 24);
+        txtTitle.setMinimumSize(new Dimension(80, txtTitle.getPreferredSize().height));
         txtTitle.putClientProperty("FlatLaf.style", "margin: 6,8,6,8; arc: 8;");
         header.add(txtTitle, gbc);
 
@@ -957,12 +1063,20 @@ public class EvidenceManagerTab {
         };
 
         txtTitle.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) { save.run(); }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (e.isTemporary()) return;
+                save.run();
+                flushRegistryReload.run();
+            }
         });
         txtTitle.addActionListener(e -> save.run());
         comboSeverity.addActionListener(e -> save.run());
         txtCwe.addFocusListener(new java.awt.event.FocusAdapter() {
-            @Override public void focusLost(java.awt.event.FocusEvent e) { save.run(); }
+            @Override public void focusLost(java.awt.event.FocusEvent e) {
+                if (e.isTemporary()) return;
+                save.run();
+                flushRegistryReload.run();
+            }
         });
         txtCwe.addActionListener(e -> save.run());
 

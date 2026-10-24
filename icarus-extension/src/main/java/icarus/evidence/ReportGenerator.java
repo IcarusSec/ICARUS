@@ -174,6 +174,10 @@ public final class ReportGenerator {
         appendProfileHtmlSummary(sb, ctx);
 
         for (var node : ctx.profile().sections().enabledInOrder()) {
+            if (icarus.report.blocks.CustomBlockParser.isCustomBlock(node)) {
+                icarus.report.blocks.CustomBlockRenderer.renderHtml(sb, node, ctx);
+                continue;
+            }
             String id = node.id().toUpperCase();
             if ("FINDINGS".equals(id)) {
                 var findingRenderer = registry.getFinding(ctx.profile().findingRenderer());
@@ -228,6 +232,14 @@ public final class ReportGenerator {
             .append("      margin: 0; padding: 2rem;\n")
             .append("    }\n")
             .append("    .container { max-width: 1000px; margin: 0 auto; }\n")
+            .append("    .icarus-block { margin: 1.5rem 0; }\n")
+            .append("    .icarus-block svg { width: 100%; height: auto; }\n")
+            .append("    .icarus-block-table { width: 100%; border-collapse: collapse; }\n")
+            .append("    .icarus-block-table th, .icarus-block-table td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; }\n")
+            .append("    .icarus-block-table th { background: var(--card-bg); }\n")
+            .append("    .icarus-callout { border: 1px solid #D7E2F5; background: #F5F8FD; padding: 0.75rem 1rem; border-radius: 6px; }\n")
+            .append("    .icarus-callout.warning { background: #FFF8EE; border-color: #F0D7B0; }\n")
+            .append("    .icarus-block-note { color: #666; font-style: italic; }\n")
             .append("  </style>\n")
             .append("</head>\n<body><div class=\"container\">\n");
     }

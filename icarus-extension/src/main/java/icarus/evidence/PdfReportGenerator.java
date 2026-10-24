@@ -251,6 +251,10 @@ public final class PdfReportGenerator {
 
             // Sections
             for (var node : profile.sections().enabledInOrder()) {
+                if (icarus.report.blocks.CustomBlockParser.isCustomBlock(node)) {
+                    icarus.report.blocks.CustomBlockRenderer.renderPdf(doc, writer, node, ctx);
+                    continue;
+                }
                 String id = node.id().toUpperCase();
                 if ("FINDINGS".equals(id)) {
                     appendProfileSummary(doc, ctx, accent);

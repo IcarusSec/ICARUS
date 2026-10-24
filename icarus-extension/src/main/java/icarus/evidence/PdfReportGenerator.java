@@ -228,6 +228,11 @@ public final class PdfReportGenerator {
         Path reportDir = outputPdfFile.toAbsolutePath().getParent();
         if (reportDir != null) Files.createDirectories(reportDir);
 
+        if (icarus.report.canvas.CanvasPages.hasCanvas(ctx.profile())) {
+            icarus.report.canvas.CanvasPageRenderer.writePdf(ctx, outputPdfFile);
+            return true;
+        }
+
         icarus.report.model.ReportProfile profile = ctx.profile();
         Color accent = themeColor(profile.pdfTheme().primaryHex(), ACCENT);
         Color accent2 = themeColor(profile.pdfTheme().secondaryHex(), accent);

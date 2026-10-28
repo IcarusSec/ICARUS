@@ -149,11 +149,15 @@ For a deep dive into ICARUS's capabilities, check out our official documentation
 
 ## 📝 Report template builder
 
-Design a pentest report the way you would a poster. Each page is a free-form A4 canvas: drag, resize, rotate, type directly, group, and snap. Text can hold fields such as `{{client}}` and `{{count_critical}}` that Burp fills in when the report is generated. Nothing is uploaded. Drafts stay in the browser.
+Design a pentest report the way you would a poster. Each page is a free-form A4 canvas: drag, resize, rotate, type directly, group, and snap. Text can hold fields such as `{{client}}` and `{{count_critical}}` that Burp fills in when the report is generated. Nothing is uploaded. Drafts stay in the browser. The studio is in English and Brazilian Portuguese.
+
+The basics are on screen: click a tile or drag it onto the page, drop or paste an image, and pick colours from your brand palette. Opacity, letter spacing, chart data, and table columns are under **More options** and in each element's panel. Press <kbd>?</kbd> for every keyboard shortcut, and right-click for the context menu.
 
 - **Open it:** [`docs/index.html`](docs/index.html). After GitHub Pages is enabled (Settings → Pages → Deploy from branch → `main` → `/docs`), the site is <https://icarussec.github.io/ICARUS/>.
-- **Use it in Burp:** export JSON, or copy a share link. In Burp open **ICARUS → Reporting → Import**. The file is a report profile (`schemaVersion` 1). Each designed page is a section with `rendererKey` `CANVAS_PAGE`.
-- **Print** follows the page on screen. The same coordinates are what the ICARUS PDF uses.
+- **Use it in Burp:** export JSON. In Burp open **ICARUS → Reporting → Import**. The file is a report profile (`schemaVersion` 1). Each designed page is a section with `rendererKey` `CANVAS_PAGE`.
+- **Share it:** **Share link** copies a URL that opens the design in someone else's browser. Designs with large photos are too big for a link; send the JSON instead.
+- **Print / PDF and HTML preview** include every page, filled with the sample data from the Brand tab. Burp's PDF uses the same coordinates and fonts.
+- **Images** are resized and stored as JPEG or PNG inside the template, so the Burp PDF can read them whatever format you uploaded.
 - **AI assist** copies a prompt that documents the page format, including a finished cover, then checks the JSON you paste back. The page does not call an AI API.
 - **Donation links** stay hidden until the placeholders in [`docs/assets/config.js`](docs/assets/config.js) are replaced. That file is also where the BApp listing URL goes once the extension is on the store.
 

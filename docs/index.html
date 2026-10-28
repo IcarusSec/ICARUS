@@ -3,147 +3,134 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" id="meta-desc" content="Design a penetration test report template in the browser and export it for ICARUS. Nothing is uploaded.">
-  <title>ICARUS report template builder</title>
-  <link rel="icon" href="assets/favicon.svg">
+  <title>ICARUS report studio</title>
+  <meta name="description" content="Design the cover and pages of a penetration-test report in the browser, then import the template into ICARUS for Burp Suite. Nothing is uploaded.">
+  <meta name="theme-color" content="#ffffff">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="ICARUS report studio">
+  <meta property="og:description" content="Design a penetration-test report the way you would a poster. Free, open source, and nothing leaves your browser.">
+  <meta property="og:url" content="https://icarussec.github.io/ICARUS/">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/Inter-Regular.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="preload" href="assets/fonts/Inter-Bold.ttf" as="font" type="font/ttf" crossorigin>
   <link rel="stylesheet" href="assets/app.css">
 </head>
 <body>
-  <a class="skip" href="#artboard">Skip to the page</a>
+  <a class="skip" href="#stage" data-i18n="skip">Skip to the page</a>
+  <noscript><p class="noscript">The report studio needs JavaScript. Everything runs in your browser; nothing is uploaded.</p></noscript>
   <header class="topbar">
     <div class="brand">
       <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path fill="currentColor" d="M3 22c6.2-1.6 10.2-7.4 13-14.5C18.8 14.6 22.8 20.4 29 22c-6.2-1-10-3.2-13-7.6C13 18.8 9.2 21 3 22z"/></svg>
       <div>
-        <p class="eyebrow">ICARUS</p>
+        <p class="eyebrow">ICARUS <span data-i18n="studio">Report studio</span></p>
         <label class="sr" for="template-name" data-i18n="templateName">Template name</label>
-        <input id="template-name" class="name" type="text" maxlength="120" autocomplete="off">
+        <input id="template-name" class="name" type="text" maxlength="120" autocomplete="off" spellcheck="false" value="Untitled report">
       </div>
     </div>
     <div class="top-tools">
-      <button type="button" id="undo" class="icon-btn" disabled data-i18n-title="undo" aria-label="Undo">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7H4v4"/><path d="M4 11a8 8 0 1 1 2 5"/></svg>
-      </button>
-      <button type="button" id="redo" class="icon-btn" disabled data-i18n-title="redo" aria-label="Redo">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 7h4v4"/><path d="M20 11a8 8 0 1 0-2 5"/></svg>
-      </button>
+      <button type="button" id="undo" class="icon-btn" disabled data-i18n-label="undo" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7H4v4"/><path d="M4 11a8 8 0 1 1 2 5"/></svg></button>
+      <button type="button" id="redo" class="icon-btn" disabled data-i18n-label="redo" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 7h4v4"/><path d="M20 11a8 8 0 1 0-2 5"/></svg></button>
       <div class="zoom" role="group" aria-label="Zoom">
-        <button type="button" id="zoom-out" class="icon-btn" aria-label="Zoom out">−</button>
-        <button type="button" id="zoom-label" class="zoom-label">100%</button>
-        <button type="button" id="zoom-in" class="icon-btn" aria-label="Zoom in">+</button>
+        <button type="button" id="zoom-out" class="icon-btn" data-i18n-label="zoomOut" aria-label="Zoom out"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+        <button type="button" id="zoom-label" class="zoom-label" data-i18n-label="actualSize" aria-label="Actual size">100%</button>
+        <button type="button" id="zoom-in" class="icon-btn" data-i18n-label="zoomIn" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button>
         <button type="button" id="zoom-fit" class="text-btn" data-i18n="fit">Fit</button>
       </div>
+      <button type="button" id="keys-open" class="icon-btn hide-narrow" data-i18n-label="shortcuts" aria-label="Keyboard shortcuts"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
       <div class="lang" role="group" aria-label="Language">
         <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
         <button type="button" data-set-lang="pt-BR" aria-pressed="false">PT</button>
       </div>
     </div>
     <div class="top-actions">
-      <label class="starter-pick">
-        <span class="sr" data-i18n="starters">Starter templates</span>
-        <select id="starter"></select>
-      </label>
+      <button type="button" id="templates" class="text-btn" data-i18n="templates">Templates</button>
+      <button type="button" id="share" class="text-btn" data-i18n="share">Share link</button>
       <button type="button" id="ai-open" class="text-btn" data-i18n="aiExport">AI prompt</button>
       <button type="button" id="ai-import-open" class="text-btn" data-i18n="aiImport">Import from AI</button>
-      <label class="text-btn file-btn">
-        <span data-i18n="importAction">Import</span>
-        <input id="import-file" type="file" accept="application/json,.json">
-      </label>
+      <label class="text-btn file-btn"><span data-i18n="importAction">Import</span><input id="import-file" type="file" accept="application/json,.json"></label>
       <div class="export-wrap">
-        <button type="button" id="export-open" class="primary" data-i18n="exportBtn">Export</button>
-        <div id="export-menu" class="menu" hidden>
-          <button type="button" data-export="json" data-i18n="exportJson">JSON for ICARUS</button>
-          <button type="button" data-export="html" data-i18n="exportHtml">HTML</button>
-          <button type="button" data-export="md" data-i18n="exportMd">Markdown</button>
-          <button type="button" data-export="print" data-i18n="printPdf">Print / PDF</button>
+        <button type="button" id="export-open" class="primary" aria-haspopup="menu" aria-expanded="false" data-i18n="exportBtn">Export</button>
+        <div id="export-menu" class="menu" role="menu" hidden>
+          <button type="button" role="menuitem" data-export="json"><strong data-i18n="exportJson">JSON for ICARUS</strong><small data-i18n="exportJsonHelp">Import it in Burp: Reporting → Import.</small></button>
+          <button type="button" role="menuitem" data-export="html"><strong data-i18n="exportHtml">HTML preview</strong><small data-i18n="exportHtmlHelp">Every page, with sample data.</small></button>
+          <button type="button" role="menuitem" data-export="print"><strong data-i18n="exportPrint">Print / PDF</strong><small data-i18n="exportPrintHelp">Every page, from the browser.</small></button>
         </div>
       </div>
     </div>
   </header>
-  <p id="status" class="status" role="status"></p>
-  <nav class="mobile-tabs" aria-label="Panels">
-    <button type="button" data-mobile="pages" data-i18n="mobilePages">Pages</button>
-    <button type="button" data-mobile="canvas" data-i18n="mobileCanvas" aria-pressed="true">Canvas</button>
-    <button type="button" data-mobile="style" data-i18n="mobileStyle">Style</button>
-  </nav>
-  <div class="workspace" id="workspace" data-mobile="canvas">
-    <aside class="pane pane-left" aria-label="Pages">
-      <div class="pane-head">
-        <h2 data-i18n="pages">Pages</h2>
-      </div>
-      <ul id="page-list" class="page-list"></ul>
-      <div class="pane-head sub">
-        <h2 data-i18n="addBlock">Add</h2>
-      </div>
-      <div id="palette" class="palette"></div>
-    </aside>
-    <main class="canvas-wrap" id="artboard">
-      <div id="stack" class="stack"></div>
-    </main>
-    <aside class="pane pane-right" aria-label="Properties">
-      <div class="tabs" role="tablist">
-        <button type="button" data-tab="style" aria-selected="true" data-i18n="styleTab">Style</button>
-        <button type="button" data-tab="page" data-i18n="pageTab">Page</button>
-        <button type="button" data-tab="document" data-i18n="documentTab">Document</button>
-      </div>
-      <div id="inspector" class="inspector"></div>
-    </aside>
+  <div id="hintbar" class="hintbar">
+    <span data-i18n="hint">Click to select. Drag to move. Double-click text to type. Shift keeps proportions. Press ? for shortcuts.</span>
+    <button type="button" id="hint-dismiss" data-i18n="hide">Hide</button>
   </div>
+  <p id="status" class="status" role="status" aria-live="polite"></p>
+  <nav class="mobile-tabs" aria-label="Panels">
+    <button type="button" data-mobile="elements" aria-pressed="false" data-i18n="tabAdd">Add</button>
+    <button type="button" data-mobile="canvas" aria-pressed="true" data-i18n="tabPage">Page</button>
+    <button type="button" data-mobile="props" aria-pressed="false" data-i18n="tabProps">Properties</button>
+  </nav>
+  <main class="workspace" id="workspace" data-mobile="canvas">
+    <aside class="pane pane-left" aria-label="Library">
+      <div class="pane-tabs" role="tablist">
+        <button type="button" role="tab" data-left="elements" aria-selected="true" data-i18n="tabElements">Elements</button>
+        <button type="button" role="tab" data-left="pages" aria-selected="false" data-i18n="tabPages">Pages</button>
+        <button type="button" role="tab" data-left="layers" aria-selected="false" data-i18n="tabLayers">Layers</button>
+        <button type="button" role="tab" data-left="brand" aria-selected="false" data-i18n="tabBrand">Brand</button>
+      </div>
+      <div id="left-body" class="pane-body"></div>
+    </aside>
+    <div class="stage-wrap">
+      <div id="stage" class="stage" tabindex="0" aria-label="A4 page">
+        <div id="world" class="world"><article id="sheet" class="sheet"></article></div>
+        <div id="overlay" class="overlay"></div>
+      </div>
+      <div id="gallery" class="gallery" hidden></div>
+    </div>
+    <aside class="pane pane-right" aria-label="Properties">
+      <div id="inspector" class="pane-body"></div>
+    </aside>
+  </main>
   <footer class="site-foot">
-    <p data-i18n="footerNote">ICARUS is free software, for authorized testing only.</p>
+    <p data-i18n="footer">ICARUS is free software, for authorized testing only. Your designs stay in this browser.</p>
     <p id="support" class="support" hidden></p>
     <p class="foot-links">
-      <a id="repo-link" href="https://github.com/IcarusSec/ICARUS">GitHub</a>
-      <a id="docs-link" href="https://github.com/IcarusSec/ICARUS/tree/main/docs">Docs</a>
-      <a id="bapp-link" href="https://portswigger.net/bappstore">BApp Store</a>
+      <a id="repo-link" href="https://github.com/IcarusSec/ICARUS" rel="noopener">GitHub</a>
+      <a id="docs-link" href="https://github.com/IcarusSec/ICARUS/tree/main/docs" rel="noopener" data-i18n="docs">Docs</a>
+      <a id="bapp-link" href="https://portswigger.net/bappstore" rel="noopener">BApp Store</a>
     </p>
   </footer>
-
-  <dialog id="ai-dialog">
+  <dialog id="ai-dialog" aria-labelledby="ai-title">
     <form method="dialog" class="dialog-card">
-      <header>
-        <h2 data-i18n="aiExport">AI prompt</h2>
-        <button type="submit" class="icon-btn" aria-label="Close">×</button>
-      </header>
-      <p class="hint" data-i18n="aiHelp"></p>
+      <header><h2 id="ai-title" data-i18n="aiTitle">Edit with an AI model</h2><button type="submit" class="icon-btn" data-i18n-label="close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p class="help" data-i18n="aiHelp">Copy this into any model and add what you want changed. It describes the page format and includes a finished cover as an example. Nothing is sent from this page.</p>
       <textarea id="ai-prompt" readonly></textarea>
       <div class="dialog-actions">
         <button type="button" id="ai-copy" class="text-btn" data-i18n="copyPrompt">Copy prompt</button>
-        <button type="button" id="ai-download" class="primary" data-i18n="downloadPrompt">Download</button>
+        <button type="button" id="ai-download" class="primary" data-i18n="download">Download</button>
       </div>
     </form>
   </dialog>
-  <dialog id="ai-import-dialog">
+  <dialog id="ai-import-dialog" aria-labelledby="ai-import-title">
     <form method="dialog" class="dialog-card">
-      <header>
-        <h2 data-i18n="aiImport">Import from AI</h2>
-        <button type="submit" class="icon-btn" aria-label="Close">×</button>
-      </header>
-      <p class="hint" data-i18n="aiHelp"></p>
-      <label class="sr" for="ai-answer" data-i18n="pasteAnswer">Paste the JSON answer</label>
-      <textarea id="ai-answer"></textarea>
+      <header><h2 id="ai-import-title" data-i18n="aiImport">Import from AI</h2><button type="submit" class="icon-btn" data-i18n-label="close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p class="help" data-i18n="aiImportHelp">Paste the JSON the model returned. If something is wrong, the message says which page and which element. You can undo the import.</p>
+      <textarea id="ai-answer" data-i18n-placeholder="pasteHere" placeholder="Paste the JSON here"></textarea>
       <ul id="ai-errors" class="errors"></ul>
-      <div class="dialog-actions">
-        <button type="button" id="ai-apply" class="primary" data-i18n="applyAnswer">Apply</button>
-      </div>
+      <div class="dialog-actions"><button type="button" id="ai-apply" class="primary" data-i18n="useDesign">Use this design</button></div>
     </form>
   </dialog>
-  <dialog id="confirm-dialog">
-    <form method="dialog" class="dialog-card narrow">
-      <header><h2 id="confirm-title"></h2></header>
-      <p id="confirm-body"></p>
-      <div class="dialog-actions">
-        <button type="submit" class="text-btn" value="cancel" data-i18n="cancel">Cancel</button>
-        <button type="submit" class="primary" id="confirm-ok" value="ok"></button>
-      </div>
+  <dialog id="keys-dialog" aria-labelledby="keys-title">
+    <form method="dialog" class="dialog-card">
+      <header><h2 id="keys-title" data-i18n="shortcuts">Keyboard shortcuts</h2><button type="submit" class="icon-btn" data-i18n-label="close" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <p class="help" data-i18n="macNote">On a Mac, use ⌘ where this says Ctrl.</p>
+      <table class="keys"><tbody id="keys-list"></tbody></table>
     </form>
   </dialog>
-
   <script src="assets/config.js"></script>
-  <script src="assets/profile.js"></script>
-  <script src="assets/blocks.js"></script>
+  <script src="assets/canvas.js"></script>
   <script src="assets/ai.js"></script>
-  <script src="assets/templates.js"></script>
   <script src="assets/i18n.js"></script>
+  <script src="assets/editor.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>

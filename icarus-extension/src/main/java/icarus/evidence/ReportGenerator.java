@@ -162,6 +162,11 @@ public final class ReportGenerator {
         Path reportDir = outputHtmlFile.toAbsolutePath().getParent();
         if (reportDir != null) Files.createDirectories(reportDir);
 
+        if (icarus.report.canvas.CanvasPages.hasCanvas(ctx.profile())) {
+            icarus.report.canvas.CanvasPageRenderer.writeHtml(ctx, outputHtmlFile);
+            return true;
+        }
+
         StringBuilder sb = new StringBuilder();
         appendProfileHtmlHeader(sb, ctx);
 

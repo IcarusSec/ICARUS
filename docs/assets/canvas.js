@@ -12,6 +12,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   var PAGE_W = 210;
   var PAGE_H = 297;
+  var MAX_IMAGE = 700000;
   var TYPES = ["text", "shape", "image", "line", "chart", "table"];
   var FONTS = [
     { id: "sans", label: "Inter", css: "'ICARUS Sans', Inter, Helvetica, Arial, sans-serif" },
@@ -67,6 +68,13 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  /** Only inline images. The PDF ignores anything else, and a remote URL in a share link would load from a third party. */
+  function imageSrc(value) {
+    var text = typeof value === "string" ? value.trim() : "";
+    if (!/^data:image\/(png|jpe?g|gif|webp|svg\+xml)[;,]/i.test(text)) return "";
+    return text.length > MAX_IMAGE ? "" : text;
   }
 
   function fontCss(id) {
@@ -167,7 +175,7 @@
       return el;
     }
     if (type === "image") {
-      el.src = typeof raw.src === "string" ? raw.src.slice(0, 700000) : "";
+      el.src = imageSrc(raw.src);
       el.slot = raw.slot === "clientLogo" || raw.slot === "companyLogo" ? raw.slot : "";
       el.alt = String(raw.alt || "").slice(0, 160);
       el.fit = "cover";
@@ -252,7 +260,7 @@
       templateId: raw.templateId || null,
       brand: {
         colors: brandColors,
-        logo: typeof raw.brand === "object" && typeof raw.brand.logo === "string" ? raw.brand.logo.slice(0, 700000) : ""
+        logo: raw.brand && typeof raw.brand === "object" ? imageSrc(raw.brand.logo) : ""
       },
       fields: {
         documentTitle: String(raw.fields && raw.fields.documentTitle || "Security assessment").slice(0, 160),
@@ -949,20 +957,50 @@
     if (elements.length < 2) return;
     var box = unionBounds(elements);
     elements.forEach(function (element) {
-      if (mode === "left") element.x = round(box.x);
-      if (mode === "center") element.x = round(box.x + (box.w - element.w) / 2);
-      if (mode === "right") element.x = round(box.x + box.w - element.w);
-      if (mode === "top") element.y = round(box.y);
-      if (mode === "middle") element.y = round(box.y + (box.h - element.h) / 2);
-      if (mode === "bottom") element.y = round(box.y + box.h - element.h);
-      if (element.type === "line") shiftLineToBox(element);
+      var own = unionBounds([element]);
+      var dx = 0;
+      var dy = 0;
+      if (mode === "left") dx = box.x - own.x;
+      if (mode === "center") dx = box.x + (box.w - own.w) / 2 - own.x;
+      if (mode === "right") dx = box.x + box.w - (own.x + own.w);
+      if (mode === "top") dy = box.y - own.y;
+      if (mode === "middle") dy = box.y + (box.h - own.h) / 2 - own.y;
+      if (mode === "bottom") dy = box.y + box.h - (own.y + own.h);
+      moveElement(element, dx, dy);
     });
   }
 
-  function shiftLineToBox(element) {
-    var dx = element.x - (Math.min(element.x1, element.x2) - Math.max(1.2, element.strokeWidth + 1));
-    var dy = element.y - (Math.min(element.y1, element.y2) - Math.max(1.2, element.strokeWidth + 1));
-    if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) return;
+  /** Renumbers z from 1 so ties and gaps never decide the paint order. */
+  function normalizeZ(elements) {
+    elements.slice().sort(function (a, b) { return a.z - b.z; }).forEach(function (element, index) {
+      element.z = index + 1;
+    });
+  }
+
+  /** Moves ids to the front or back, or one step forward or backward. */
+  function reorder(elements, ids, dir) {
+    var list = elements.slice().sort(function (a, b) { return a.z - b.z; });
+    var picked = list.filter(function (element) { return ids.indexOf(element.id) !== -1; });
+    var rest = list.filter(function (element) { return ids.indexOf(element.id) === -1; });
+    if (dir === "front") list = rest.concat(picked);
+    else if (dir === "back") list = picked.concat(rest);
+    else {
+      var step = dir === "forward" ? 1 : -1;
+      var order = dir === "forward" ? list.slice().reverse() : list.slice();
+      order.forEach(function (element) {
+        if (ids.indexOf(element.id) === -1) return;
+        var at = list.indexOf(element);
+        var to = at + step;
+        if (to < 0 || to >= list.length || ids.indexOf(list[to].id) !== -1) return;
+        list[at] = list[to];
+        list[to] = element;
+      });
+    }
+    list.forEach(function (element, index) { element.z = index + 1; });
+  }
+
+  function maxZ(elements) {
+    return elements.reduce(function (top, element) { return Math.max(top, element.z || 0); }, 0);
   }
 
   function moveElement(element, dx, dy) {
@@ -1058,6 +1096,8 @@
     if (images.filter(function (element) { return element.tint === "#A3205A"; }).length !== 2) throw new Error("tint");
     var view = starterDoc("viewbook");
     if (!view.pages[0].elements.some(function (element) { return element.clip === "parallelogram"; })) throw new Error("clip");
+    if (normalizeElement({ type: "image", src: "https://example.com/a.png" }).src !== "") throw new Error("remote src");
+    if (normalizeElement({ type: "image", src: "javascript:alert(1)" }).src !== "") throw new Error("script src");
     var html = renderPage(swiss.pages[0], { vars: sampleVars(swiss, 0, 2) });
     if (html.indexOf("mix-blend-mode:difference") === -1) throw new Error("css blend");
     if (html.indexOf("<script") !== -1) throw new Error("script");
@@ -1076,12 +1116,23 @@
     var snap = snapDelta({ x: 99, y: 10, w: 10, h: 10 }, [], 2);
     if (Math.abs((99 + snap.dx + 5) - 105) > 0.2) throw new Error("snap center");
     if (profileFromDoc(starterDoc("stripes")).sections.nodes.length !== 2) throw new Error("interior included");
+    var line = newElement("line", { x1: 50, y1: 50, x2: 90, y2: 50 });
+    var box = newElement("shape", { x: 10, y: 10, w: 20, h: 10 });
+    alignElements([line, box], "left");
+    if (Math.abs(line.x - 10) > 0.2 || line.x1 > 20) throw new Error("align line");
+    var stack = [newElement("shape", { z: 400 }), newElement("shape", { z: 400 }), newElement("shape", { z: 2 })];
+    reorder(stack, [stack[2].id], "front");
+    if (stack[2].z !== 3 || stack[0].z === stack[1].z) throw new Error("reorder front");
+    reorder(stack, [stack[2].id], "backward");
+    if (stack[2].z !== 2) throw new Error("reorder backward");
     return "canvas ok";
   }
 
   return {
     PAGE_W: PAGE_W,
     PAGE_H: PAGE_H,
+    MAX_IMAGE: MAX_IMAGE,
+    esc: esc,
     FONTS: FONTS,
     VARIABLES: VARIABLES,
     STARTERS: STARTERS,
@@ -1100,6 +1151,10 @@
     alignElements: alignElements,
     distribute: distribute,
     moveElement: moveElement,
+    syncLineBox: syncLineBox,
+    normalizeZ: normalizeZ,
+    reorder: reorder,
+    maxZ: maxZ,
     snapDelta: snapDelta,
     unionBounds: unionBounds,
     corners: corners,

@@ -113,9 +113,9 @@ rm -rf build_manual
 mkdir -p build_manual/classes
 mkdir -p build_manual/libs
 
-# 3. Find all Java files
+# 3. Find all Java files. Tests compile separately so they never ship in the jar.
 echo "[*] Discovering source files..."
-find src/main/java $([ -d src/test/java ] && echo src/test/java) -name "*.java" > build_manual/sources.txt
+find src/main/java -name "*.java" > build_manual/sources.txt
 SOURCE_COUNT=$(wc -l < build_manual/sources.txt)
 echo "[+] Found $SOURCE_COUNT Java files"
 
@@ -124,10 +124,25 @@ echo "[*] Compiling sources..."
 MCP_CP=$(printf ':libs/%s' "${MCP_LIBS[@]##*/}")
 EXTRA_CP=$(printf ':libs/%s' "${EXTRA_LIBS[@]##*/}")
 COMPILE_ONLY_CP=$(printf ':libs/%s' "${COMPILE_ONLY_LIBS[@]##*/}")
+LIB_CP="libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commonmark-ext-gfm-tables-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}"
 javac -d build_manual/classes \
-      -cp "libs/montoya-api-2026.7.jar:libs/openpdf-2.0.2.jar:libs/commonmark-0.30.0.jar:libs/commonmark-ext-gfm-tables-0.30.0.jar:libs/commons-csv-1.10.0.jar${MCP_CP}${EXTRA_CP}${COMPILE_ONLY_CP}" \
+      -cp "$LIB_CP" \
       --release 19 \
       @build_manual/sources.txt
+
+# 4a. Compile tests against the main classes into their own folder (run them with test.sh).
+if [ -d src/test/java ]; then
+    echo "[*] Compiling tests..."
+    mkdir -p build_manual/test-classes
+    find src/test/java -name "*.java" > build_manual/test-sources.txt
+    javac -d build_manual/test-classes \
+          -cp "build_manual/classes:$LIB_CP" \
+          --release 19 \
+          @build_manual/test-sources.txt
+    if [ -d src/test/resources ]; then
+        cp -r src/test/resources/. build_manual/test-classes/
+    fi
+fi
 
 # 4b. Copy resources onto the classpath
 if [ -d "src/main/resources" ]; then

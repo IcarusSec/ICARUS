@@ -86,7 +86,7 @@ public final class CanvasPages {
         if (branding != null) {
             put(vars, "tester", first(vars.get("author"), branding.author()));
             put(vars, "author", first(vars.get("author"), branding.author()));
-            put(vars, "client", first(vars.get("client"), branding.requester()));
+            put(vars, "client", first(vars.get("client"), first(vars.get("requester"), branding.requester())));
             put(vars, "classification", first(vars.get("classification"), branding.classification()));
             put(vars, "date", first(vars.get("date"), branding.assessmentPeriod()));
             if (vars.get("report_title") == null || vars.get("report_title").isBlank()) {
@@ -95,6 +95,11 @@ public final class CanvasPages {
         }
         if (!vars.containsKey("version") || vars.get("version") == null || vars.get("version").isBlank()) {
             vars.put("version", "1.0");
+        }
+        // Studio tokens with no value print as empty text; any other {{token}} stays literal so typos show.
+        for (String key : List.of("report_title", "project", "client", "tester", "author", "date", "version", "classification",
+                "finding_count", "count_critical", "count_high", "count_medium", "count_low", "count_info", "page", "pages")) {
+            vars.putIfAbsent(key, "");
         }
         vars.put("page", String.valueOf(pageNumber));
         vars.put("pages", String.valueOf(pageCount));

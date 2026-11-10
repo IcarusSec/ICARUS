@@ -76,7 +76,7 @@ public final class CanvasPageRenderer {
         html.append(".el{position:absolute;box-sizing:border-box;transform-origin:center center;overflow:hidden;white-space:pre-wrap}");
         html.append(".el svg,.el img{width:100%;height:100%;display:block}.tint{position:absolute;inset:0;mix-blend-mode:multiply}");
         html.append(".slot{display:flex;align-items:center;justify-content:center;height:100%;border:1px dashed #c5cad3;color:#667085;font-size:9pt}");
-        html.append("table{width:100%;border-collapse:collapse}th,td{border:1px solid #e5e7eb;padding:1.2mm;text-align:left;vertical-align:top}");
+        html.append("table{width:100%;border-collapse:collapse}th,td{border:1px solid #e5e7eb;padding:1.2mm 1.6mm;text-align:left;vertical-align:top}");
         html.append("</style></head><body>");
         for (int i = 0; i < pages.size(); i++) {
             CanvasPages.Page page = CanvasPages.parse(pages.get(i));
@@ -218,7 +218,8 @@ public final class CanvasPageRenderer {
         cb.clip();
         cb.newPath();
         cb.setColorFill(ink);
-        String[] lines = value.split("\\n", -1);
+        List<String> lines = new java.util.ArrayList<>();
+        for (String paragraph : value.split("\\n", -1)) lines.addAll(wrap(paragraph, font, size, w - 2f * pad));
         float leading = size * Math.max(lineHeight, 0.7f);
         // CSS centres the em box in the line box, so a line-height below 1 lifts the glyphs.
         float halfLeading = (lineHeight - 1f) * size / 2f;
@@ -240,6 +241,28 @@ public final class CanvasPageRenderer {
         cb.restoreState();
     }
 
+    /** Greedy wrap like CSS pre-wrap with overflow-wrap:break-word: break at spaces, else inside a word. */
+    private static List<String> wrap(String paragraph, BaseFont font, float size, float maxWidth) {
+        List<String> rows = new java.util.ArrayList<>();
+        StringBuilder row = new StringBuilder();
+        for (String word : paragraph.split("(?<= )")) {
+            if (row.length() > 0 && font.getWidthPoint((row + word).stripTrailing(), size) > maxWidth) {
+                rows.add(row.toString());
+                row.setLength(0);
+            }
+            for (int i = 0; i < word.length(); i++) {
+                String next = row.toString() + word.charAt(i);
+                if (row.length() > 0 && font.getWidthPoint(next.stripTrailing(), size) > maxWidth) {
+                    rows.add(row.toString());
+                    row.setLength(0);
+                }
+                row.append(word.charAt(i));
+            }
+        }
+        rows.add(row.toString());
+        return rows;
+    }
+
     private static void safeShow(PdfContentByte cb, String line) {
         try {
             cb.showText(line);
@@ -259,7 +282,9 @@ public final class CanvasPageRenderer {
             cb.setColorFill(new Color(0xf8, 0xfa, 0xfc));
             cb.rectangle(-w / 2, -h / 2, w, h);
             cb.fill();
-            drawTextRaw(cb, "Client logo", w, h, font("sans", 400), 8, Color.GRAY, "center");
+            // The studio centres the placeholder in both axes; pad is the top inset that centres one line.
+            float pad = (h - 8f * 1.15f) / 2f;
+            drawTextRaw(cb, "Client logo", w, h, font("sans", 400), 8, Color.GRAY, "center", 1.15f, pad);
             return;
         }
         BufferedImage buffered = ImageIO.read(new ByteArrayInputStream(bytes));
@@ -413,6 +438,7 @@ public final class CanvasPageRenderer {
         float gap = 4f;
         float barW = (w * 0.9f - gap * (cats.size() - 1)) / cats.size();
         BaseFont label = font("sans", 400);
+        float labelPt = (float) (chartLabelMm(el) * CanvasPages.MM);
         for (int i = 0; i < cats.size(); i++) {
             float bh = (float) (values[i] / max * (h * 0.7));
             float bx = -w / 2f + w * 0.05f + i * (barW + gap);
@@ -420,8 +446,8 @@ public final class CanvasPageRenderer {
             cb.rectangle(bx, -h / 2f + 14, barW, Math.max(bh, values[i] > 0 ? 2 : 0));
             cb.fill();
             cb.beginText();
-            cb.setFontAndSize(label, 7);
-            cb.setColorFill(Color.DARK_GRAY);
+            cb.setFontAndSize(label, labelPt);
+            cb.setColorFill(new Color(0x4B, 0x55, 0x63));
             String name = cats.get(i).path("label").asText("");
             cb.showTextAligned(com.lowagie.text.Element.ALIGN_CENTER, name, bx + barW / 2, -h / 2f + 3, 0);
             cb.endText();
@@ -442,29 +468,44 @@ public final class CanvasPageRenderer {
         if (columns.isEmpty()) return;
         PdfPTable table = new PdfPTable(columns.size());
         table.setTotalWidth(w);
-        com.lowagie.text.Font head = new com.lowagie.text.Font(font("sans", 700), 8, com.lowagie.text.Font.NORMAL, Color.DARK_GRAY);
-        com.lowagie.text.Font body = new com.lowagie.text.Font(font(CanvasPages.text(el, "font", "sans"), 400), (float) el.path("size").asDouble(9), com.lowagie.text.Font.NORMAL, color(CanvasPages.text(el, "color", "#1A1A1A"), Color.BLACK));
+        // Same defaults as the studio's tableHtml: one ink colour and size for head and body, bold head.
+        String family = CanvasPages.text(el, "font", "sans");
+        Color ink = color(CanvasPages.text(el, "color", "#1A1A1A"), Color.BLACK);
+        float size = (float) el.path("size").asDouble(9);
+        com.lowagie.text.Font head = new com.lowagie.text.Font(font(family, 700), size, com.lowagie.text.Font.NORMAL, color(headerInk(el), Color.BLACK));
+        com.lowagie.text.Font body = new com.lowagie.text.Font(font(family, 400), size, com.lowagie.text.Font.NORMAL, ink);
         for (JsonNode column : columns) {
-            PdfPCell cell = new PdfPCell(new com.lowagie.text.Phrase(CanvasPages.fill(column.path("label").asText(""), vars), head));
+            PdfPCell cell = gridCell(new com.lowagie.text.Phrase(CanvasPages.fill(column.path("label").asText(""), vars), head));
             cell.setBackgroundColor(color(CanvasPages.text(el, "headerFill", "#F4F4F5"), new Color(0xf4, 0xf4, 0xf5)));
-            cell.setPadding(3);
             table.addCell(cell);
         }
         if (!"static".equals(CanvasPages.text(el, "mode", "findings")) && ctx.data() != null) {
             for (FindingView finding : ctx.data().findings()) {
                 for (JsonNode column : columns) {
-                    table.addCell(new PdfPCell(new com.lowagie.text.Phrase(cell(finding, column.path("key").asText("")), body)));
+                    table.addCell(gridCell(new com.lowagie.text.Phrase(cell(finding, column.path("key").asText("")), body)));
                 }
             }
         } else if (el.path("rows").isArray()) {
             for (JsonNode row : el.path("rows")) {
                 for (int i = 0; i < columns.size(); i++) {
                     String value = row.isArray() && row.size() > i ? row.get(i).asText("") : "";
-                    table.addCell(new PdfPCell(new com.lowagie.text.Phrase(value, body)));
+                    table.addCell(gridCell(new com.lowagie.text.Phrase(value, body)));
                 }
             }
         }
         table.writeSelectedRows(0, -1, -w / 2f, h / 2f, cb);
+    }
+
+    /** Studio cells: 1px #e5e7eb border (CSS px = 0.75pt) and padding 1.2mm 1.6mm. */
+    private static PdfPCell gridCell(com.lowagie.text.Phrase phrase) {
+        PdfPCell cell = new PdfPCell(phrase);
+        cell.setBorderColor(new Color(0xe5, 0xe7, 0xeb));
+        cell.setBorderWidth(0.75f);
+        cell.setPaddingTop(1.2f * CanvasPages.MM);
+        cell.setPaddingBottom(1.2f * CanvasPages.MM);
+        cell.setPaddingLeft(1.6f * CanvasPages.MM);
+        cell.setPaddingRight(1.6f * CanvasPages.MM);
+        return cell;
     }
 
     private static String cell(FindingView finding, String key) {
@@ -497,9 +538,14 @@ public final class CanvasPageRenderer {
                 float ux = dx / len;
                 float uy = dy / len;
                 cb.setColorFill(color(CanvasPages.text(el, "stroke", "#1A1A1A"), Color.BLACK));
-                cb.moveTo(x2, y2);
-                cb.lineTo(x2 - ux * 8 - uy * 3, y2 - uy * 8 + ux * 3);
-                cb.lineTo(x2 - ux * 8 + uy * 3, y2 - uy * 8 - ux * 3);
+                // Studio marker (markerUnits=strokeWidth, path 0,0 7,3 0,6, refX 6): tip 1 sw past the end,
+                // base 6 sw back, half-width 3 sw. All proportional to the line's own stroke width.
+                float sw = (float) el.path("strokeWidth").asDouble(0.4) * CanvasPages.MM;
+                float bx = x2 - ux * 6 * sw;
+                float by = y2 - uy * 6 * sw;
+                cb.moveTo(x2 + ux * sw, y2 + uy * sw);
+                cb.lineTo(bx - uy * 3 * sw, by + ux * 3 * sw);
+                cb.lineTo(bx + uy * 3 * sw, by - ux * 3 * sw);
                 cb.fill();
             }
         }
@@ -536,10 +582,16 @@ public final class CanvasPageRenderer {
             inner = esc(CanvasPages.fill(CanvasPages.text(el, "text", ""), vars)).replace("\n", "<br>");
         } else if ("shape".equals(type)) {
             String shape = CanvasPages.text(el, "shape", "rect");
+            // Strokes are millimetres, as in the PDF and the studio inspector.
+            String stroke = CanvasPages.text(el, "stroke", "");
+            double strokeMm = el.path("strokeWidth").asDouble(0);
+            boolean outlined = strokeMm > 0 && !stroke.isBlank();
             if ("rect".equals(shape) || "ellipse".equals(shape)) {
                 style += ";background:" + esc(CanvasPages.text(el, "fill", "#111111"));
                 if ("ellipse".equals(shape)) style += ";border-radius:50%";
-            } else inner = "<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"><polygon points=\"" + pointsAttr(el.path("points")) + "\" fill=\"" + esc(CanvasPages.text(el, "fill", "#111111")) + "\"/></svg>";
+                if (outlined) style += ";box-shadow:inset 0 0 0 " + strokeMm + "mm " + esc(stroke);
+            } else inner = "<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"><polygon points=\"" + pointsAttr(el.path("points")) + "\" fill=\"" + esc(CanvasPages.text(el, "fill", "#111111")) + "\"" +
+                (outlined ? " stroke=\"" + esc(stroke) + "\" stroke-width=\"" + strokeMm * 96 / 25.4 + "\" vector-effect=\"non-scaling-stroke\"" : "") + "/></svg>";
         } else if ("image".equals(type)) {
             String clip = clipCss(el);
             if (!clip.isBlank()) style += ";clip-path:" + clip;
@@ -567,7 +619,7 @@ public final class CanvasPageRenderer {
         double h = Math.max(4, Math.abs(y2 - y1) + 4);
         return "<div class=\"el\" style=\"left:" + x + "mm;top:" + y + "mm;width:" + w + "mm;height:" + h + "mm\"><svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"><line x1=\"" +
             ((x1 - x) / w * 100) + "\" y1=\"" + ((y1 - y) / h * 100) + "\" x2=\"" + ((x2 - x) / w * 100) + "\" y2=\"" + ((y2 - y) / h * 100) +
-            "\" stroke=\"" + esc(CanvasPages.text(el, "stroke", "#1A1A1A")) + "\" stroke-width=\"" + el.path("strokeWidth").asDouble(0.4) + "\" vector-effect=\"non-scaling-stroke\"/></svg></div>";
+            "\" stroke=\"" + esc(CanvasPages.text(el, "stroke", "#1A1A1A")) + "\" stroke-width=\"" + el.path("strokeWidth").asDouble(0.4) * 96 / 25.4 + "\" vector-effect=\"non-scaling-stroke\"/></svg></div>";
     }
 
     private static String chartSvg(JsonNode el, ReportRenderContext ctx) {
@@ -578,27 +630,42 @@ public final class CanvasPageRenderer {
         for (JsonNode cat : cats) max = Math.max(max, count(ctx, cat.path("key").asText("")));
         double gap = 3;
         double barW = (88 - gap * (cats.size() - 1)) / cats.size();
+        double labelMm = chartLabelMm(el);
+        StringBuilder labels = new StringBuilder();
         int i = 0;
         for (JsonNode cat : cats) {
             double value = count(ctx, cat.path("key").asText(""));
             double bh = value / max * 62;
             double x = 6 + i * (barW + gap);
             svg.append("<rect x=\"").append(x).append("\" y=\"").append(78 - bh).append("\" width=\"").append(barW).append("\" height=\"").append(Math.max(bh, value > 0 ? 1 : 0)).append("\" fill=\"").append(esc(cat.path("color").asText("#64748B"))).append("\"/>");
+            // HTML labels, not svg text, so preserveAspectRatio="none" cannot stretch them.
+            labels.append("<span style=\"position:absolute;top:92%;left:").append(x + barW / 2).append("%;transform:translate(-50%,-50%);white-space:nowrap;text-align:center;line-height:1;font-family:")
+                .append(esc(fontCss("sans"))).append(";font-size:").append(labelMm).append("mm;color:#4B5563\">")
+                .append(esc(cat.path("label").asText(""))).append("</span>");
             i++;
         }
-        return svg.append("</svg>").toString();
+        return svg.append("</svg>").append(labels).toString();
     }
 
     private static String tableHtml(JsonNode el, ReportRenderContext ctx, Map<String, String> vars) {
-        StringBuilder html = new StringBuilder("<table><thead><tr>");
         JsonNode columns = el.path("columns");
         if (!columns.isArray()) return "";
+        StringBuilder html = new StringBuilder("<table style=\"font-family:" + esc(fontCss(CanvasPages.text(el, "font", "sans"))) +
+            ";font-size:" + el.path("size").asDouble(9) + "pt;color:" + esc(CanvasPages.text(el, "color", "#1A1A1A")) +
+            "\"><thead style=\"background:" + esc(CanvasPages.text(el, "headerFill", "#F4F4F5")) + ";color:" + headerInk(el) + "\"><tr>");
         for (JsonNode column : columns) html.append("<th>").append(esc(CanvasPages.fill(column.path("label").asText(""), vars))).append("</th>");
         html.append("</tr></thead><tbody>");
-        if (ctx.data() != null) {
+        // Same branches as drawTable: findings unless the table is static, then the stored rows.
+        if (!"static".equals(CanvasPages.text(el, "mode", "findings")) && ctx.data() != null) {
             for (FindingView finding : ctx.data().findings()) {
                 html.append("<tr>");
                 for (JsonNode column : columns) html.append("<td>").append(esc(cell(finding, column.path("key").asText("")))).append("</td>");
+                html.append("</tr>");
+            }
+        } else if (el.path("rows").isArray()) {
+            for (JsonNode row : el.path("rows")) {
+                html.append("<tr>");
+                for (int i = 0; i < columns.size(); i++) html.append("<td>").append(esc(row.isArray() && row.size() > i ? row.get(i).asText("") : "")).append("</td>");
                 html.append("</tr>");
             }
         }
@@ -683,6 +750,32 @@ public final class CanvasPageRenderer {
 
     private static float mm(double value) { return (float) (value * CanvasPages.MM); }
     private static String num(JsonNode el, String field) { return String.valueOf(el.path(field).asDouble(0)); }
+
+    /** Studio chart labels: 6% of the box's smaller side, or the size that fits a bar slot at 0.6em per character. */
+    private static double chartLabelMm(JsonNode el) {
+        JsonNode cats = el.path("categories");
+        double w = el.path("w").asDouble(10);
+        double h = el.path("h").asDouble(10);
+        int maxLen = 1;
+        for (JsonNode cat : cats) maxLen = Math.max(maxLen, cat.path("label").asText("").length());
+        double slot = w * 0.88 / Math.max(1, cats.size());
+        return Math.min(0.06 * Math.min(w, h), slot / (0.6 * maxLen));
+    }
+
+    /** Studio table header text: the element colour if it has WCAG contrast >= 3 on headerFill, else white or #1A1A1A by fill luminance. */
+    private static String headerInk(JsonNode el) {
+        Color ink = color(CanvasPages.text(el, "color", "#1A1A1A"), Color.BLACK);
+        Color fill = color(CanvasPages.text(el, "headerFill", "#F4F4F5"), new Color(0xf4, 0xf4, 0xf5));
+        java.util.function.ToDoubleFunction<Color> luminance = c -> {
+            double[] v = {c.getRed() / 255.0, c.getGreen() / 255.0, c.getBlue() / 255.0};
+            for (int i = 0; i < 3; i++) v[i] = v[i] <= 0.03928 ? v[i] / 12.92 : Math.pow((v[i] + 0.055) / 1.055, 2.4);
+            return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+        };
+        double a = luminance.applyAsDouble(ink);
+        double b = luminance.applyAsDouble(fill);
+        if ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 3) return String.format("#%06X", ink.getRGB() & 0xFFFFFF);
+        return b < 0.5 ? "#FFFFFF" : "#1A1A1A";
+    }
 
     private static Color color(String hex, Color fallback) {
         if (hex != null && hex.matches("#[0-9a-fA-F]{6}")) return Color.decode(hex);

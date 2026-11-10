@@ -2,6 +2,7 @@ package icarus.report.canvas;
 
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.PdfTextExtractor;
+import icarus.core.Severity;
 import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ReportGenerator;
 import icarus.report.PreviewService;
@@ -9,6 +10,8 @@ import icarus.report.model.ReportProfile;
 import icarus.report.model.ReportProfileCodec;
 import icarus.report.model.SectionGraph;
 import icarus.report.model.SectionNode;
+import icarus.report.render.FindingView;
+import icarus.report.render.ReportData;
 import icarus.report.render.ReportRenderContext;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,6 +63,45 @@ public class CanvasPageRenderTest {
         assert viewbookPdf.contains("ENGINEERING") && viewbookPdf.contains("VIEWBOOK") : "pdf viewbook";
         assert viewbookPdf.contains("DISCOVER") : "pdf discover";
 
+        // Studio export with one real finding; client comes from the requester variable.
+        ReportProfile rich = ReportProfileCodec.fromJson(Files.readString(fixtures.resolve("rich.json")));
+        ReportData richData = new ReportData("Comprehensive Web Application Penetration Test", "Enterprise Vulnerability Assessment",
+            List.of(new FindingView("rich-1", 1, "SERVER_ERROR", Severity.HIGH, "SERVER_ERROR", "ServerErrorScanner",
+                "/debug", List.of(), "", Map.of(), List.of(), null, null, false)),
+            Map.of(Severity.HIGH, 1L), 0, 1, Map.of("requester", "QA-CLIENT-7", "author", "QA-AUTHOR-3"), false);
+        renderProfile(rich, richData, out.resolve("rich.html"), out.resolve("rich.pdf"));
+        String richHtml = Files.readString(out.resolve("rich.html"));
+        String richPdf = pdfText(out.resolve("rich.pdf"));
+        assert !richHtml.contains("{{") && !richPdf.contains("{{") : "no literal tokens";
+        assert richHtml.contains("QA-CLIENT-7") && richPdf.contains("QA-CLIENT-7") : "client from requester";
+        assert richPdf.contains("QA-AUTHOR-3") : "author variable";
+        assert richPdf.contains("Penetration Test") : "wrapped title keeps its words";
+        assert richPdf.contains("SERVER_ERROR") && richPdf.contains("HIGH") && richPdf.contains("/debug") : "pdf finding row";
+        assert richHtml.contains("SERVER_ERROR") && richHtml.contains("/debug") : "html finding row";
+        assert richHtml.contains("background:#0F172A;color:#FFFFFF") : "dark header gets white ink";
+        assert richHtml.contains(">High</span>") && richPdf.contains("High") : "chart labels in both outputs";
+
+        // Studio tokens with no value print as empty text; unknown tokens stay visible.
+        ReportData blank = new ReportData(null, null, List.of(), Map.of(), 0, 0, Map.of(), false);
+        var blankVars = CanvasPages.variables(new ReportRenderContext(rich, blank, null, out), 1, 2);
+        assert CanvasPages.fill("[{{project}}]", blankVars).equals("[]") : "blank project is empty";
+        assert CanvasPages.fill("[{{projct}}]", blankVars).equals("[{{projct}}]") : "typo stays literal";
+        for (String token : List.of("report_title", "project", "client", "tester", "author", "date", "version", "classification",
+                "finding_count", "count_critical", "count_info", "page", "pages")) {
+            assert !CanvasPages.fill("{{" + token + "}}", blankVars).contains("{{") : "studio token " + token;
+        }
+
+        // Static tables print their stored rows in both outputs.
+        ReportProfile staticPage = new ReportProfile("1", "user:canvas-static", "Static", "en", false, null,
+            null, null, new SectionGraph(List.of(
+                SectionNode.of("page:static", true, 1, false, "CANVAS_PAGE", Map.of("title", "Static", "role", "interior",
+                    "spec", "{\"background\":\"#FFFFFF\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"mode\":\"static\","
+                        + "\"columns\":[{\"key\":\"a\",\"label\":\"Name\"},{\"key\":\"b\",\"label\":\"Value\"}],\"rows\":[[\"alpha-row\",\"beta-value\"]]}]}"))
+            )), null, null, null, null);
+        renderProfile(staticPage, out.resolve("static.html"), out.resolve("static.pdf"));
+        assert Files.readString(out.resolve("static.html")).contains("beta-value") : "static rows in html";
+        assert pdfText(out.resolve("static.pdf")).contains("beta-value") : "static rows in pdf";
+
         ReportProfile broken = new ReportProfile("1", "user:canvas-broken", "Broken", "en", false, null,
             null, null, new SectionGraph(List.of(
                 SectionNode.of("page:bad", true, 1, false, "CANVAS_PAGE",
@@ -97,7 +139,11 @@ public class CanvasPageRenderTest {
     }
 
     private static void renderProfile(ReportProfile profile, Path html, Path pdf) throws Exception {
-        var ctx = new ReportRenderContext(profile, PreviewService.createFixtureReportData(), null, html.getParent());
+        renderProfile(profile, PreviewService.createFixtureReportData(), html, pdf);
+    }
+
+    private static void renderProfile(ReportProfile profile, ReportData data, Path html, Path pdf) throws Exception {
+        var ctx = new ReportRenderContext(profile, data, null, html.getParent());
         if (!new ReportGenerator(null).generate(ctx, html)) throw new AssertionError("html not written");
         if (!new PdfReportGenerator(null).generate(ctx, pdf)) throw new AssertionError("pdf not written");
     }

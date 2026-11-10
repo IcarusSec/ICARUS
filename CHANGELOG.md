@@ -10,6 +10,40 @@ Full release notes (with complete detail) live on the
 
 _Nothing yet._
 
+## [1.0.0] - 2026-11-10
+
+First stable release. Builds 1.1.4–1.5.0 below were pre-releases (published on
+GitHub as tags v0.1.5–v0.4.0); the version number now matches the release tags.
+
+### Added
+
+- **Report studio:** in-browser A4 template builder with a free-form cover
+  editor; free-form canvas pages and custom blocks render in HTML and PDF.
+- **UI:** one action bar for preview, HTML and PDF; empty tabs explain the next
+  step; evidence actions are labelled and a finding can be added in one click;
+  shared spacing and font scale; long text is ellipsized with the full value on
+  hover.
+- **Evidence:** one-click secret masking (also across wrapped header lines);
+  findings and the Evidence Manager are autosaved and restored.
+- **MCP:** `get_scan_status`, `list_kb_vulnerabilities`,
+  `delete_kb_vulnerability`; the local server is authenticated and its token
+  persists across restarts.
+
+### Fixed
+
+- **Reports:** one broken finding no longer spoils the whole report; one entry
+  per finding; evidence images render in every HTML path.
+- **Findings:** per-verb, per-claim and per-endpoint findings no longer collapse
+  into one.
+- **Evidence:** thread-safe evidence list; findings without captured traffic no
+  longer crash the editor; unique screenshot files; large JSON images capped.
+- **Scanning:** bounded verbose-error regexes (ReDoS) and scanned body size;
+  bounded passive-scan queue and JSON recursion depth; fewer header-check false
+  positives.
+- **MCP:** argument validation for every tool; attack chains correlated by host.
+- **UI:** Results table keeps order and selection; Settings keeps typed spinner
+  values; KB deletion and profile-export overwrite ask first.
+
 ## [1.5.0] - 2026-08-31
 
 Report Profiles architecture, an AST-based mutation engine, behavioral WAF
@@ -177,7 +211,8 @@ Fixed a config-persistence bug that could corrupt suppression rules/custom paylo
 
 Initial unified Burp Suite interface for ICARUS modules: smart evidence capture with full payload logging and manual evidence popups, the Rate Limit Tester, and automated scanning from the extension UI.
 
-[Unreleased]: https://github.com/IcarusSec/ICARUS/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/IcarusSec/ICARUS/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/IcarusSec/ICARUS/compare/v0.4.0...v1.0.0
 [1.5.0]: https://github.com/IcarusSec/ICARUS/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/IcarusSec/ICARUS/compare/v1.3...v1.4.0
 [1.3.0]: https://github.com/IcarusSec/ICARUS/compare/v1.2...v1.3

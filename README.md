@@ -1,7 +1,7 @@
 <p align="center">
   <img src="./.images/banner.png" alt="ICARUS Banner">
 </p>
-<h1 align="center">ICARUS v1.5.0</h1>
+<h1 align="center">ICARUS v1.0.0</h1>
 
 <p align="center">
   <a href="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml"><img src="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml/badge.svg" alt="Build"></a>

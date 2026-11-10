@@ -24,9 +24,8 @@ should be upgraded rather than patched in place.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.5.x   | :white_check_mark: |
-| 1.4.x   | :white_check_mark: |
-| < 1.4   | :x:                |
+| 1.0.x   | :white_check_mark: |
+| < 1.0 (incl. 1.1.4–1.5.0) | :x: |
 
 ## Out of Scope
 

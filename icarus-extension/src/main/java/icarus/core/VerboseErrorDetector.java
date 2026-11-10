@@ -39,29 +39,29 @@ public class VerboseErrorDetector {
 
     private static final List<Pattern> DB_ERROR_PATTERNS = List.of(
         Pattern.compile("(?i)ORA-\\d{5}:"), // Oracle
-        Pattern.compile("(?i)SQL syntax.*MySQL"), // MySQL
+        Pattern.compile("(?i)SQL syntax[^\\r\\n]{0,300}?MySQL"), // MySQL
         Pattern.compile("(?i)PostgreSQL query failed"), // PostgreSQL
         Pattern.compile("(?i)SQLite3::SQLException"), // SQLite (PHP)
-        Pattern.compile("(?i)sqlite3\\.\\w*Error"), // SQLite (Python)
+        Pattern.compile("(?i)sqlite3\\.\\w{0,128}Error"), // SQLite (Python)
         Pattern.compile("(?i)SQLITE_(ERROR|CONSTRAINT|BUSY|MISUSE|CORRUPT|FULL|IOERR|LOCKED|READONLY|NOTADB)"), // SQLite raw error codes
-        Pattern.compile("(?i)near \".*?\": syntax error"), // SQLite raw syntax error (language-agnostic, straight from libsqlite3)
+        Pattern.compile("(?i)near \"[^\\r\\n]{0,300}?\": syntax error"), // SQLite raw syntax error (language-agnostic, straight from libsqlite3)
         Pattern.compile("(?i)MongoError:"), // MongoDB
-        Pattern.compile("(?i)(?:ODBC|JDBC|OLEDB) Driver\\[.*?\\]"), // ODBC/JDBC/OLEDB
+        Pattern.compile("(?i)(?:ODBC|JDBC|OLEDB) Driver\\[[^\\r\\n]{0,200}?\\]"), // ODBC/JDBC/OLEDB
         Pattern.compile("(?i)SQLServerException") // MSSQL
     );
 
     private static final List<Pattern> FRAMEWORK_AND_LANG_PATTERNS = List.of(
         // Java
-        Pattern.compile("(?i)\\bjava\\.lang\\.\\w+Exception"),
+        Pattern.compile("(?i)\\bjava\\.lang\\.\\w{1,128}Exception"),
         Pattern.compile("(?i)at java\\.base/"),
         // Qualified by an exception class or a stack frame — a bare "org.apache.xyz" also
         // appears in license notices, docs pages and Maven coordinates.
-        Pattern.compile("(?i)(?:at |\\b)org\\.springframework\\.[\\w.$]*(?:Exception|Error)\\b|\\bat org\\.springframework\\.[\\w.$]+\\("),
-        Pattern.compile("(?i)(?:at |\\b)org\\.apache\\.[\\w.$]*(?:Exception|Error)\\b|\\bat org\\.apache\\.[\\w.$]+\\("),
+        Pattern.compile("(?i)(?:at |\\b)org\\.springframework\\.[\\w.$]{0,256}(?:Exception|Error)\\b|\\bat org\\.springframework\\.[\\w.$]{1,256}\\("),
+        Pattern.compile("(?i)(?:at |\\b)org\\.apache\\.[\\w.$]{0,256}(?:Exception|Error)\\b|\\bat org\\.apache\\.[\\w.$]{1,256}\\("),
 
         // Python
         Pattern.compile("(?i)Traceback \\(most recent call last\\):"),
-        Pattern.compile("(?i)File \"[^\"]+\", line \\d+, in"),
+        Pattern.compile("(?i)File \"[^\"\\r\\n]{1,512}\", line \\d{1,9}, in"),
         Pattern.compile("(?i)werkzeug\\.exceptions\\."),
 
         // PHP
@@ -75,10 +75,10 @@ public class VerboseErrorDetector {
         // PHP prints "Stack trace:" then "#0 ..." on the next line. The old "\\bStack trace:\\b"
         // needed a word char right after the colon, so it never matched real PHP output; the
         // bare "stack ?trace" alternative instead matched any page merely mentioning the words.
-        Pattern.compile("(?i)\\bStack trace:\\s*#\\d"),
+        Pattern.compile("(?i)\\bStack trace:\\s{0,64}#\\d"),
 
         // Ruby
-        Pattern.compile("(?i)\\w+\\.rb:\\d+:in"),
+        Pattern.compile("(?i)\\b\\w{1,128}\\.rb:\\d{1,9}:in"),
         Pattern.compile("(?i)NoMethodError:"),
 
         // Node.js / JavaScript
@@ -87,20 +87,20 @@ public class VerboseErrorDetector {
         Pattern.compile("(?i)SyntaxError: [^\\r\\n]{1,200}"),
         Pattern.compile("(?i)UnhandledPromiseRejection"),
         // Java/.NET chained cause — requires the class name, "Caused by:" alone is plain English.
-        Pattern.compile("(?i)Caused by: [\\w.$]+(?:Exception|Error)\\b"),
-        Pattern.compile("(?i)at [^()]*\\([^()]*:\\d+:\\d+\\)"), // V8 stacktrace (linear: no nested quantifier — see java/redos)
+        Pattern.compile("(?i)Caused by: [\\w.$]{1,256}(?:Exception|Error)\\b"),
+        Pattern.compile("(?i)\\bat [^()\\r\\n]{0,256}\\([^()\\r\\n]{0,256}:\\d{1,9}:\\d{1,9}\\)"), // V8 stacktrace, one line
 
         // C# / ASP.NET
-        Pattern.compile("(?i)System\\.\\w+Exception"),
+        Pattern.compile("(?i)System\\.\\w{1,128}Exception"),
         Pattern.compile("(?i)Server Error in '/' Application"),
-        Pattern.compile("(?i)at System\\.Web\\.[a-zA-Z\\.]+"),
+        Pattern.compile("(?i)at System\\.Web\\.[a-zA-Z\\.]{1,256}"),
 
         // JWT / auth libraries
         // Error/exception names only. The previous bare-word "jose" matched the first name
         // (José/Jose) on any page, and "jsonwebtoken"/"jjwt" matched docs and package lists.
         Pattern.compile("(?i)\\bJsonWebTokenError\\b"),
-        Pattern.compile("(?i)\\bio\\.jsonwebtoken\\.[\\w.$]*(?:Exception|Error)\\b"),
-        Pattern.compile("(?i)\\bjjwt[\\w.$]*(?:Exception|Error)\\b"),
+        Pattern.compile("(?i)\\bio\\.jsonwebtoken\\.[\\w.$]{0,256}(?:Exception|Error)\\b"),
+        Pattern.compile("(?i)\\bjjwt[\\w.$]{0,256}(?:Exception|Error)\\b"),
         Pattern.compile("(?i)\\bJOSE(?:Error|Exception)\\b"),
 
         // General / Web Servers
@@ -110,9 +110,19 @@ public class VerboseErrorDetector {
     /** Longest matched excerpt kept for a finding description / evidence caption. */
     private static final int MAX_MATCH_LENGTH = 240;
 
+    /**
+     * Only the first 256K chars of a body are scanned. Every pattern above is bounded (no
+     * unbounded quantifier after a literal that can repeat, no {@code .*}), so cost grows
+     * linearly with the scanned length; the cap keeps that linear cost small on the single
+     * passive-analysis thread, where a hostile multi-megabyte body would otherwise stall every
+     * later response behind it. Real error pages put the error near the top.
+     */
+    static final int MAX_SCAN_CHARS = 256 * 1024;
+
     /** Returns the matched string for reporting, or null if no match. */
     public static String getVerboseErrorMatch(String body) {
         if (body == null || body.isBlank()) return null;
+        if (body.length() > MAX_SCAN_CHARS) body = body.substring(0, MAX_SCAN_CHARS);
 
         for (Pattern p : DB_ERROR_PATTERNS) {
             var m = p.matcher(body);

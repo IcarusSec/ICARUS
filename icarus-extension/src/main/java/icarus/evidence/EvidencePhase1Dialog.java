@@ -252,33 +252,16 @@ public void showPhase1(Finding finding) {
 
         pnlHeader.add(pnlChips, BorderLayout.SOUTH);
 
-        // Text Areas — include the request line (method + path) and status line
-        var rr = finding.evidence();
-        String reqContentType = rr.request().headerValue("Content-Type");
-        String reqLine = rr.request().method() + " " + rr.request().path() + " " + rr.request().httpVersion() + "\n";
-        String reqText = reqLine + rr.request().headers().stream()
-                .map(h -> h.name() + ": " + h.value() + "\n")
-                .reduce("", String::concat) + capture.imageRenderer.formatBody(rr.request().body().getBytes(), reqContentType);
+        // Text Areas — include the request line (method + path) and status line.
+        // A finding created from the Knowledge Base or by MCP add_finding has no captured
+        // traffic: start with empty panes (the user can paste a request) instead of an NPE.
+        String reqText = httpText(finding.evidence() == null ? null : finding.evidence().request());
+        String resText = httpText(finding.evidence() == null ? null : finding.evidence().response());
 
-        String resText = "";
-        if (rr.response() != null) {
-            String resContentType = rr.response().headerValue("Content-Type");
-            String statusLine = rr.response().httpVersion() + " " + rr.response().statusCode() + " " + rr.response().reasonPhrase() + "\n";
-            resText = statusLine + rr.response().headers().stream()
-                    .map(h -> h.name() + ": " + h.value() + "\n")
-                    .reduce("", String::concat) + capture.imageRenderer.formatBody(rr.response().body().getBytes(), resContentType);
-        }
-
-        // Wrap for the default layout (chk1080 below defaults to checked, i.e. 1920x1080).
-        // Wrapping narrower than what's actually rendered wastes space — a line wrapped
-        // for the 1200px column only fills ~61% of the 1920px column's real width, needing
-        // far more lines (and therefore a much taller image) than necessary. If the user
-        // unchecks the box, the chk1080 listener below re-wraps down to the narrower width,
-        // which is always a safe direction (splitting an already-short-enough line further).
-        int wrapWidth = capture.phase1Dialog.maxCharsForColumnWidth(1920);
-        reqText = capture.phase1Dialog.wrapEvidenceText(reqText, wrapWidth);
-        resText = capture.phase1Dialog.wrapEvidenceText(resText, wrapWidth);
-
+        // The panes hold the unwrapped text (they soft-wrap on screen); the hard wrap the image
+        // layout needs is applied only when rendering (see wrapForImage). Wrapping here first
+        // split a long Authorization/Cookie value over several lines, and "Mask Secrets" then
+        // left every continuation line — most of the token — readable.
         JTextArea reqArea = capture.phase1Dialog.createStyledTextArea(reqText);
         JTextArea resArea = capture.phase1Dialog.createStyledTextArea(resText);
 
@@ -397,7 +380,7 @@ public void showPhase1(Finding finding) {
             if (updatedFinding.category() == Category.RATE_LIMIT && updatedFinding.metadata().containsKey("blast_log")) {
                 renderedText = capture.tableRenderer.renderRateLimitTable(updatedFinding, chk1080.isSelected());
             } else {
-                renderedText = capture.imageRenderer.renderTextToImage(reqArea.getText(), resArea.getText(),
+                renderedText = capture.imageRenderer.renderTextToImage(wrapForImage(reqArea.getText()), wrapForImage(resArea.getText()),
                         updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
             }
             capture.saveAndRegisterEvidence(updatedFinding.withoutMeta("blast_log"), renderedText);
@@ -410,7 +393,7 @@ public void showPhase1(Finding finding) {
             if (updatedFinding.category() == Category.RATE_LIMIT && updatedFinding.metadata().containsKey("blast_log")) {
                 renderedText = capture.tableRenderer.renderRateLimitTable(updatedFinding, chk1080.isSelected());
             } else {
-                renderedText = capture.imageRenderer.renderTextToImage(reqArea.getText(), resArea.getText(),
+                renderedText = capture.imageRenderer.renderTextToImage(wrapForImage(reqArea.getText()), wrapForImage(resArea.getText()),
                         updatedFinding.type(), updatedFinding.description(), updatedFinding.severity().name(), chk1080.isSelected());
             }
             Finding forEvidenceManager = updatedFinding.withoutMeta("blast_log");
@@ -422,6 +405,30 @@ public void showPhase1(Finding finding) {
         editor.add(split, BorderLayout.CENTER);
         editor.add(pnlBottom, BorderLayout.SOUTH);
         editor.setVisible(true);
+    }
+
+    /** Request/response as editable text: start line, headers, formatted body. Empty for null. */
+    String httpText(burp.api.montoya.http.message.HttpMessage message) {
+        if (message instanceof burp.api.montoya.http.message.requests.HttpRequest req) {
+            String line = req.method() + " " + req.path() + " " + req.httpVersion() + "\n";
+            return line + headerText(req.headers()) + capture.imageRenderer.formatBody(req.body().getBytes(), req.headerValue("Content-Type"));
+        }
+        if (message instanceof burp.api.montoya.http.message.responses.HttpResponse res) {
+            String line = res.httpVersion() + " " + res.statusCode() + " " + res.reasonPhrase() + "\n";
+            return line + headerText(res.headers()) + capture.imageRenderer.formatBody(res.body().getBytes(), res.headerValue("Content-Type"));
+        }
+        return "";
+    }
+
+    private static String headerText(List<burp.api.montoya.http.message.HttpHeader> headers) {
+        StringBuilder sb = new StringBuilder();
+        if (headers != null) for (var h : headers) sb.append(h.name()).append(": ").append(h.value()).append('\n');
+        return sb.toString();
+    }
+
+    /** Hard-wraps pane text for the 1920px evidence image (the renderer always draws 1920 wide). */
+    String wrapForImage(String text) {
+        return wrapEvidenceText(text == null ? "" : text, maxCharsForColumnWidth(1920));
     }
 
 public JTextArea createStyledTextArea(String text) {

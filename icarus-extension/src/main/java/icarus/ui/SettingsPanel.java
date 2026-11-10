@@ -112,7 +112,7 @@ public class SettingsPanel {
         cardAuto.addFormRow(mutedLabel(I18n.t("settings.help.autoauth.persistence",
                 "⚠ Token-source requests are saved in the Burp project file (unencrypted), including any auth headers they carry.")));
         JLabel autoAuthStatus = new JLabel(autoAuth.statusSummary());
-        autoAuthStatus.setForeground(UIManager.getColor("Label.disabledForeground"));
+        autoAuthStatus.setForeground(ThemeHelper.mutedOn(themeHelper.getContainerBackgroundColor()));
         cardAuto.addFormRow(autoAuthStatus);
         
         JButton btnClearAuth = new JButton(I18n.t("settings.button.clear_active_config"));
@@ -126,7 +126,7 @@ public class SettingsPanel {
         CardPanel cardMcp = new CardPanel(I18n.t("settings.section.mcp"), "cpu");
         JLabel mcpStatusBadge = new JLabel(mcpServer.isRunning() ? I18n.t("settings.mcp.status.active", "● ACTIVE") : I18n.t("settings.mcp.status.stopped", "● STOPPED"));
         mcpStatusBadge.setFont(UiMetrics.font(UiMetrics.Role.EMPHASIS));
-        mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
+        mcpStatusBadge.setForeground(mcpServer.isRunning() ? themeHelper.successColor() : themeHelper.dangerColor());
         
         JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         headerPanel.setOpaque(false);
@@ -194,7 +194,7 @@ public class SettingsPanel {
                 @Override
                 protected void done() {
                     mcpStatusBadge.setText(mcpServer.isRunning() ? I18n.t("settings.mcp.status.active", "● ACTIVE") : I18n.t("settings.mcp.status.stopped", "● STOPPED"));
-                    mcpStatusBadge.setForeground(mcpServer.isRunning() ? Color.decode("#00E676") : Color.decode("#FF1744"));
+                    mcpStatusBadge.setForeground(mcpServer.isRunning() ? themeHelper.successColor() : themeHelper.dangerColor());
                     mcpTokenField.setText(mcpServer.authToken() == null ? "" : mcpServer.authToken());
                     btnRestartMcp.setText(I18n.t("settings.button.restart_mcp", "Restart Server"));
                     btnRestartMcp.setEnabled(true);
@@ -390,7 +390,7 @@ public class SettingsPanel {
     private JLabel mutedLabel(String text) {
         // No <html> wrapper: Burp disables HTML rendering in Swing labels, so it shows as literal markup.
         JLabel l = new JLabel(text);
-        l.setForeground(UIManager.getColor("Label.disabledForeground"));
+        l.setForeground(ThemeHelper.mutedOn(themeHelper.getContainerBackgroundColor()));
         l.setFont(UiMetrics.font(UiMetrics.Role.CAPTION));
         return l;
     }

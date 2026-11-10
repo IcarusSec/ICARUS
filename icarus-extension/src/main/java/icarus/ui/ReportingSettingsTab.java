@@ -1,6 +1,7 @@
 package icarus.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.ui.Theme;
 import icarus.core.I18n;
 import icarus.core.ModuleConfig;
 import icarus.core.Severity;
@@ -67,6 +68,9 @@ public class ReportingSettingsTab {
         this.config = config;
         this.themeHelper = themeHelper;
         this.profileManager = profileManager;
+        // Paint with the Burp theme that is actually showing. The palette otherwise stays on
+        // its dark default, which is light grey text on a light page.
+        icarus.ui.reportprofile.theme.ThemeColors.refresh(themeHelper.isDarkTheme() ? Theme.DARK : Theme.LIGHT);
         this.containerPanel = new JPanel(new BorderLayout());
         themeHelper.applyTheme(containerPanel);
 
@@ -124,7 +128,7 @@ public class ReportingSettingsTab {
         // FlatLaf recolor otherwise drops the button ~2px shorter, so pin its
         // preferred height to the sibling button explicitly.
         btnSave = btn("Save Profile", "device-floppy", e -> saveCurrentProfileChanges());
-        btnSave.putClientProperty("FlatLaf.style", "background: #FF6633; foreground: #FFFFFF; font: bold $defaultFont;");
+        btnSave.putClientProperty("FlatLaf.style", "background: #C2410C; foreground: #FFFFFF; font: bold $defaultFont;");
         Dimension saveRef = btnPreviewHtml.getPreferredSize();
         btnSave.setPreferredSize(new Dimension(
                 Math.max(saveRef.width, btnSave.getPreferredSize().width), saveRef.height));

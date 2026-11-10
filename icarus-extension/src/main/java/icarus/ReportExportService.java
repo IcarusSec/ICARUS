@@ -148,20 +148,30 @@ public class ReportExportService {
     }
 
     /**
-     * Canvas profiles render through the context overloads with the real findings; every other
-     * profile keeps the legacy overloads. The working dir is the output's parent, as the
-     * legacy generators use it (the context renderers do not read it today).
+     * PDF always renders through the profile context, the same path Preview uses, so the
+     * selected cover and finding layout (and an imported template) are not replaced by the
+     * legacy generator. HTML without canvas pages stays on that legacy generator, which also
+     * honors the evidence.html_report switch. The working dir is the output's parent.
      */
     private boolean writeReport(boolean pdf, List<Finding> reportFindings, Path out) throws IOException {
         icarus.report.DefaultReportProfileManager profiles = new icarus.report.DefaultReportProfileManager(config);
         icarus.report.model.ReportProfile profile = profiles.active();
-        if (!icarus.report.canvas.CanvasPages.hasCanvas(profile)) {
-            return pdf ? pdfReportGenerator.generate(reportFindings, config, evidenceCapture, out)
-                       : reportGenerator.generate(reportFindings, config, evidenceCapture, out);
+        boolean canvas = icarus.report.canvas.CanvasPages.hasCanvas(profile);
+        if (!pdf && !canvas) {
+            return reportGenerator.generate(reportFindings, config, evidenceCapture, out);
+        }
+        // Non-canvas PDF used to sort worst-first inside the legacy generator. Keep that order
+        // when the profile's own finding renderer draws the cards.
+        // Same finding-template rules as the legacy generators: a saved template severity
+        // wins, a blank one does not, and the knowledge-base fallback is not a user edit.
+        List<Finding> ordered = applyFindingTemplates(reportFindings);
+        if (pdf && !canvas) {
+            ordered = new ArrayList<>(ordered);
+            ordered.sort(java.util.Comparator.comparingInt(f -> f.severity().ordinal()));
         }
         // Same title and project sources as the legacy generators: Report Details first, then Burp's project name.
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
-        rtc.injectFindingsVariables(reportFindings);
+        rtc.injectFindingsVariables(ordered);
         String title = rtc.variables().get("report_title");
         String project = rtc.variables().get("project");
         if (project == null || project.isBlank()) {
@@ -172,7 +182,7 @@ public class ReportExportService {
             }
         }
         icarus.report.render.ReportData mapped = icarus.report.ReportDataMapper.buildReportData(
-                reportFindings, evidenceCapture, config, profile.content(), title, project);
+                ordered, evidenceCapture, config, profile.content(), title, project);
         // Report Details fields ({{author}}, {{client}}, ...) reach canvas pages through the variables.
         Map<String, String> vars = new LinkedHashMap<>(rtc.variables());
         vars.putAll(mapped.variables());
@@ -180,6 +190,37 @@ public class ReportExportService {
                 mapped.findings(), mapped.severityCounts(), mapped.fixedCount(), mapped.notFixedCount(), vars, mapped.isRetest());
         icarus.report.render.ReportRenderContext ctx = profiles.bind(data, out.toAbsolutePath().getParent());
         return pdf ? pdfReportGenerator.generate(ctx, out) : reportGenerator.generate(ctx, out);
+    }
+
+    private List<Finding> applyFindingTemplates(List<Finding> findings) {
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        List<Finding> processed = new ArrayList<>();
+        for (Finding f : findings) {
+            ReportTemplateConfig.FindingTemplate tmpl = rtc.getFindingTemplate(f.type());
+            if (tmpl == null) {
+                processed.add(f);
+                continue;
+            }
+            Finding.Builder b = Finding.builder(f.module(), f.type())
+                .category(f.category())
+                .path(f.path())
+                .evidence(f.evidence());
+            f.metadata().forEach(b::meta);
+            f.cweIds().forEach(b::cwe);
+            b.description(tmpl.descricao() != null && !tmpl.descricao().isBlank() ? tmpl.descricao() : f.description());
+            Severity sev = f.severity();
+            ReportTemplateConfig.FindingTemplate userTmpl = rtc.findingTemplates().get(f.type());
+            if (userTmpl != null && userTmpl.severidade() != null && !userTmpl.severidade().isBlank()) {
+                try {
+                    sev = Severity.valueOf(userTmpl.severidade().toUpperCase());
+                } catch (Exception ignored) {
+                    // Keep the finding's own severity when the saved value is not a known level.
+                }
+            }
+            b.severity(sev);
+            processed.add(b.build());
+        }
+        return processed;
     }
 
     public Path generateReport(String format, Map<String, String> templateVariables) throws Exception {

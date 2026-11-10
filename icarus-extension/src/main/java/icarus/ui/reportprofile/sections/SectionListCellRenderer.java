@@ -67,11 +67,12 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
         boolean on = currentRow.enabled() || currentRow.required();
         boolean dim = currentRow.required();
         
-        g2.setColor(on ? (dim ? palette.accentSoft() : palette.accent()) : palette.borderStrong());
+        Color track = on ? (dim ? palette.accentSoft() : palette.accent()) : palette.borderStrong();
+        g2.setColor(track);
         g2.fill(new RoundRectangle2D.Float(TOGGLE_X0, toggleY, toggleW, toggleH, toggleH, toggleH));
         
         int thumbX = on ? TOGGLE_X0 + toggleW - toggleThumb - 2 : TOGGLE_X0 + 2;
-        g2.setColor(on ? Color.WHITE : palette.textTertiary());
+        g2.setColor(icarus.ui.ThemeHelper.ink(flat(track)));
         g2.fillOval(thumbX, toggleY + (toggleH - toggleThumb) / 2, toggleThumb, toggleThumb);
         
         // Text
@@ -93,5 +94,16 @@ public class SectionListCellRenderer extends JPanel implements ListCellRenderer<
         }
         
         g2.dispose();
+    }
+
+    /** Translucent accent tints are painted over the row. Contrast uses that composite, not the raw RGB. */
+    private Color flat(Color color) {
+        if (color.getAlpha() == 255) return color;
+        Color under = getBackground() == null ? Color.WHITE : getBackground();
+        float a = color.getAlpha() / 255f;
+        return new Color(
+            Math.round(color.getRed() * a + under.getRed() * (1 - a)),
+            Math.round(color.getGreen() * a + under.getGreen() * (1 - a)),
+            Math.round(color.getBlue() * a + under.getBlue() * (1 - a)));
     }
 }

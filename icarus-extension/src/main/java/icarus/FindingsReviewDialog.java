@@ -98,7 +98,7 @@ public class FindingsReviewDialog {
         
         JTextField txtFilter = new JTextField(30);
         txtFilter.putClientProperty("FlatLaf.style", "arc: 8; margin: 4,8,4,8;");
-        txtFilter.putClientProperty("JTextField.placeholderText", "Pesquisar (Regex)...");
+        txtFilter.putClientProperty("JTextField.placeholderText", I18n.t("findings.review.filter.placeholder"));
         filterPanel.add(txtFilter);
         
         javax.swing.table.TableRowSorter<javax.swing.table.TableModel> sorter = new javax.swing.table.TableRowSorter<>(table.getModel());

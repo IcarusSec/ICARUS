@@ -121,6 +121,18 @@ public class CanvasPageRenderTest {
             assert Math.abs(Math.hypot(v[2] - baseX, v[3] - baseY) - 2.35) < 0.01 : "arrow half-width is 2.35 stroke widths";
             arrowCount++;
         }
+        Matcher shafts = Pattern.compile("<line [^>]*x2=\"([^\"]+)\" y2=\"([^\"]+)\"").matcher(Files.readString(out.resolve("arrows.html")));
+        heads.reset();
+        int shaftCount = 0;
+        while (shafts.find() && heads.find()) {
+            double[] v = Arrays.stream(heads.group(1).trim().split("[ ,]")).mapToDouble(Double::parseDouble).toArray();
+            double baseX = (v[2] + v[4]) / 2;
+            double baseY = (v[3] + v[5]) / 2;
+            assert Math.abs(Double.parseDouble(shafts.group(1)) - baseX) < 0.01 : "shaft ends at the arrow base, not past the tip";
+            assert Math.abs(Double.parseDouble(shafts.group(2)) - baseY) < 0.01 : "shaft ends at the arrow base, not past the tip";
+            shaftCount++;
+        }
+        assert shaftCount == 3 : "each arrow shaft stops at its head";
         assert arrowCount == 3 : "one arrowhead per arrow line";
 
         // Chart kinds: line and pie are strokes and wedges with no bars and no labels; bars keep their labels.

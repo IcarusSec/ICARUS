@@ -158,10 +158,10 @@
       el.y1 = round(num(raw.y1, el.y));
       el.x2 = round(num(raw.x2, el.x + el.w));
       el.y2 = round(num(raw.y2, el.y + el.h));
-      syncLineBox(el);
       el.stroke = hex(raw.stroke, "#1A1A1A");
       el.strokeWidth = round(clamp(num(raw.strokeWidth, 0.4), 0.1, 8));
       el.arrow = !!raw.arrow;
+      syncLineBox(el); // after stroke and arrow are set: the box padding depends on both
       return el;
     }
     if (type === "text") {
@@ -241,12 +241,23 @@
   }
 
   function syncLineBox(el) {
-    var pad = Math.max(1.2, (el.strokeWidth || 0.4) + 1);
-    el.x = round(Math.min(el.x1, el.x2) - pad);
-    el.y = round(Math.min(el.y1, el.y2) - pad);
-    el.w = round(Math.max(pad * 2, Math.abs(el.x2 - el.x1) + pad * 2));
-    el.h = round(Math.max(pad * 2, Math.abs(el.y2 - el.y1) + pad * 2));
+    var sw = el.strokeWidth || 0.4, pad = Math.max(1.2, sw + 1);
+    // The box holds both ends and, for an arrow, the head's base and wings, even when the head is longer than the line.
+    var pts = [[el.x1, el.y1], [el.x2, el.y2]];
+    if (el.arrow) {
+      var dx = el.x2 - el.x1, dy = el.y2 - el.y1, len = Math.hypot(dx, dy) || 1;
+      var ux = dx / len, uy = dy / len, L = ARROW_LEN * sw, H = ARROW_HALF * sw;
+      var bx = el.x2 - ux * L, by = el.y2 - uy * L;
+      pts.push([bx - uy * H, by + ux * H], [bx + uy * H, by - ux * H]);
+    }
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    var minX = Math.min.apply(null, xs), minY = Math.min.apply(null, ys);
+    el.x = round(minX - pad);
+    el.y = round(minY - pad);
+    el.w = round(Math.max(pad * 2, Math.max.apply(null, xs) - minX + pad * 2));
+    el.h = round(Math.max(pad * 2, Math.max.apply(null, ys) - minY + pad * 2));
   }
+
 
   function normalizePage(raw) {
     raw = raw && typeof raw === "object" ? raw : {};
@@ -723,15 +734,19 @@
 
   function lineSvg(element) {
     var x1 = element.x1 - element.x, y1 = element.y1 - element.y, x2 = element.x2 - element.x, y2 = element.y2 - element.y;
-    var sw = element.strokeWidth, color = esc(element.stroke), head = "";
+    var sw = element.strokeWidth, color = esc(element.stroke), head = "", line = "";
     var dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+    var end = { x: x2, y: y2 }, drawLine = true;
     if (element.arrow && len >= 0.5) {
       var ux = dx / len, uy = dy / len, L = ARROW_LEN * sw, H = ARROW_HALF * sw;
       var bx = x2 - ux * L, by = y2 - uy * L;
       var pts = [[x2, y2], [bx - uy * H, by + ux * H], [bx + uy * H, by - ux * H]];
       head = '<polygon points="' + pointsAttr(pts, 1, 1) + '" fill="' + color + '"/>';
+      // The line stops at the head's base centre, so its square end cannot poke past the tip. Shorter than the head: head only.
+      if (len > L) end = { x: bx, y: by }; else drawLine = false;
     }
-    return '<svg class="line" viewBox="0 0 ' + element.w + ' ' + element.h + '" overflow="visible" aria-hidden="true"><line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + color + '" stroke-width="' + sw + '"/>' + head + "</svg>";
+    if (drawLine) line = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + end.x + '" y2="' + end.y + '" stroke="' + color + '" stroke-width="' + sw + '"/>';
+    return '<svg class="line" viewBox="0 0 ' + element.w + ' ' + element.h + '" overflow="visible" aria-hidden="true">' + line + head + "</svg>";
   }
 
   function profileFromDoc(doc) {
@@ -1155,6 +1170,15 @@
     if (stack[2].z !== 3 || stack[0].z === stack[1].z) throw new Error("reorder front");
     reorder(stack, [stack[2].id], "backward");
     if (stack[2].z !== 2) throw new Error("reorder backward");
+    var arrow = newElement("line", { x1: 10, y1: 40, x2: 80, y2: 40, strokeWidth: 1, arrow: true });
+    var plain = newElement("line", { x1: 10, y1: 40, x2: 80, y2: 40, strokeWidth: 1, arrow: false });
+    if (arrow.h <= plain.h) throw new Error("arrow box");
+    var arrowHtml = renderPage({ elements: [arrow] });
+    var shaft = /<line[^>]*x2="([^"]+)"/.exec(arrowHtml);
+    var tip = /<polygon points="([^"]+)"/.exec(arrowHtml);
+    if (!shaft || !tip) throw new Error("arrow draw");
+    var nums = tip[1].split(/[ ,]/).map(Number);
+    if (Math.abs(parseFloat(shaft[1]) - (nums[2] + nums[4]) / 2) > 0.05) throw new Error("arrow shaft");
     return "canvas ok";
   }
 

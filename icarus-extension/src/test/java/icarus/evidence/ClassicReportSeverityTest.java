@@ -46,7 +46,9 @@ public final class ClassicReportSeverityTest {
         assert pdfText.contains("Severity HIGH") && pdfText.contains("SERVER_ERROR HIGH") : "PDF does not show the finding's HIGH";
         assert !pdfText.contains("Severity MEDIUM") && !pdfText.contains("SERVER_ERROR MEDIUM") : "PDF shows knowledge-base MEDIUM";
 
-        String html = Files.readString(report(cfg, capture, List.of(high), "html"));
+        Path htmlFile = report(cfg, capture, List.of(high), "html");
+        String html = Files.readString(htmlFile);
+        assert html.contains("Report ID: " + htmlFile.getFileName().toString().replace(".html", "")) : "HTML Report ID is not the file name";
         assert html.contains("class=\"badge HIGH\">HIGH</span>") : "HTML badge is not the finding's HIGH";
         assert !html.contains("class=\"badge MEDIUM\">") : "HTML badge shows knowledge-base MEDIUM";
 

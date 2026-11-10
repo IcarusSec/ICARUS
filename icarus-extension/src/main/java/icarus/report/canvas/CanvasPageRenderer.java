@@ -78,7 +78,7 @@ public final class CanvasPageRenderer {
         html.append(".sheet{width:210mm;height:297mm;position:relative;overflow:hidden;page-break-after:always}");
         html.append(".el{position:absolute;box-sizing:border-box;transform-origin:center center;overflow:hidden;white-space:pre-wrap}");
         html.append(".el svg,.el img{width:100%;height:100%;display:block}.tint{position:absolute;inset:0;mix-blend-mode:multiply}");
-        html.append(".slot{display:flex;align-items:center;justify-content:center;height:100%;border:1px dashed #c5cad3;color:#667085;font-size:9pt}");
+        html.append(".slot{display:flex;align-items:center;justify-content:center;height:100%;box-sizing:border-box;border:1px dashed #c5cad3;color:#667085;background:#f8fafc;font-family:sans-serif;font-size:9pt}");
         html.append("table{width:100%;border-collapse:collapse}th,td{border:1px solid #e5e7eb;padding:1.2mm 1.6mm;text-align:left;vertical-align:top}");
         html.append("</style></head><body>");
         for (int i = 0; i < pages.size(); i++) {
@@ -285,12 +285,17 @@ public final class CanvasPageRenderer {
     private static void drawImage(PdfContentByte cb, JsonNode el, ReportRenderContext ctx, float w, float h) throws Exception {
         byte[] bytes = imageBytes(el, ctx);
         if (bytes == null) {
+            // Same empty slot as the studio: #f8fafc fill, 1px dashed #c5cad3, 9pt #667085, centred.
             cb.setColorFill(new Color(0xf8, 0xfa, 0xfc));
             cb.rectangle(-w / 2, -h / 2, w, h);
             cb.fill();
-            // The studio centres the placeholder in both axes; pad is the top inset that centres one line.
-            float pad = (h - 8f * 1.15f) / 2f;
-            drawTextRaw(cb, "Client logo", w, h, font("sans", 400), 8, Color.GRAY, "center", 1.15f, pad);
+            cb.setLineWidth(0.75f);
+            cb.setLineDash(2.25f, 1.5f, 0);
+            cb.setColorStroke(new Color(0xc5, 0xca, 0xd3));
+            cb.rectangle(-w / 2 + 0.375f, -h / 2 + 0.375f, w - 0.75f, h - 0.75f);
+            cb.stroke();
+            float pad = (h - 9f * 1.15f) / 2f;
+            drawTextRaw(cb, "Client logo", w, h, font("sans", 400), 9, new Color(0x66, 0x70, 0x85), "center", 1.15f, pad);
             return;
         }
         BufferedImage buffered = ImageIO.read(new ByteArrayInputStream(bytes));
@@ -449,9 +454,11 @@ public final class CanvasPageRenderer {
             float bh = values[i] > 0 ? Math.max(0.012f * h, (float) (values[i] / max * 0.62 * h)) : 0;
             float bx = -w / 2f + 0.06f * w + i * (barW + gap);
             float baseY = -h / 2f + 0.22f * h;
-            cb.setColorFill(color(cats.get(i).path("color").asText("#64748B"), Color.GRAY));
-            cb.rectangle(bx, baseY, barW, bh);
-            cb.fill();
+            if (bh > 0) {
+                cb.setColorFill(color(cats.get(i).path("color").asText("#64748B"), Color.GRAY));
+                cb.rectangle(bx, baseY, barW, bh);
+                cb.fill();
+            }
             // Label centre at 92% from the top; the CSS line box (line-height 1) is centred on it.
             float centre = -h / 2f + 0.08f * h;
             float baseline = centre + labelPt / 2f - ((labelPt - (ascent + descent)) / 2f + ascent);
@@ -544,27 +551,31 @@ public final class CanvasPageRenderer {
         float y2 = pageH - mm(el.path("y2").asDouble(0));
         float sw = (float) el.path("strokeWidth").asDouble(0.4) * CanvasPages.MM;
         cb.saveState();
-        cb.setColorStroke(color(CanvasPages.text(el, "stroke", "#1A1A1A"), Color.BLACK));
+        Color ink = color(CanvasPages.text(el, "stroke", "#1A1A1A"), Color.BLACK);
+        cb.setColorStroke(ink);
         cb.setLineWidth(sw);
-        cb.moveTo(x1, y1);
-        cb.lineTo(x2, y2);
-        cb.stroke();
-        if (el.path("arrow").asBoolean(false)) {
-            float dx = x2 - x1;
-            float dy = y2 - y1;
-            float len = (float) Math.hypot(dx, dy);
-            if (len >= 0.5f * CanvasPages.MM) {
-                float ux = dx / len;
-                float uy = dy / len;
-                cb.setColorFill(color(CanvasPages.text(el, "stroke", "#1A1A1A"), Color.BLACK));
-                // Same head as the studio: tip on the line end, length and half-width in stroke widths.
-                float bx = x2 - ux * ARROW_LEN * sw;
-                float by = y2 - uy * ARROW_LEN * sw;
-                cb.moveTo(x2, y2);
-                cb.lineTo(bx - uy * ARROW_HALF * sw, by + ux * ARROW_HALF * sw);
-                cb.lineTo(bx + uy * ARROW_HALF * sw, by - ux * ARROW_HALF * sw);
-                cb.fill();
-            }
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float len = (float) Math.hypot(dx, dy);
+        boolean arrow = el.path("arrow").asBoolean(false) && len >= 0.5f * CanvasPages.MM;
+        float ux = len == 0 ? 1 : dx / len;
+        float uy = len == 0 ? 0 : dy / len;
+        float headLen = ARROW_LEN * sw;
+        float bx = x2 - ux * headLen;
+        float by = y2 - uy * headLen;
+        // The shaft stops at the head's base, so the square cap cannot stick out past the tip.
+        if (!arrow || len > headLen) {
+            cb.moveTo(x1, y1);
+            cb.lineTo(arrow ? bx : x2, arrow ? by : y2);
+            cb.stroke();
+        }
+        if (arrow) {
+            float half = ARROW_HALF * sw;
+            cb.setColorFill(ink);
+            cb.moveTo(x2, y2);
+            cb.lineTo(bx - uy * half, by + ux * half);
+            cb.lineTo(bx + uy * half, by - ux * half);
+            cb.fill();
         }
         cb.restoreState();
     }
@@ -607,8 +618,12 @@ public final class CanvasPageRenderer {
                 style += ";background:" + esc(CanvasPages.text(el, "fill", "#111111"));
                 if ("ellipse".equals(shape)) style += ";border-radius:50%";
                 if (outlined) style += ";box-shadow:inset 0 0 0 " + strokeMm + "mm " + esc(stroke);
-            } else inner = "<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"><polygon points=\"" + pointsAttr(el.path("points")) + "\" fill=\"" + esc(CanvasPages.text(el, "fill", "#111111")) + "\"" +
-                (outlined ? " stroke=\"" + esc(stroke) + "\" stroke-width=\"" + strokeMm * 96 / 25.4 + "\" vector-effect=\"non-scaling-stroke\"" : "") + "/></svg>";
+            } else {
+                // Stroke is centred on the edge; visible overflow keeps the bottom of a triangle from being clipped.
+                style += ";overflow:visible";
+                inner = "<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\" overflow=\"visible\"><polygon points=\"" + pointsAttr(el.path("points")) + "\" fill=\"" + esc(CanvasPages.text(el, "fill", "#111111")) + "\"" +
+                    (outlined ? " stroke=\"" + esc(stroke) + "\" stroke-width=\"" + strokeMm * 96 / 25.4 + "\" vector-effect=\"non-scaling-stroke\"" : "") + "/></svg>";
+            }
         } else if ("image".equals(type)) {
             String clip = clipCss(el);
             if (!clip.isBlank()) style += ";clip-path:" + clip;
@@ -631,31 +646,49 @@ public final class CanvasPageRenderer {
         double x2 = el.path("x2").asDouble();
         double y2 = el.path("y2").asDouble();
         double sw = el.path("strokeWidth").asDouble(0.4);
-        // The box grows with the stroke so the arrow wings are not clipped by the element's overflow.
-        double pad = Math.max(2, ARROW_HALF * sw + 1);
-        double x = Math.min(x1, x2) - pad;
-        double y = Math.min(y1, y2) - pad;
-        double w = Math.max(2 * pad, Math.abs(x2 - x1) + 2 * pad);
-        double h = Math.max(2 * pad, Math.abs(y2 - y1) + 2 * pad);
-        String color = esc(CanvasPages.text(el, "stroke", "#1A1A1A"));
-        // viewBox in millimetres, so stroke-width and the head are millimetres as in the PDF (no distortion).
-        StringBuilder head = new StringBuilder();
         double dx = x2 - x1;
         double dy = y2 - y1;
         double len = Math.hypot(dx, dy);
-        if (el.path("arrow").asBoolean(false) && len >= 0.5) {
-            double ux = dx / len;
-            double uy = dy / len;
-            double bx = x2 - ux * ARROW_LEN * sw;
-            double by = y2 - uy * ARROW_LEN * sw;
+        boolean arrow = el.path("arrow").asBoolean(false) && len >= 0.5;
+        double ux = len == 0 ? 1 : dx / len;
+        double uy = len == 0 ? 0 : dy / len;
+        double headLen = ARROW_LEN * sw;
+        double half = ARROW_HALF * sw;
+        double bx = x2 - ux * headLen;
+        double by = y2 - uy * headLen;
+        // Same box as the studio: both ends, plus the head's base and wings when it is an arrow.
+        double pad = Math.max(1.2, sw + 1);
+        double minX = Math.min(x1, x2);
+        double minY = Math.min(y1, y2);
+        double maxX = Math.max(x1, x2);
+        double maxY = Math.max(y1, y2);
+        if (arrow) {
+            minX = Math.min(minX, Math.min(bx - uy * half, bx + uy * half));
+            maxX = Math.max(maxX, Math.max(bx - uy * half, bx + uy * half));
+            minY = Math.min(minY, Math.min(by + ux * half, by - ux * half));
+            maxY = Math.max(maxY, Math.max(by + ux * half, by - ux * half));
+        }
+        double x = minX - pad;
+        double y = minY - pad;
+        double w = Math.max(pad * 2, maxX - minX + pad * 2);
+        double h = Math.max(pad * 2, maxY - minY + pad * 2);
+        String color = esc(CanvasPages.text(el, "stroke", "#1A1A1A"));
+        StringBuilder head = new StringBuilder();
+        double ex = x2;
+        double ey = y2;
+        boolean drawShaft = true;
+        if (arrow) {
+            if (len > headLen) { ex = bx; ey = by; } else drawShaft = false;
             head.append("<polygon points=\"").append(fmt(x2 - x)).append(',').append(fmt(y2 - y)).append(' ')
-                .append(fmt(bx - uy * ARROW_HALF * sw - x)).append(',').append(fmt(by + ux * ARROW_HALF * sw - y)).append(' ')
-                .append(fmt(bx + uy * ARROW_HALF * sw - x)).append(',').append(fmt(by - ux * ARROW_HALF * sw - y))
+                .append(fmt(bx - uy * half - x)).append(',').append(fmt(by + ux * half - y)).append(' ')
+                .append(fmt(bx + uy * half - x)).append(',').append(fmt(by - ux * half - y))
                 .append("\" fill=\"").append(color).append("\"/>");
         }
-        return "<div class=\"el\" style=\"left:" + fmt(x) + "mm;top:" + fmt(y) + "mm;width:" + fmt(w) + "mm;height:" + fmt(h) + "mm\">" +
-            "<svg viewBox=\"0 0 " + fmt(w) + " " + fmt(h) + "\" aria-hidden=\"true\"><line x1=\"" + fmt(x1 - x) + "\" y1=\"" + fmt(y1 - y) +
-            "\" x2=\"" + fmt(x2 - x) + "\" y2=\"" + fmt(y2 - y) + "\" stroke=\"" + color + "\" stroke-width=\"" + fmt(sw) + "\"/>" + head + "</svg></div>";
+        String shaft = drawShaft
+            ? "<line x1=\"" + fmt(x1 - x) + "\" y1=\"" + fmt(y1 - y) + "\" x2=\"" + fmt(ex - x) + "\" y2=\"" + fmt(ey - y) + "\" stroke=\"" + color + "\" stroke-width=\"" + fmt(sw) + "\"/>"
+            : "";
+        return "<div class=\"el\" style=\"left:" + fmt(x) + "mm;top:" + fmt(y) + "mm;width:" + fmt(w) + "mm;height:" + fmt(h) + "mm;overflow:visible\">" +
+            "<svg viewBox=\"0 0 " + fmt(w) + " " + fmt(h) + "\" overflow=\"visible\" aria-hidden=\"true\">" + shaft + head + "</svg></div>";
     }
 
     private static String chartSvg(JsonNode el, ReportRenderContext ctx) {

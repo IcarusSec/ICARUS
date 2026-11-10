@@ -23,6 +23,7 @@ public class ReportProfileSystemTest {
         testBuiltInProfilesLoad();
         testJsonRoundTrip();
         testImportValidation();
+        testStoredInvalidProfileSkipped();
         testProfileCloning();
         testProfileManagerImmutability();
         testMigrator();
@@ -98,6 +99,18 @@ public class ReportProfileSystemTest {
         }
         assert manager.list().size() == before : "rejected import must not create a profile";
         System.out.println("   [PASSED] Profile import validation.");
+    }
+
+    private static void testStoredInvalidProfileSkipped() {
+        System.out.println(" - Testing stored profiles with an unsupported version are skipped...");
+        ModuleConfig cfg = new ModuleConfig();
+        cfg.set(DefaultReportProfileManager.KEY_USER_PROFILES,
+            "[{\"schemaVersion\":\"1\",\"id\":\"user:good\",\"name\":\"Good\"},"
+            + "{\"schemaVersion\":\"99\",\"id\":\"user:bad\",\"name\":\"Bad\"}]");
+        DefaultReportProfileManager manager = new DefaultReportProfileManager(cfg);
+        assert manager.get("user:good") != null : "valid stored profile must still load";
+        assert manager.get("user:bad") == null : "schemaVersion 99 stored profile must be skipped";
+        System.out.println("   [PASSED] Invalid stored profile skipped, others loaded.");
     }
 
     private static void assertImportRejected(String json, String messagePrefix) {

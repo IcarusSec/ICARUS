@@ -206,7 +206,7 @@ public final class PdfReportGenerator {
             writer.setPageEvent(new FooterPageEvent(rtc, accent, accent2, this));
             doc.open();
 
-            String reportId = outputPdfFile.getFileName().toString().replaceFirst("(?i)\\.pdf$", "");
+            String reportId = ReportGenerator.reportId(outputPdfFile);
             appendCoverPage(doc, rtc, reportId, projectName, accent, accent2, writer);
             appendHeader(doc, reportId, projectName, rtc);
             boolean findingsPlaced = appendSections(doc, rtc, accent, writer, addBookmarks, retest, findings, evidenceByHash, config, capture);

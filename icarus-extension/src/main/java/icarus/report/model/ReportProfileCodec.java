@@ -32,6 +32,11 @@ public final class ReportProfileCodec {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse ReportProfile from JSON: " + e.getMessage(), e);
         }
+        return fromNode(node);
+    }
+
+    /** Validates an already-parsed profile (import, or one element of the stored profile list). */
+    public static ReportProfile fromNode(JsonNode node) {
         if (node == null || !node.isObject()) {
             throw new IllegalArgumentException("Not a report profile: expected a JSON object");
         }

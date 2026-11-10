@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -59,6 +60,13 @@ public final class EvidenceCapture {
     private final MontoyaApi api;
     final ModuleConfig config;
     public final List<CapturedEvidence> captured = new CopyOnWriteArrayList<>();
+    /**
+     * Guards every mutation of {@link #captured} and {@link #excludedFromReport}. The list is
+     * changed from the EDT (Evidence Manager), MCP worker threads and the autosaver; a
+     * look-up-then-set or clear-then-addAll sequence without it could drop or duplicate entries.
+     * Listeners are always notified after the lock is released.
+     */
+    private final Object lock = new Object();
     public final CweRepository cweRepository = new CweRepository();
 
     // Lets a piece of evidence be left out of the *next* report without discarding it —
@@ -125,30 +133,38 @@ public final class EvidenceCapture {
     }
 
     public void removeCaptured(CapturedEvidence evidence) {
-        captured.remove(evidence);
-        excludedFromReport.remove(evidence);
+        synchronized (lock) {
+            captured.remove(evidence);
+            excludedFromReport.remove(evidence);
+        }
         notifyChangeListeners();
     }
 
     /** Discards all captured evidence and inclusion state — used when importing a project file to fully replace current state. */
     public void clearAll() {
-        captured.clear();
-        excludedFromReport.clear();
+        synchronized (lock) {
+            captured.clear();
+            excludedFromReport.clear();
+        }
         notifyChangeListeners();
     }
 
     /** Adds a reconstructed piece of evidence (e.g. from an imported project file) without going through the interactive capture flow. */
     public void restoreCaptured(CapturedEvidence evidence, boolean included) {
-        captured.add(evidence);
-        if (!included) excludedFromReport.add(evidence);
+        synchronized (lock) {
+            captured.add(evidence);
+            if (!included) excludedFromReport.add(evidence);
+        }
         notifyChangeListeners();
     }
 
     public void setIncluded(CapturedEvidence evidence, boolean included) {
-        if (included) {
-            excludedFromReport.remove(evidence);
-        } else {
-            excludedFromReport.add(evidence);
+        synchronized (lock) {
+            if (included) {
+                excludedFromReport.remove(evidence);
+            } else {
+                excludedFromReport.add(evidence);
+            }
         }
         notifyChangeListeners();
     }
@@ -163,9 +179,49 @@ public final class EvidenceCapture {
      * it back — simpler than translating individual drag gestures into swap operations here.
      */
     public void reorderCaptured(List<CapturedEvidence> newOrder) {
-        captured.clear();
-        captured.addAll(newOrder);
+        synchronized (lock) {
+            // newOrder is a copy the caller took earlier. Order by image path but keep the
+            // current instances (a caption edited meanwhile must not be reverted), skip entries
+            // removed meanwhile and keep entries added meanwhile (at the end).
+            // Entries sharing one path (older projects) are matched in list order.
+            Map<Path, java.util.ArrayDeque<CapturedEvidence>> current = new java.util.HashMap<>();
+            for (CapturedEvidence ce : captured) {
+                current.computeIfAbsent(key(ce.imagePath()), k -> new java.util.ArrayDeque<>()).add(ce);
+            }
+            List<CapturedEvidence> ordered = new ArrayList<>(captured.size());
+            for (CapturedEvidence ce : newOrder) {
+                var live = current.get(key(ce.imagePath()));
+                if (live != null && !live.isEmpty()) ordered.add(live.poll());
+            }
+            for (CapturedEvidence ce : captured) {
+                var live = current.get(key(ce.imagePath()));
+                if (live.peek() == ce) ordered.add(live.poll());
+            }
+            if (ordered.size() == captured.size()) {
+                // One atomic array swap: readers never see a half-empty list.
+                int[] i = {0};
+                captured.replaceAll(ce -> ordered.get(i[0]++));
+            }
+        }
         notifyChangeListeners();
+    }
+
+    private static Path key(Path p) {
+        return p == null ? Path.of("") : p.toAbsolutePath().normalize();
+    }
+
+    /**
+     * True if some captured evidence entry already uses {@code imagePath} (compared as
+     * normalized absolute paths). Saving a second screenshot over it would make two entries
+     * share, and silently change, one file.
+     */
+    public boolean isImagePathInUse(Path imagePath) {
+        if (imagePath == null) return false;
+        Path k = key(imagePath);
+        for (CapturedEvidence ce : captured) {
+            if (ce.imagePath() != null && key(ce.imagePath()).equals(k)) return true;
+        }
+        return false;
     }
 
     public List<CapturedEvidence> getCaptured() {
@@ -267,7 +323,7 @@ public final class EvidenceCapture {
 
     private int indexByImagePath(Path imagePath) {
         for (int i = 0; i < captured.size(); i++) {
-            if (captured.get(i).imagePath().equals(imagePath)) return i;
+            if (Objects.equals(captured.get(i).imagePath(), imagePath)) return i;
         }
         return -1;
     }
@@ -281,16 +337,20 @@ public final class EvidenceCapture {
      * holding a now-stale reference. {@code image} of {@code null} keeps the current image.
      */
     private CapturedEvidence replace(CapturedEvidence evidence, Finding finding, String caption, BufferedImage image) {
-        int idx = indexByImagePath(evidence.imagePath());
-        if (idx < 0) return evidence;
-        CapturedEvidence current = captured.get(idx);
-        BufferedImage finalImage = image != null ? image : current.image();
-        boolean wasExcluded = excludedFromReport.contains(current);
-        CapturedEvidence updated = new CapturedEvidence(finding, current.imagePath(), finalImage, caption);
-        captured.set(idx, updated);
-        if (wasExcluded) {
-            excludedFromReport.remove(current);
-            excludedFromReport.add(updated);
+        CapturedEvidence updated;
+        synchronized (lock) {
+            // Look-up and set under one lock: another thread may reorder/remove in between.
+            int idx = indexByImagePath(evidence.imagePath());
+            if (idx < 0) return evidence;
+            CapturedEvidence current = captured.get(idx);
+            BufferedImage finalImage = image != null ? image : current.image();
+            boolean wasExcluded = excludedFromReport.contains(current);
+            updated = new CapturedEvidence(finding, current.imagePath(), finalImage, caption);
+            captured.set(idx, updated);
+            if (wasExcluded) {
+                excludedFromReport.remove(current);
+                excludedFromReport.add(updated);
+            }
         }
         notifyChangeListeners();
         return updated;
@@ -367,21 +427,26 @@ public final class EvidenceCapture {
      * screenshot actually show up in the report — a mismatch there was silently
      * dropping evidence images before.
      */
-    public void saveAndRegisterEvidence(Finding finding, BufferedImage image) {
+    /** @return true if the screenshot was written and added; false after showing the error. */
+    public boolean saveAndRegisterEvidence(Finding finding, BufferedImage image) {
         try {
             Path out = EvidencePaths.reserveEvidenceFile(EvidencePaths.evidenceImageDir(api, config),
                     "evidence", finding.type());
-            ImageIO.write(image, "png", out.toFile());
+            if (!ImageIO.write(image, "png", out.toFile())) throw new IOException("no PNG writer available");
 
-            captured.add(new CapturedEvidence(finding, out, image, ""));
+            synchronized (lock) {
+                captured.add(new CapturedEvidence(finding, out, image, ""));
+            }
             onApplied.accept(finding);
             notifyChangeListeners();
             ToastNotification.show(api.userInterface().swingUtils().suiteFrame(),
                     "Evidence added to report: " + finding.type());
-        } catch (IOException e) {
+            return true;
+        } catch (IOException | RuntimeException e) {
             api.logging().logToError("Failed to save evidence screenshot: " + e);
             JOptionPane.showMessageDialog(api.userInterface().swingUtils().suiteFrame(),
                     "Failed to save evidence screenshot: " + e.getMessage());
+            return false;
         }
     }
 

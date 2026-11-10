@@ -207,12 +207,7 @@ public class ReportingSettingsTab {
                 detailPane.bodyWell.setEnabled(!disable);
                 isUpdatingUi = false;
             } else {
-                isUpdatingUi = true;
-                detailPane.titleField.setText("");
-                detailPane.bodyWell.setText("");
-                detailPane.titleField.setEnabled(false);
-                detailPane.bodyWell.setEnabled(false);
-                isUpdatingUi = false;
+                clearSectionDetail();
             }
         });
 
@@ -239,6 +234,18 @@ public class ReportingSettingsTab {
         };
         detailPane.titleField.getDocument().addDocumentListener(dl);
         detailPane.bodyWell.getDocument().addDocumentListener(dl);
+    }
+
+    /** Empties and disables the section editor. Keeps the caller's isUpdatingUi state intact. */
+    private void clearSectionDetail() {
+        boolean wasUpdating = isUpdatingUi;
+        isUpdatingUi = true;
+        try {
+            detailPane.titleField.setText("");
+            detailPane.bodyWell.setText("");
+            detailPane.titleField.setEnabled(false);
+            detailPane.bodyWell.setEnabled(false);
+        } finally { isUpdatingUi = wasUpdating; }
     }
 
     private void refreshProfileList() {
@@ -268,6 +275,9 @@ public class ReportingSettingsTab {
         for (SectionNode n : p.sections().nodes()) {
             sectionListPanel.model.addElement(n);
         }
+        // No section means no selection event, and refreshProfileList() suppresses the listener
+        // anyway, so the previous profile's text would stay in the editor.
+        if (sectionListPanel.model.isEmpty()) clearSectionDetail();
         // Select the first section once isUpdatingUi has cleared, so the editor
         // opens populated instead of blank.
         SwingUtilities.invokeLater(() -> {
@@ -350,23 +360,31 @@ public class ReportingSettingsTab {
             if (v != null) sevHex.put(s, v);
         });
 
-        PdfTheme pdfTheme = new PdfTheme(primary, secondary, "#202020", primary, "#F7F7F7", sevHex, font, fontSize, PageBox.a4Default());
-        HtmlTheme htmlTheme = new HtmlTheme(primary, secondary, "#FFFFFF", "#F7F7F7", "#1A1A1A", "#DDDDDD", sevHex,
-            "-apple-system, BlinkMacSystemFont, sans-serif", false);
+        // Fields the form has no control for (text/heading colors, page box, branding team/owner...,
+        // CWE mode, HTML background and font) come from the loaded profile, not from defaults.
+        PdfTheme oldPdf = currentProfile.pdfTheme();
+        HtmlTheme oldHtml = currentProfile.htmlTheme();
+        PdfTheme pdfTheme = new PdfTheme(primary, secondary, oldPdf.textHex(), oldPdf.headingHex(), oldPdf.tableHeaderHex(),
+            sevHex, font, fontSize, oldPdf.pageBox());
+        HtmlTheme htmlTheme = new HtmlTheme(primary, secondary, oldHtml.backgroundHex(), oldHtml.cardBackgroundHex(),
+            oldHtml.textHex(), oldHtml.borderHex(), sevHex, oldHtml.fontStack(), oldHtml.dark());
 
+        BrandingConfig oldBranding = currentProfile.branding();
         BrandingConfig branding = new BrandingConfig(
             blankToNull(brandingPanel.txtCompanyLogo.getText()), blankToNull(brandingPanel.txtClientLogo.getText()),
             brandingPanel.txtAuthor.getText().trim(), brandingPanel.txtReviewer.getText().trim(), brandingPanel.txtApprover.getText().trim(),
             brandingPanel.txtClassification.getText().trim(), brandingPanel.txtEnvironment.getText().trim(), brandingPanel.txtDocTitle.getText().trim(),
-            "", "", "", "", "", "");
+            oldBranding.team(), oldBranding.component(), oldBranding.requester(), oldBranding.owner(),
+            oldBranding.assessmentPeriod(), oldBranding.method());
 
         List<FindingField> fields = new ArrayList<>();
         contentPanel.fieldCheckboxes.forEach((f, chk) -> { if (chk.isOn()) fields.add(f); });
 
+        ContentPolicy oldContent = currentProfile.content();
         ContentPolicy contentPolicy = new ContentPolicy(
             contentPanel.chkIncludeEvidence.isOn(), contentPanel.chkIncludeReq.isOn(), contentPanel.chkIncludeRes.isOn(),
             (Integer) contentPanel.spinMaxReqBytes.getValue(), (Integer) contentPanel.spinMaxResBytes.getValue(),
-            fields, CweMode.HARDCODED_CATALOG, Collections.emptyList(), contentPanel.chkToc.isOn());
+            fields, oldContent.cweMode(), oldContent.cweAllowlist(), contentPanel.chkToc.isOn());
 
         ReportProfile updated = new ReportProfile(
             ReportProfile.CURRENT_SCHEMA_VERSION, currentProfile.id(), currentProfile.name(),

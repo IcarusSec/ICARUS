@@ -1,6 +1,7 @@
 package icarus.report.model;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import java.io.InputStream;
@@ -23,9 +24,29 @@ public final class ReportProfileCodec {
         }
     }
 
+    /** Import entry point: rejects input that is not a profile, or is a profile of another schema version. */
     public static ReportProfile fromJson(String json) {
+        JsonNode node;
         try {
-            return MAPPER.readValue(json, ReportProfile.class);
+            node = MAPPER.readTree(json);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse ReportProfile from JSON: " + e.getMessage(), e);
+        }
+        if (node == null || !node.isObject()) {
+            throw new IllegalArgumentException("Not a report profile: expected a JSON object");
+        }
+        // A missing or blank version is accepted (older exports predate the field).
+        JsonNode version = node.get("schemaVersion");
+        if (version != null && !version.isNull() && !version.asText().isBlank()
+                && !ReportProfile.CURRENT_SCHEMA_VERSION.equals(version.asText())) {
+            throw new IllegalArgumentException("Unsupported profile version \"" + version.asText()
+                + "\" (this ICARUS reads version " + ReportProfile.CURRENT_SCHEMA_VERSION + ")");
+        }
+        if (!node.hasNonNull("name") && !node.hasNonNull("sections")) {
+            throw new IllegalArgumentException("Not a report profile: no name or sections");
+        }
+        try {
+            return MAPPER.treeToValue(node, ReportProfile.class);
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse ReportProfile from JSON: " + e.getMessage(), e);
         }

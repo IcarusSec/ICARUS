@@ -148,9 +148,12 @@ public final class PdfReportGenerator {
             
             b.description(tmpl.descricao() != null && !tmpl.descricao().isBlank() ? tmpl.descricao() : f.description());
             
+            // Only a user-saved template severity overrides the finding's own; tmpl may be the
+            // knowledge-base fallback from getFindingTemplate(), which is not a user edit.
             Severity sev = f.severity();
-            if (tmpl.severidade() != null && !tmpl.severidade().isBlank()) {
-                try { sev = Severity.valueOf(tmpl.severidade().toUpperCase()); } catch (Exception e) {}
+            ReportTemplateConfig.FindingTemplate userTmpl = rtc.findingTemplates().get(f.type());
+            if (userTmpl != null && userTmpl.severidade() != null && !userTmpl.severidade().isBlank()) {
+                try { sev = Severity.valueOf(userTmpl.severidade().toUpperCase()); } catch (Exception e) {}
             }
             b.severity(sev);
             
@@ -203,8 +206,9 @@ public final class PdfReportGenerator {
             writer.setPageEvent(new FooterPageEvent(rtc, accent, accent2, this));
             doc.open();
 
-            appendCoverPage(doc, rtc, reportDir.getFileName().toString(), projectName, accent, accent2, writer);
-            appendHeader(doc, reportDir.getFileName().toString(), projectName, rtc);
+            String reportId = outputPdfFile.getFileName().toString().replaceFirst("(?i)\\.pdf$", "");
+            appendCoverPage(doc, rtc, reportId, projectName, accent, accent2, writer);
+            appendHeader(doc, reportId, projectName, rtc);
             boolean findingsPlaced = appendSections(doc, rtc, accent, writer, addBookmarks, retest, findings, evidenceByHash, config, capture);
             if (!findingsPlaced) {
                 appendSummary(doc, findings, accent);
@@ -809,9 +813,11 @@ public final class PdfReportGenerator {
                     contentCell.addElement(new Paragraph(I18n.t("evidence.pdf.findings.evidence_error"), BODY_FONT));
                 }
                 String evidenceCaption = evidence.caption() == null ? "" : evidence.caption();
-                Paragraph caption = new Paragraph(evidenceIndex + ". " + evidenceCaption, LABEL_FONT);
-                caption.setSpacingBefore(4f);
-                contentCell.addElement(caption);
+                if (!evidenceCaption.isBlank()) {
+                    Paragraph caption = new Paragraph(evidenceIndex + ". " + evidenceCaption, LABEL_FONT);
+                    caption.setSpacingBefore(4f);
+                    contentCell.addElement(caption);
+                }
                 card.addCell(contentCell);
                 evidenceIndex++;
             }

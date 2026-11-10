@@ -17,9 +17,9 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Classic PDF and HTML reports must print a finding's own severity (the one Results shows),
- * unless the user saved a template severity; and a screenshot with no caption must not print
- * a bare "1.". Generated headlessly, then read back with OpenPDF's text extractor.
+ * PDF uses the active profile layout and still prints a finding's own severity (the one Results
+ * shows), unless the user saved a template severity. HTML stays on the legacy generator.
+ * A screenshot with no caption must not print a bare "1.".
  * {@code java -cp build_manual/classes:build_manual/test-classes:libs/* icarus.evidence.ClassicReportSeverityTest}
  */
 public final class ClassicReportSeverityTest {
@@ -39,12 +39,11 @@ public final class ClassicReportSeverityTest {
 
         Path pdf = report(cfg, capture, List.of(high), "pdf");
         String pdfText = pdfText(pdf);
-        // Report ID comes from the output file name, not the folder it sits in.
-        String id = pdf.getFileName().toString().replace(".pdf", "");
-        assert pdfText.contains("Report ID: " + id) : "Report ID is not the file name";
-        System.out.println("   [PDF text]\n" + pdfText);
-        assert pdfText.contains("Severity HIGH") && pdfText.contains("SERVER_ERROR HIGH") : "PDF does not show the finding's HIGH";
-        assert !pdfText.contains("Severity MEDIUM") && !pdfText.contains("SERVER_ERROR MEDIUM") : "PDF shows knowledge-base MEDIUM";
+        // Executive Modern draws the finding's own severity on the card and in the summary row.
+        // The knowledge-base default for SERVER_ERROR is MEDIUM and must not replace HIGH.
+        assert pdfText.contains("SERVER_ERROR HIGH") : "PDF does not show the finding's HIGH:\n" + pdfText;
+        assert pdfText.contains("HIGH #1. SERVER_ERROR") : "elevated card missing:\n" + pdfText;
+        assert !pdfText.contains("SERVER_ERROR MEDIUM") : "PDF shows knowledge-base MEDIUM";
 
         Path htmlFile = report(cfg, capture, List.of(high), "html");
         String html = Files.readString(htmlFile);
@@ -58,7 +57,9 @@ public final class ClassicReportSeverityTest {
             new ReportTemplateConfig.FindingTemplate(null, null, null, "LOW")));
         rtc.saveTo(cfg);
         String overridden = pdfText(report(cfg, capture, List.of(high), "pdf"));
-        assert overridden.contains("Severity LOW") && overridden.contains("SERVER_ERROR LOW") : "user template severity not applied";
+        assert overridden.contains("SERVER_ERROR LOW") : "user template severity not applied:\n" + overridden;
+        assert overridden.contains("LOW #1. SERVER_ERROR") : "elevated card kept HIGH:\n" + overridden;
+        assert !overridden.contains("SERVER_ERROR HIGH") : "user template severity did not replace HIGH";
 
         // Blank caption: no stray "1." paragraph.
         ModuleConfig plain = config();

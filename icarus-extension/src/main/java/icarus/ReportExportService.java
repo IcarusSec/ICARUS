@@ -162,9 +162,11 @@ public class ReportExportService {
         }
         // Non-canvas PDF used to sort worst-first inside the legacy generator. Keep that order
         // when the profile's own finding renderer draws the cards.
-        List<Finding> ordered = reportFindings;
+        // Same finding-template rules as the legacy generators: a saved template severity
+        // wins, a blank one does not, and the knowledge-base fallback is not a user edit.
+        List<Finding> ordered = applyFindingTemplates(reportFindings);
         if (pdf && !canvas) {
-            ordered = new ArrayList<>(reportFindings);
+            ordered = new ArrayList<>(ordered);
             ordered.sort(java.util.Comparator.comparingInt(f -> f.severity().ordinal()));
         }
         // Same title and project sources as the legacy generators: Report Details first, then Burp's project name.
@@ -188,6 +190,37 @@ public class ReportExportService {
                 mapped.findings(), mapped.severityCounts(), mapped.fixedCount(), mapped.notFixedCount(), vars, mapped.isRetest());
         icarus.report.render.ReportRenderContext ctx = profiles.bind(data, out.toAbsolutePath().getParent());
         return pdf ? pdfReportGenerator.generate(ctx, out) : reportGenerator.generate(ctx, out);
+    }
+
+    private List<Finding> applyFindingTemplates(List<Finding> findings) {
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        List<Finding> processed = new ArrayList<>();
+        for (Finding f : findings) {
+            ReportTemplateConfig.FindingTemplate tmpl = rtc.getFindingTemplate(f.type());
+            if (tmpl == null) {
+                processed.add(f);
+                continue;
+            }
+            Finding.Builder b = Finding.builder(f.module(), f.type())
+                .category(f.category())
+                .path(f.path())
+                .evidence(f.evidence());
+            f.metadata().forEach(b::meta);
+            f.cweIds().forEach(b::cwe);
+            b.description(tmpl.descricao() != null && !tmpl.descricao().isBlank() ? tmpl.descricao() : f.description());
+            Severity sev = f.severity();
+            ReportTemplateConfig.FindingTemplate userTmpl = rtc.findingTemplates().get(f.type());
+            if (userTmpl != null && userTmpl.severidade() != null && !userTmpl.severidade().isBlank()) {
+                try {
+                    sev = Severity.valueOf(userTmpl.severidade().toUpperCase());
+                } catch (Exception ignored) {
+                    // Keep the finding's own severity when the saved value is not a known level.
+                }
+            }
+            b.severity(sev);
+            processed.add(b.build());
+        }
+        return processed;
     }
 
     public Path generateReport(String format, Map<String, String> templateVariables) throws Exception {

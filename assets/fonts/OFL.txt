@@ -1,0 +1,1 @@
+Inter, Source Serif 4, and JetBrains Mono are used under the SIL Open Font License. The latin subsets are from the Fontsource builds of those families.

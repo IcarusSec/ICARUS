@@ -40,6 +40,9 @@ import javax.imageio.ImageIO;
  * coordinates as the template studio. Fonts are the files shipped with the studio.
  */
 public final class CanvasPageRenderer {
+    /** Studio arrowhead: length and half-width in stroke widths (canvas.js ARROW_LEN, ARROW_HALF). */
+    private static final float ARROW_LEN = 6.3f;
+    private static final float ARROW_HALF = 2.35f;
     private static final Map<String, BaseFont> FONTS = new HashMap<>();
 
     private CanvasPageRenderer() {}
@@ -168,10 +171,13 @@ public final class CanvasPageRenderer {
         double stroke = el.path("strokeWidth").asDouble(0);
         String strokeColor = CanvasPages.text(el, "stroke", "");
         if (stroke > 0 && !strokeColor.isBlank()) {
+            // Rect and ellipse strokes are inset by half the width so the outer edge is the element box (box-shadow inset).
+            float sw = (float) stroke * CanvasPages.MM;
+            float inset = sw / 2f;
             cb.setColorStroke(color(strokeColor, Color.BLACK));
-            cb.setLineWidth((float) stroke * CanvasPages.MM);
-            if ("ellipse".equals(shape)) cb.ellipse(-w / 2, -h / 2, w / 2, h / 2);
-            else if ("rect".equals(shape)) cb.rectangle(-w / 2, -h / 2, w, h);
+            cb.setLineWidth(sw);
+            if ("ellipse".equals(shape)) cb.ellipse(-w / 2 + inset, -h / 2 + inset, w / 2 - inset, h / 2 - inset);
+            else if ("rect".equals(shape)) cb.rectangle(-w / 2 + inset, -h / 2 + inset, w - sw, h - sw);
             else polygon(cb, el.path("points"), w, h);
             cb.stroke();
         }
@@ -390,30 +396,23 @@ public final class CanvasPageRenderer {
     }
 
     private static void drawChart(PdfContentByte cb, JsonNode el, ReportRenderContext ctx, float w, float h) throws Exception {
-        List<JsonNode> cats = new java.util.ArrayList<>();
-        if (el.path("categories").isArray()) el.path("categories").forEach(cats::add);
-        if (cats.isEmpty()) return;
-        boolean bound = !"static".equals(CanvasPages.text(el, "binding", "findingsBySeverity"));
+        JsonNode cats = el.path("categories");
+        if (!cats.isArray() || cats.isEmpty()) return;
+        double[] values = chartValues(el, ctx);
         double max = 1;
-        double[] values = new double[cats.size()];
-        for (int i = 0; i < cats.size(); i++) {
-            String key = cats.get(i).path("key").asText("");
-            values[i] = bound ? count(ctx, key) : cats.get(i).path("value").asDouble(0);
-            max = Math.max(max, values[i]);
-        }
+        for (double value : values) max = Math.max(max, value);
+        // Studio geometry: a 100-unit square. Line and pie keep it uniform and centred; bars stretch to the box.
+        // Local coordinates are centred: X = (u - 50) * scale, Y = (50 - v) * scale, with (u, v) in studio units.
         String kind = CanvasPages.text(el, "chart", "bar");
+        float s = Math.min(w, h) / 100f;
         if ("line".equals(kind)) {
-            cb.setLineWidth(1.2f);
-            cb.setColorStroke(color(cats.get(0).path("color").asText("#2563EB"), new Color(0x25, 0x63, 0xEB)));
-            boolean started = false;
-            float step = values.length <= 1 ? 0 : (w * 0.84f) / (values.length - 1);
+            cb.setLineWidth(1.6f * s);
+            cb.setColorStroke(new Color(0x25, 0x63, 0xEB));
             for (int i = 0; i < values.length; i++) {
-                float px = -w / 2f + w * 0.08f + i * step;
-                float py = -h / 2f + 14 + (float) (values[i] / max * h * 0.7);
-                if (!started) {
-                    cb.moveTo(px, py);
-                    started = true;
-                } else cb.lineTo(px, py);
+                float u = values.length == 1 ? 50 : 8 + i * 84f / (values.length - 1);
+                float v = (float) (78 - values[i] / max * 62);
+                if (i == 0) cb.moveTo((u - 50) * s, (50 - v) * s);
+                else cb.lineTo((u - 50) * s, (50 - v) * s);
             }
             cb.stroke();
             return;
@@ -422,34 +421,44 @@ public final class CanvasPageRenderer {
             double total = 0;
             for (double value : values) total += Math.max(0, value);
             if (total <= 0) return;
-            float start = 90;
+            float radius = 36f * s;
+            double phi = 90;   // 12 o'clock; slices run clockwise like the studio's SVG arcs
             for (int i = 0; i < values.length; i++) {
                 if (values[i] <= 0) continue;
-                float sweep = (float) (values[i] / total * 360);
+                double sweep = values[i] / total * 360;
                 cb.setColorFill(color(cats.get(i).path("color").asText("#64748B"), Color.GRAY));
                 cb.moveTo(0, 0);
-                cb.arc(-h / 3, -h / 3, h / 3, h / 3, start, -sweep);
-                cb.lineTo(0, 0);
+                int steps = Math.max(1, (int) Math.ceil(sweep / 2));
+                for (int k = 0; k <= steps; k++) {
+                    double a = Math.toRadians(phi - sweep * k / steps);
+                    cb.lineTo((float) (radius * Math.cos(a)), (float) (radius * Math.sin(a)));
+                }
+                cb.closePath();
                 cb.fill();
-                start -= sweep;
+                phi -= sweep;
             }
             return;
         }
-        float gap = 4f;
-        float barW = (w * 0.9f - gap * (cats.size() - 1)) / cats.size();
-        BaseFont label = font("sans", 400);
+        float gap = 0.03f * w;
+        float barW = (0.88f * w - gap * (values.length - 1)) / values.length;
         float labelPt = (float) (chartLabelMm(el) * CanvasPages.MM);
-        for (int i = 0; i < cats.size(); i++) {
-            float bh = (float) (values[i] / max * (h * 0.7));
-            float bx = -w / 2f + w * 0.05f + i * (barW + gap);
+        BaseFont label = font("sans", 400);
+        float ascent = label.getAscentPoint("Ag", labelPt);
+        float descent = -label.getDescentPoint("Ag", labelPt);
+        for (int i = 0; i < values.length; i++) {
+            float bh = values[i] > 0 ? Math.max(0.012f * h, (float) (values[i] / max * 0.62 * h)) : 0;
+            float bx = -w / 2f + 0.06f * w + i * (barW + gap);
+            float baseY = -h / 2f + 0.22f * h;
             cb.setColorFill(color(cats.get(i).path("color").asText("#64748B"), Color.GRAY));
-            cb.rectangle(bx, -h / 2f + 14, barW, Math.max(bh, values[i] > 0 ? 2 : 0));
+            cb.rectangle(bx, baseY, barW, bh);
             cb.fill();
+            // Label centre at 92% from the top; the CSS line box (line-height 1) is centred on it.
+            float centre = -h / 2f + 0.08f * h;
+            float baseline = centre + labelPt / 2f - ((labelPt - (ascent + descent)) / 2f + ascent);
             cb.beginText();
             cb.setFontAndSize(label, labelPt);
             cb.setColorFill(new Color(0x4B, 0x55, 0x63));
-            String name = cats.get(i).path("label").asText("");
-            cb.showTextAligned(com.lowagie.text.Element.ALIGN_CENTER, name, bx + barW / 2, -h / 2f + 3, 0);
+            cb.showTextAligned(com.lowagie.text.Element.ALIGN_CENTER, cats.get(i).path("label").asText(""), bx + barW / 2, baseline, 0);
             cb.endText();
         }
     }
@@ -479,19 +488,28 @@ public final class CanvasPageRenderer {
             cell.setBackgroundColor(color(CanvasPages.text(el, "headerFill", "#F4F4F5"), new Color(0xf4, 0xf4, 0xf5)));
             table.addCell(cell);
         }
+        int bodyRows = 0;
         if (!"static".equals(CanvasPages.text(el, "mode", "findings")) && ctx.data() != null) {
             for (FindingView finding : ctx.data().findings()) {
+                bodyRows++;
                 for (JsonNode column : columns) {
                     table.addCell(gridCell(new com.lowagie.text.Phrase(cell(finding, column.path("key").asText("")), body)));
                 }
             }
         } else if (el.path("rows").isArray()) {
             for (JsonNode row : el.path("rows")) {
+                bodyRows++;
                 for (int i = 0; i < columns.size(); i++) {
                     String value = row.isArray() && row.size() > i ? row.get(i).asText("") : "";
                     table.addCell(gridCell(new com.lowagie.text.Phrase(value, body)));
                 }
             }
+        }
+        if (bodyRows == 0) {
+            // Studio: with no rows, one dash row spans every column.
+            PdfPCell dash = gridCell(new com.lowagie.text.Phrase("\u2014", body));
+            dash.setColspan(columns.size());
+            table.addCell(dash);
         }
         table.writeSelectedRows(0, -1, -w / 2f, h / 2f, cb);
     }
@@ -524,9 +542,10 @@ public final class CanvasPageRenderer {
         float y1 = pageH - mm(el.path("y1").asDouble(0));
         float x2 = mm(el.path("x2").asDouble(10));
         float y2 = pageH - mm(el.path("y2").asDouble(0));
+        float sw = (float) el.path("strokeWidth").asDouble(0.4) * CanvasPages.MM;
         cb.saveState();
         cb.setColorStroke(color(CanvasPages.text(el, "stroke", "#1A1A1A"), Color.BLACK));
-        cb.setLineWidth((float) el.path("strokeWidth").asDouble(0.4) * CanvasPages.MM);
+        cb.setLineWidth(sw);
         cb.moveTo(x1, y1);
         cb.lineTo(x2, y2);
         cb.stroke();
@@ -534,18 +553,16 @@ public final class CanvasPageRenderer {
             float dx = x2 - x1;
             float dy = y2 - y1;
             float len = (float) Math.hypot(dx, dy);
-            if (len > 0.5f) {
+            if (len >= 0.5f * CanvasPages.MM) {
                 float ux = dx / len;
                 float uy = dy / len;
                 cb.setColorFill(color(CanvasPages.text(el, "stroke", "#1A1A1A"), Color.BLACK));
-                // Studio marker (markerUnits=strokeWidth, path 0,0 7,3 0,6, refX 6): tip 1 sw past the end,
-                // base 6 sw back, half-width 3 sw. All proportional to the line's own stroke width.
-                float sw = (float) el.path("strokeWidth").asDouble(0.4) * CanvasPages.MM;
-                float bx = x2 - ux * 6 * sw;
-                float by = y2 - uy * 6 * sw;
-                cb.moveTo(x2 + ux * sw, y2 + uy * sw);
-                cb.lineTo(bx - uy * 3 * sw, by + ux * 3 * sw);
-                cb.lineTo(bx + uy * 3 * sw, by - ux * 3 * sw);
+                // Same head as the studio: tip on the line end, length and half-width in stroke widths.
+                float bx = x2 - ux * ARROW_LEN * sw;
+                float by = y2 - uy * ARROW_LEN * sw;
+                cb.moveTo(x2, y2);
+                cb.lineTo(bx - uy * ARROW_HALF * sw, by + ux * ARROW_HALF * sw);
+                cb.lineTo(bx + uy * ARROW_HALF * sw, by - ux * ARROW_HALF * sw);
                 cb.fill();
             }
         }
@@ -613,38 +630,84 @@ public final class CanvasPageRenderer {
         double y1 = el.path("y1").asDouble();
         double x2 = el.path("x2").asDouble();
         double y2 = el.path("y2").asDouble();
-        double x = Math.min(x1, x2) - 2;
-        double y = Math.min(y1, y2) - 2;
-        double w = Math.max(4, Math.abs(x2 - x1) + 4);
-        double h = Math.max(4, Math.abs(y2 - y1) + 4);
-        return "<div class=\"el\" style=\"left:" + x + "mm;top:" + y + "mm;width:" + w + "mm;height:" + h + "mm\"><svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\"><line x1=\"" +
-            ((x1 - x) / w * 100) + "\" y1=\"" + ((y1 - y) / h * 100) + "\" x2=\"" + ((x2 - x) / w * 100) + "\" y2=\"" + ((y2 - y) / h * 100) +
-            "\" stroke=\"" + esc(CanvasPages.text(el, "stroke", "#1A1A1A")) + "\" stroke-width=\"" + el.path("strokeWidth").asDouble(0.4) * 96 / 25.4 + "\" vector-effect=\"non-scaling-stroke\"/></svg></div>";
+        double sw = el.path("strokeWidth").asDouble(0.4);
+        // The box grows with the stroke so the arrow wings are not clipped by the element's overflow.
+        double pad = Math.max(2, ARROW_HALF * sw + 1);
+        double x = Math.min(x1, x2) - pad;
+        double y = Math.min(y1, y2) - pad;
+        double w = Math.max(2 * pad, Math.abs(x2 - x1) + 2 * pad);
+        double h = Math.max(2 * pad, Math.abs(y2 - y1) + 2 * pad);
+        String color = esc(CanvasPages.text(el, "stroke", "#1A1A1A"));
+        // viewBox in millimetres, so stroke-width and the head are millimetres as in the PDF (no distortion).
+        StringBuilder head = new StringBuilder();
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double len = Math.hypot(dx, dy);
+        if (el.path("arrow").asBoolean(false) && len >= 0.5) {
+            double ux = dx / len;
+            double uy = dy / len;
+            double bx = x2 - ux * ARROW_LEN * sw;
+            double by = y2 - uy * ARROW_LEN * sw;
+            head.append("<polygon points=\"").append(fmt(x2 - x)).append(',').append(fmt(y2 - y)).append(' ')
+                .append(fmt(bx - uy * ARROW_HALF * sw - x)).append(',').append(fmt(by + ux * ARROW_HALF * sw - y)).append(' ')
+                .append(fmt(bx + uy * ARROW_HALF * sw - x)).append(',').append(fmt(by - ux * ARROW_HALF * sw - y))
+                .append("\" fill=\"").append(color).append("\"/>");
+        }
+        return "<div class=\"el\" style=\"left:" + fmt(x) + "mm;top:" + fmt(y) + "mm;width:" + fmt(w) + "mm;height:" + fmt(h) + "mm\">" +
+            "<svg viewBox=\"0 0 " + fmt(w) + " " + fmt(h) + "\" aria-hidden=\"true\"><line x1=\"" + fmt(x1 - x) + "\" y1=\"" + fmt(y1 - y) +
+            "\" x2=\"" + fmt(x2 - x) + "\" y2=\"" + fmt(y2 - y) + "\" stroke=\"" + color + "\" stroke-width=\"" + fmt(sw) + "\"/>" + head + "</svg></div>";
     }
 
     private static String chartSvg(JsonNode el, ReportRenderContext ctx) {
-        StringBuilder svg = new StringBuilder("<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\">");
         JsonNode cats = el.path("categories");
         if (!cats.isArray() || cats.isEmpty()) return "";
+        double[] values = chartValues(el, ctx);
         double max = 1;
-        for (JsonNode cat : cats) max = Math.max(max, count(ctx, cat.path("key").asText("")));
-        double gap = 3;
-        double barW = (88 - gap * (cats.size() - 1)) / cats.size();
-        double labelMm = chartLabelMm(el);
-        StringBuilder labels = new StringBuilder();
-        int i = 0;
-        for (JsonNode cat : cats) {
-            double value = count(ctx, cat.path("key").asText(""));
-            double bh = value / max * 62;
-            double x = 6 + i * (barW + gap);
-            svg.append("<rect x=\"").append(x).append("\" y=\"").append(78 - bh).append("\" width=\"").append(barW).append("\" height=\"").append(Math.max(bh, value > 0 ? 1 : 0)).append("\" fill=\"").append(esc(cat.path("color").asText("#64748B"))).append("\"/>");
-            // HTML labels, not svg text, so preserveAspectRatio="none" cannot stretch them.
-            labels.append("<span style=\"position:absolute;top:92%;left:").append(x + barW / 2).append("%;transform:translate(-50%,-50%);white-space:nowrap;text-align:center;line-height:1;font-family:")
-                .append(esc(fontCss("sans"))).append(";font-size:").append(labelMm).append("mm;color:#4B5563\">")
-                .append(esc(cat.path("label").asText(""))).append("</span>");
-            i++;
+        for (double value : values) max = Math.max(max, value);
+        String kind = CanvasPages.text(el, "chart", "bar");
+        if ("pie".equals(kind)) {
+            // Same path as the studio: radius 36 around (50, 50), clockwise from 12 o'clock.
+            double total = 0;
+            for (double value : values) total += Math.max(0, value);
+            StringBuilder paths = new StringBuilder();
+            double angle = -Math.PI / 2;
+            for (int i = 0; total > 0 && i < values.length; i++) {
+                double slice = Math.max(0, values[i]) / total * Math.PI * 2;
+                if (slice <= 0) continue;
+                double end = angle + slice;
+                String d = "M50 50 L" + fmt(50 + 36 * Math.cos(angle)) + " " + fmt(50 + 36 * Math.sin(angle)) + " A36 36 0 " + (slice > Math.PI ? 1 : 0) + " 1 " +
+                    fmt(50 + 36 * Math.cos(end)) + " " + fmt(50 + 36 * Math.sin(end)) + " Z";
+                paths.append("<path d=\"").append(d).append("\" fill=\"").append(esc(cats.get(i).path("color").asText("#64748B"))).append("\"/>");
+                angle = end;
+            }
+            return "<svg viewBox=\"0 0 100 100\" role=\"img\">" + paths + "</svg>";
         }
-        return svg.append("</svg>").append(labels).toString();
+        if ("line".equals(kind)) {
+            StringBuilder d = new StringBuilder();
+            for (int i = 0; i < values.length; i++) {
+                double x = values.length == 1 ? 50 : 8 + i * (84.0 / (values.length - 1));
+                double y = 78 - values[i] / max * 62;
+                d.append(i == 0 ? "M" : " L").append(fmt(x)).append(' ').append(fmt(y));
+            }
+            return "<svg viewBox=\"0 0 100 100\" role=\"img\"><path d=\"" + d + "\" fill=\"none\" stroke=\"#2563EB\" stroke-width=\"1.6\"/></svg>";
+        }
+        double gap = 3;
+        double barW = (88 - gap * (values.length - 1)) / values.length;
+        double labelMm = chartLabelMm(el);
+        StringBuilder bars = new StringBuilder();
+        StringBuilder labels = new StringBuilder();
+        for (int i = 0; i < values.length; i++) {
+            JsonNode cat = cats.get(i);
+            double bh = values[i] > 0 ? Math.max(1.2, values[i] / max * 62) : 0;
+            double x = 6 + i * (barW + gap);
+            bars.append("<rect x=\"").append(fmt(x)).append("\" y=\"").append(fmt(78 - bh)).append("\" width=\"").append(fmt(barW))
+                .append("\" height=\"").append(fmt(bh)).append("\" fill=\"").append(esc(cat.path("color").asText("#64748B"))).append("\"/>");
+            // Labels are HTML so preserveAspectRatio="none" cannot stretch them.
+            labels.append("<span style=\"position:absolute;top:92%;left:").append(fmt(x + barW / 2))
+                .append("%;transform:translate(-50%,-50%);white-space:nowrap;text-align:center;line-height:1;font-family:").append(esc(fontCss("sans")))
+                .append(";font-size:").append(fmt(labelMm)).append("mm;color:#4B5563\">").append(esc(cat.path("label").asText(""))).append("</span>");
+        }
+        return "<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\">" + bars + "</svg>" + labels;
     }
 
     private static String tableHtml(JsonNode el, ReportRenderContext ctx, Map<String, String> vars) {
@@ -656,19 +719,23 @@ public final class CanvasPageRenderer {
         for (JsonNode column : columns) html.append("<th>").append(esc(CanvasPages.fill(column.path("label").asText(""), vars))).append("</th>");
         html.append("</tr></thead><tbody>");
         // Same branches as drawTable: findings unless the table is static, then the stored rows.
+        int bodyRows = 0;
         if (!"static".equals(CanvasPages.text(el, "mode", "findings")) && ctx.data() != null) {
             for (FindingView finding : ctx.data().findings()) {
+                bodyRows++;
                 html.append("<tr>");
                 for (JsonNode column : columns) html.append("<td>").append(esc(cell(finding, column.path("key").asText("")))).append("</td>");
                 html.append("</tr>");
             }
         } else if (el.path("rows").isArray()) {
             for (JsonNode row : el.path("rows")) {
+                bodyRows++;
                 html.append("<tr>");
                 for (int i = 0; i < columns.size(); i++) html.append("<td>").append(esc(row.isArray() && row.size() > i ? row.get(i).asText("") : "")).append("</td>");
                 html.append("</tr>");
             }
         }
+        if (bodyRows == 0) html.append("<tr><td colspan=\"").append(columns.size()).append("\">\u2014</td></tr>");
         return html.append("</tbody></table>").toString();
     }
 
@@ -756,10 +823,27 @@ public final class CanvasPageRenderer {
         JsonNode cats = el.path("categories");
         double w = el.path("w").asDouble(10);
         double h = el.path("h").asDouble(10);
+        int n = Math.max(1, cats.size());
         int maxLen = 1;
         for (JsonNode cat : cats) maxLen = Math.max(maxLen, cat.path("label").asText("").length());
-        double slot = w * 0.88 / Math.max(1, cats.size());
-        return Math.min(0.06 * Math.min(w, h), slot / (0.6 * maxLen));
+        double barWidth = w * (88 - 3 * (n - 1)) / 100 / n;
+        return Math.min(0.06 * Math.min(w, h), barWidth / (0.6 * maxLen));
+    }
+
+    /** Bar, line and pie values: live finding counts unless the chart is static (the studio's chartRows rule). */
+    private static double[] chartValues(JsonNode el, ReportRenderContext ctx) {
+        JsonNode cats = el.path("categories");
+        boolean bound = !"static".equals(CanvasPages.text(el, "binding", "findingsBySeverity"));
+        double[] values = new double[cats.isArray() ? cats.size() : 0];
+        for (int i = 0; i < values.length; i++) {
+            JsonNode cat = cats.get(i);
+            values[i] = bound ? count(ctx, cat.path("key").asText("")) : cat.path("value").asDouble(0);
+        }
+        return values;
+    }
+
+    private static String fmt(double value) {
+        return String.format(Locale.ROOT, "%.3f", value);
     }
 
     /** Studio table header text: the element colour if it has WCAG contrast >= 3 on headerFill, else white or #1A1A1A by fill luminance. */

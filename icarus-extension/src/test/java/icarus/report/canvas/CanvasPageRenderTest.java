@@ -15,8 +15,11 @@ import icarus.report.render.ReportData;
 import icarus.report.render.ReportRenderContext;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Renders the four starter covers through the same generators Burp calls,
@@ -102,6 +105,40 @@ public class CanvasPageRenderTest {
         assert Files.readString(out.resolve("static.html")).contains("beta-value") : "static rows in html";
         assert pdfText(out.resolve("static.pdf")).contains("beta-value") : "static rows in pdf";
 
+        // Arrowheads in HTML: 6.3 x 2.35 stroke widths, tip on the line end, at any angle.
+        ReportProfile arrows = singlePage("arrows", "{\"background\":\"#FFFFFF\",\"elements\":["
+            + "{\"type\":\"line\",\"x1\":20,\"y1\":20,\"x2\":120,\"y2\":20,\"stroke\":\"#111111\",\"strokeWidth\":1,\"arrow\":true},"
+            + "{\"type\":\"line\",\"x1\":40,\"y1\":60,\"x2\":40,\"y2\":160,\"stroke\":\"#111111\",\"strokeWidth\":1,\"arrow\":true},"
+            + "{\"type\":\"line\",\"x1\":20,\"y1\":200,\"x2\":120,\"y2\":250,\"stroke\":\"#111111\",\"strokeWidth\":1,\"arrow\":true}]}");
+        renderProfile(arrows, out.resolve("arrows.html"), out.resolve("arrows.pdf"));
+        Matcher heads = Pattern.compile("<polygon points=\"([^\"]+)\"").matcher(Files.readString(out.resolve("arrows.html")));
+        int arrowCount = 0;
+        while (heads.find()) {
+            double[] v = Arrays.stream(heads.group(1).trim().split("[ ,]")).mapToDouble(Double::parseDouble).toArray();
+            double baseX = (v[2] + v[4]) / 2;
+            double baseY = (v[3] + v[5]) / 2;
+            assert Math.abs(Math.hypot(v[0] - baseX, v[1] - baseY) - 6.3) < 0.01 : "arrow length is 6.3 stroke widths";
+            assert Math.abs(Math.hypot(v[2] - baseX, v[3] - baseY) - 2.35) < 0.01 : "arrow half-width is 2.35 stroke widths";
+            arrowCount++;
+        }
+        assert arrowCount == 3 : "one arrowhead per arrow line";
+
+        // Chart kinds: line and pie are strokes and wedges with no bars and no labels; bars keep their labels.
+        ReportProfile charts = singlePage("charts", "{\"background\":\"#FFFFFF\",\"elements\":["
+            + "{\"type\":\"chart\",\"chart\":\"line\",\"binding\":\"static\",\"x\":10,\"y\":10,\"w\":80,\"h\":60,\"categories\":[{\"key\":\"A\",\"label\":\"Low\",\"value\":1,\"color\":\"#B42318\"},{\"key\":\"B\",\"label\":\"High\",\"value\":3,\"color\":\"#B42318\"}]},"
+            + "{\"type\":\"chart\",\"chart\":\"pie\",\"binding\":\"static\",\"x\":100,\"y\":10,\"w\":60,\"h\":60,\"categories\":[{\"key\":\"A\",\"label\":\"Low\",\"value\":1,\"color\":\"#B42318\"},{\"key\":\"B\",\"label\":\"High\",\"value\":3,\"color\":\"#2563EB\"}]}]}");
+        renderProfile(charts, out.resolve("charts.html"), out.resolve("charts.pdf"));
+        String chartsHtml = Files.readString(out.resolve("charts.html"));
+        assert chartsHtml.contains("stroke=\"#2563EB\"") && chartsHtml.contains("A36 36") : "line and pie drawn in html";
+        assert !chartsHtml.contains("<rect") && !chartsHtml.contains("<span") : "no bars or labels for line and pie";
+
+        // Empty table: one dash row spanning all columns, in both outputs.
+        ReportProfile emptyTable = singlePage("empty", "{\"background\":\"#FFFFFF\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"mode\":\"findings\","
+            + "\"columns\":[{\"key\":\"title\",\"label\":\"Finding\"},{\"key\":\"path\",\"label\":\"Path\"}]}]}");
+        renderProfile(emptyTable, new ReportData("T", "P", List.of(), Map.of(), 0, 0, Map.of(), false), out.resolve("empty.html"), out.resolve("empty.pdf"));
+        assert Files.readString(out.resolve("empty.html")).contains("colspan=\"2\">\u2014</td>") : "empty table dash row in html";
+        assert pdfText(out.resolve("empty.pdf")).contains("\u2014") : "empty table dash row in pdf";
+
         ReportProfile broken = new ReportProfile("1", "user:canvas-broken", "Broken", "en", false, null,
             null, null, new SectionGraph(List.of(
                 SectionNode.of("page:bad", true, 1, false, "CANVAS_PAGE",
@@ -136,6 +173,12 @@ public class CanvasPageRenderTest {
         renderProfile(profile, html, pdf);
         assert Files.size(pdf) > 2000 : name + " pdf empty";
         return Files.readString(html);
+    }
+
+    private static ReportProfile singlePage(String id, String spec) {
+        return new ReportProfile("1", "user:canvas-" + id, id, "en", false, null, null, null,
+            new SectionGraph(List.of(SectionNode.of("page:" + id, true, 1, false, "CANVAS_PAGE",
+                Map.of("title", id, "role", "interior", "spec", spec)))), null, null, null, null);
     }
 
     private static void renderProfile(ReportProfile profile, Path html, Path pdf) throws Exception {

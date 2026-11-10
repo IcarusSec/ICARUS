@@ -43,10 +43,11 @@ public final class ToggleSwitch extends JComponent {
         Graphics2D g = (Graphics2D) g0.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         var palette = ThemeColors.current();
-        g.setColor(on ? palette.accent() : palette.borderStrong());
+        Color track = on ? palette.accent() : palette.borderStrong();
+        g.setColor(track);
         g.fill(new RoundRectangle2D.Float(0, 0, W, H, H, H));
         int thumbX = on ? W - THUMB - 2 : 2;
-        g.setColor(on ? Color.WHITE : palette.textTertiary());
+        g.setColor(icarus.ui.ThemeHelper.ink(track));
         g.fillOval(thumbX, (H - THUMB) / 2, THUMB, THUMB);
         
         if (hasFocus()) {

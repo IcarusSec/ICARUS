@@ -33,9 +33,9 @@ public final class EmptyState extends JPanel {
         message.setOpaque(false);
         message.setBorder(UiMetrics.pad(UiMetrics.XL));
         message.setFont(UiMetrics.font(UiMetrics.Role.BODY));
-        Color foreground = UIManager.getColor("Label.disabledForeground");
-        if (foreground == null) foreground = UIManager.getColor("Label.foreground");
-        if (foreground != null) message.setForeground(foreground);
+        // Disabled-label grey is below 4.5:1 on a light Burp panel. Secondary text still
+        // has to be readable; it is not a disabled control.
+        message.setForeground(ThemeHelper.mutedOn(background != null ? background : UIManager.getColor("Panel.background")));
         message.setText(text == null ? "" : text);
         StyledDocument doc = message.getStyledDocument();
         SimpleAttributeSet center = new SimpleAttributeSet();

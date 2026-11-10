@@ -23,9 +23,9 @@ public record ThemeColors(
     public static ThemeColors dark() {
         return new ThemeColors(
             new Color(0x1c1d1f), new Color(0x333639), new Color(0x252729), new Color(0x2a2c2e),
-            new Color(0x4a4d50), new Color(0x5c6063),
-            new Color(0xe4e4e4), new Color(0xa3a6a8), new Color(0x75787b),
-            new Color(0xff6633), withAlpha(0xff6633, 36), withAlpha(0xff6633, 77),
+            new Color(0x8a8d90), new Color(0xc5cdd6),
+            new Color(0xe4e4e4), new Color(0xa3a6a8), new Color(0xa0aec0),
+            new Color(0xffb088), withAlpha(0xffb088, 36), withAlpha(0xffb088, 77),
             new Color(0x6e6e6e),
             new Color(0xcc2f2f), new Color(0xd9711e), new Color(0xdba52c), new Color(0x4c8bf5)
         );
@@ -34,9 +34,9 @@ public record ThemeColors(
     public static ThemeColors light() {
         return new ThemeColors(
             new Color(0xf3f3f3), new Color(0xffffff), new Color(0xececec), new Color(0xe4e4e4),
-            new Color(0xd0d0d0), new Color(0xb8b8b8),
-            new Color(0x202020), new Color(0x5a5d60), new Color(0x8a8d90),
-            new Color(0xe85a2b), withAlpha(0xe85a2b, 22), withAlpha(0xe85a2b, 55),
+            new Color(0x6b7280), new Color(0x4b5563),
+            new Color(0x202020), new Color(0x5a5d60), new Color(0x4b5563),
+            new Color(0x9a3412), withAlpha(0x9a3412, 22), withAlpha(0x9a3412, 55),
             new Color(0x6e6e6e),
             new Color(0xc22929), new Color(0xc4630f), new Color(0xb9871f), new Color(0x2f6fd6)
         );

@@ -74,7 +74,7 @@ public class EvidenceManagerTab {
             
             Color badgeBg = switch(display.severity()) {
                 case CRITICAL, HIGH -> new Color(220, 53, 69);
-                case MEDIUM -> new Color(253, 126, 20);
+                case MEDIUM -> new Color(0xC2, 0x41, 0x0C); // #FD7E14 with white text is 2.57:1
                 case LOW -> new Color(13, 110, 253);
                 default -> new Color(108, 117, 125);
             };
@@ -82,7 +82,7 @@ public class EvidenceManagerTab {
             severityBadge.setForeground(Color.WHITE);
 
             JLabel countLabel = new JLabel(group.size() + " img" + (group.size() == 1 ? "" : "s"));
-            countLabel.setForeground(isSelected ? panel.getForeground() : new Color(130, 130, 130));
+            countLabel.setForeground(isSelected ? panel.getForeground() : icarus.ui.ThemeHelper.mutedOn(list.getBackground()));
             countLabel.setFont(UiMetrics.font(UiMetrics.Role.CAPTION));
 
             icarus.ui.TextFit.Label titleLabel = new icarus.ui.TextFit.Label(display.type());
@@ -389,7 +389,7 @@ public class EvidenceManagerTab {
 
         JLabel hint = new JLabel(I18n.t("ui.evidence.lbl.hint"));
         hint.setFont(UiMetrics.font(UiMetrics.Role.CAPTION));
-        hint.setForeground(new Color(140, 140, 140));
+        hint.setForeground(icarus.ui.ThemeHelper.mutedOn(UIManager.getColor("Panel.background")));
         hint.setBorder(UiMetrics.pad(UiMetrics.XS, UiMetrics.MD, UiMetrics.SM, UiMetrics.MD));
 
         JCheckBox chkRetest = new JCheckBox(I18n.t("ui.evidence.chk.retest"),
@@ -849,7 +849,7 @@ public class EvidenceManagerTab {
 
         JLabel resumoNote = new JLabel(I18n.t("ui.evidence.lbl.resumo_note"));
         resumoNote.setFont(UiMetrics.font(UiMetrics.Role.BODY).deriveFont(Font.ITALIC));
-        resumoNote.setForeground(new Color(130, 130, 130));
+        resumoNote.setForeground(icarus.ui.ThemeHelper.mutedOn(UIManager.getColor("Panel.background")));
         panel.add(resumoNote, gbc);
 
         gbc.gridy++;

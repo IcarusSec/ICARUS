@@ -80,7 +80,7 @@ public class KnowledgeBaseTab {
         themeHelper.styleButton(btnDelete);
 
         // Styling with ICARUS standard tokens (using custom colors where ThemeHelper doesn't provide them directly)
-        btnDelete.setForeground(themeHelper.isDarkTheme() ? new Color(0xFF1744) : new Color(0xD32F2F)); // COLOR_CRITICAL_RED
+        btnDelete.setForeground(themeHelper.dangerColor());
 
         actionPanel.add(btnAdd);
         actionPanel.add(btnEdit);

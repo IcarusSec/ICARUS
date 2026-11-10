@@ -82,6 +82,17 @@ public class CanvasPageRenderTest {
         assert richPdf.contains("SERVER_ERROR") && richPdf.contains("HIGH") && richPdf.contains("/debug") : "pdf finding row";
         assert richHtml.contains("SERVER_ERROR") && richHtml.contains("/debug") : "html finding row";
         assert richHtml.contains("background:#0F172A;color:#FFFFFF") : "dark header gets white ink";
+
+        // A profile that sets the table ink to white still has to print the row on a white page.
+        ReportProfile whiteOnWhite = singlePage("white-row", "{\"background\":\"#FFFFFF\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"color\":\"#FFFFFF\",\"headerFill\":\"#0F172A\",\"mode\":\"static\",\"columns\":[{\"key\":\"a\",\"label\":\"Name\"}],\"rows\":[[\"visible-row\"]]}]}");
+        renderProfile(whiteOnWhite, out.resolve("white-row.html"), out.resolve("white-row.pdf"));
+        String whiteHtml = Files.readString(out.resolve("white-row.html"));
+        assert whiteHtml.contains("color:#1A1A1A") && whiteHtml.contains("background:#0F172A;color:#FFFFFF") : "white body ink turns dark on a white page";
+        assert whiteHtml.contains("visible-row") && pdfText(out.resolve("white-row.pdf")).contains("visible-row") : "white-ink row is present";
+        ReportProfile whiteOnDark = singlePage("white-on-dark", "{\"background\":\"#0F172A\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"color\":\"#FFFFFF\",\"headerFill\":\"#0F172A\",\"mode\":\"static\",\"columns\":[{\"key\":\"a\",\"label\":\"Name\"}],\"rows\":[[\"kept-white\"]]}]}");
+        renderProfile(whiteOnDark, out.resolve("white-on-dark.html"), out.resolve("white-on-dark.pdf"));
+        String darkHtml = Files.readString(out.resolve("white-on-dark.html"));
+        assert darkHtml.contains("color:#FFFFFF") && !darkHtml.contains("color:#1A1A1A") : "white ink stays on a dark page";
         assert richHtml.contains(">High</span>") && richPdf.contains("High") : "chart labels in both outputs";
 
         // Studio tokens with no value print as empty text; unknown tokens stay visible.

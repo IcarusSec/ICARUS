@@ -632,21 +632,24 @@
     return '<div class="chart" role="img" style="position:relative;width:100%;height:100%;container-type:size"><svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;display:block">' + bars + "</svg>" + labels + "</div>";
   }
 
-  function tableHtml(element, vars) {
+  function tableHtml(element, vars, pageBackground) {
     var rows = element.mode === "static" ? element.rows : sampleFindings();
     var head = element.columns.map(function (col) { return "<th>" + esc(applyVars(col.label, vars)) + "</th>"; }).join("");
     // Header ink: the body colour when it reads on the header fill, else white or near-black by the fill's luminance.
+    var pageBg = pageBackground || "#FFFFFF";
     var headInk = contrast(element.color, element.headerFill) >= 3 ? element.color : luminance(element.headerFill) < 0.5 ? "#FFFFFF" : "#1A1A1A";
+    // Cells have no fill, so the row has to read on the page behind the table.
+    var bodyInk = contrast(element.color, pageBg) >= 3 ? element.color : luminance(pageBg) < 0.5 ? "#FFFFFF" : "#1A1A1A";
     var body = rows.map(function (row) {
       return "<tr>" + element.columns.map(function (col, index) {
         return "<td>" + esc(row[index] == null ? "" : row[index]) + "</td>";
       }).join("") + "</tr>";
     }).join("");
     if (!body) body = '<tr><td colspan="' + element.columns.length + '">—</td></tr>';
-    return '<table style="width:100%;border-collapse:collapse;font-family:' + esc(fontCss(element.font)) + ";font-size:" + element.size + 'pt;color:' + esc(element.color) + '"><thead style="background:' + esc(element.headerFill) + ';color:' + headInk + '"><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table>";
+    return '<table style="width:100%;border-collapse:collapse;font-family:' + esc(fontCss(element.font)) + ";font-size:" + element.size + 'pt;color:' + esc(bodyInk) + '"><thead style="background:' + esc(element.headerFill) + ';color:' + headInk + '"><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table>";
   }
 
-  function elementInner(element, vars, logo) {
+  function elementInner(element, vars, logo, pageBackground) {
     if (element.type === "text") {
       var shown = applyVars(element.text, vars);
       return esc(shown).replace(/\n/g, "<br>");
@@ -671,7 +674,7 @@
     }
     if (element.type === "line") return "";
     if (element.type === "chart") return chartSvg(element, vars);
-    if (element.type === "table") return tableHtml(element, vars);
+    if (element.type === "table") return tableHtml(element, vars, pageBackground);
     return "";
   }
 
@@ -724,7 +727,7 @@
       var cls = "el el-" + element.type + (element.locked ? " is-locked" : "");
       var extra = "";
       if (element.type === "line") extra = lineSvg(element);
-      return '<div class="' + cls + '" data-id="' + esc(element.id) + '" style="' + elementStyle(element) + '">' + extra + elementInner(element, vars, logo) + "</div>";
+      return '<div class="' + cls + '" data-id="' + esc(element.id) + '" style="' + elementStyle(element) + '">' + extra + elementInner(element, vars, logo, page.background) + "</div>";
     }).join("");
     return bits;
   }
@@ -1179,6 +1182,8 @@
     if (!shaft || !tip) throw new Error("arrow draw");
     var nums = tip[1].split(/[ ,]/).map(Number);
     if (Math.abs(parseFloat(shaft[1]) - (nums[2] + nums[4]) / 2) > 0.05) throw new Error("arrow shaft");
+    var whiteRow = renderPage({ background: "#FFFFFF", elements: [newElement("table", { color: "#FFFFFF", headerFill: "#0F172A", mode: "static", columns: [{ key: "a", label: "Name" }], rows: [["visible-row"]] })] });
+    if (whiteRow.indexOf("color:#1A1A1A") === -1 || whiteRow.indexOf("color:#FFFFFF") === -1) throw new Error("body ink");
     return "canvas ok";
   }
 

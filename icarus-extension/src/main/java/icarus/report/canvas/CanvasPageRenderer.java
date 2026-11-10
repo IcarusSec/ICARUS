@@ -90,7 +90,7 @@ public final class CanvasPageRenderer {
                 Map<String, String> vars = CanvasPages.variables(ctx, i + 1, pages.size());
                 for (JsonNode element : CanvasPages.elements(page)) {
                     if (element.path("hidden").asBoolean(false)) continue;
-                    html.append(elementHtml(element, vars, ctx));
+                    html.append(elementHtml(element, vars, ctx, page.background()));
                 }
             }
             html.append("</section>");
@@ -119,14 +119,14 @@ public final class CanvasPageRenderer {
         for (JsonNode element : CanvasPages.elements(page)) {
             if (element.path("hidden").asBoolean(false)) continue;
             try {
-                drawElement(cb, element, vars, ctx, pageH);
+                drawElement(cb, element, vars, ctx, pageH, page.background());
             } catch (Exception ex) {
                 drawNote(cb, "One element was skipped.", mm(element.path("x").asDouble(16)), mm(element.path("y").asDouble(20)));
             }
         }
     }
 
-    private static void drawElement(PdfContentByte cb, JsonNode el, Map<String, String> vars, ReportRenderContext ctx, float pageH) throws Exception {
+    private static void drawElement(PdfContentByte cb, JsonNode el, Map<String, String> vars, ReportRenderContext ctx, float pageH, String pageBackground) throws Exception {
         String type = CanvasPages.text(el, "type", "text");
         if ("line".equals(type)) {
             drawLine(cb, el, pageH);
@@ -155,7 +155,7 @@ public final class CanvasPageRenderer {
             case "text" -> drawText(cb, el, vars, w, h);
             case "image" -> drawImage(cb, el, ctx, w, h);
             case "chart" -> drawChart(cb, el, ctx, w, h);
-            case "table" -> drawTable(cb, el, ctx, vars, w, h);
+            case "table" -> drawTable(cb, el, ctx, vars, w, h, pageBackground);
             default -> drawTextRaw(cb, "Unsupported element (" + type.replaceAll("[^a-z0-9_-]", "") + ")", w, h, font("sans", 400), 9, Color.GRAY, "left");
         }
         cb.restoreState();
@@ -478,7 +478,7 @@ public final class CanvasPageRenderer {
         }
     }
 
-    private static void drawTable(PdfContentByte cb, JsonNode el, ReportRenderContext ctx, Map<String, String> vars, float w, float h) throws Exception {
+    private static void drawTable(PdfContentByte cb, JsonNode el, ReportRenderContext ctx, Map<String, String> vars, float w, float h, String pageBackground) throws Exception {
         List<JsonNode> columns = new java.util.ArrayList<>();
         if (el.path("columns").isArray()) el.path("columns").forEach(columns::add);
         if (columns.isEmpty()) return;
@@ -486,10 +486,10 @@ public final class CanvasPageRenderer {
         table.setTotalWidth(w);
         // Same defaults as the studio's tableHtml: one ink colour and size for head and body, bold head.
         String family = CanvasPages.text(el, "font", "sans");
-        Color ink = color(CanvasPages.text(el, "color", "#1A1A1A"), Color.BLACK);
         float size = (float) el.path("size").asDouble(9);
         com.lowagie.text.Font head = new com.lowagie.text.Font(font(family, 700), size, com.lowagie.text.Font.NORMAL, color(headerInk(el), Color.BLACK));
-        com.lowagie.text.Font body = new com.lowagie.text.Font(font(family, 400), size, com.lowagie.text.Font.NORMAL, ink);
+        // Cells are transparent, so body ink has to read on the page, not only on the header.
+        com.lowagie.text.Font body = new com.lowagie.text.Font(font(family, 400), size, com.lowagie.text.Font.NORMAL, color(bodyInk(el, pageBackground), Color.BLACK));
         for (JsonNode column : columns) {
             PdfPCell cell = gridCell(new com.lowagie.text.Phrase(CanvasPages.fill(column.path("label").asText(""), vars), head));
             cell.setBackgroundColor(color(CanvasPages.text(el, "headerFill", "#F4F4F5"), new Color(0xf4, 0xf4, 0xf5)));
@@ -593,7 +593,7 @@ public final class CanvasPageRenderer {
         }
     }
 
-    private static String elementHtml(JsonNode el, Map<String, String> vars, ReportRenderContext ctx) {
+    private static String elementHtml(JsonNode el, Map<String, String> vars, ReportRenderContext ctx, String pageBackground) {
         String type = CanvasPages.text(el, "type", "text");
         if ("line".equals(type)) return lineHtml(el);
         String style = "left:" + num(el, "x") + "mm;top:" + num(el, "y") + "mm;width:" + num(el, "w") + "mm;height:" + num(el, "h") +
@@ -635,7 +635,7 @@ public final class CanvasPageRenderer {
                 inner += "<div class=\"tint\" style=\"background:" + esc(CanvasPages.text(el, "tint", "")) + ";opacity:" + el.path("tintOpacity").asDouble(0.45) + "\"></div>";
             }
         } else if ("chart".equals(type)) inner = chartSvg(el, ctx);
-        else if ("table".equals(type)) inner = tableHtml(el, ctx, vars);
+        else if ("table".equals(type)) inner = tableHtml(el, ctx, vars, pageBackground);
         else inner = "Unsupported element";
         return "<div class=\"el\" style=\"" + style + "\">" + inner + "</div>";
     }
@@ -743,11 +743,11 @@ public final class CanvasPageRenderer {
         return "<svg viewBox=\"0 0 100 100\" preserveAspectRatio=\"none\">" + bars + "</svg>" + labels;
     }
 
-    private static String tableHtml(JsonNode el, ReportRenderContext ctx, Map<String, String> vars) {
+    private static String tableHtml(JsonNode el, ReportRenderContext ctx, Map<String, String> vars, String pageBackground) {
         JsonNode columns = el.path("columns");
         if (!columns.isArray()) return "";
         StringBuilder html = new StringBuilder("<table style=\"font-family:" + esc(fontCss(CanvasPages.text(el, "font", "sans"))) +
-            ";font-size:" + el.path("size").asDouble(9) + "pt;color:" + esc(CanvasPages.text(el, "color", "#1A1A1A")) +
+            ";font-size:" + el.path("size").asDouble(9) + "pt;color:" + esc(bodyInk(el, pageBackground)) +
             "\"><thead style=\"background:" + esc(CanvasPages.text(el, "headerFill", "#F4F4F5")) + ";color:" + headerInk(el) + "\"><tr>");
         for (JsonNode column : columns) html.append("<th>").append(esc(CanvasPages.fill(column.path("label").asText(""), vars))).append("</th>");
         html.append("</tr></thead><tbody>");
@@ -879,19 +879,29 @@ public final class CanvasPageRenderer {
         return String.format(Locale.ROOT, "%.3f", value);
     }
 
-    /** Studio table header text: the element colour if it has WCAG contrast >= 3 on headerFill, else white or #1A1A1A by fill luminance. */
+    /** Header text: the element colour when it reads on headerFill, else white or #1A1A1A. */
     private static String headerInk(JsonNode el) {
-        Color ink = color(CanvasPages.text(el, "color", "#1A1A1A"), Color.BLACK);
-        Color fill = color(CanvasPages.text(el, "headerFill", "#F4F4F5"), new Color(0xf4, 0xf4, 0xf5));
-        java.util.function.ToDoubleFunction<Color> luminance = c -> {
-            double[] v = {c.getRed() / 255.0, c.getGreen() / 255.0, c.getBlue() / 255.0};
-            for (int i = 0; i < 3; i++) v[i] = v[i] <= 0.03928 ? v[i] / 12.92 : Math.pow((v[i] + 0.055) / 1.055, 2.4);
-            return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
-        };
-        double a = luminance.applyAsDouble(ink);
-        double b = luminance.applyAsDouble(fill);
+        return readableOn(CanvasPages.text(el, "color", "#1A1A1A"), CanvasPages.text(el, "headerFill", "#F4F4F5"), new Color(0xf4, 0xf4, 0xf5));
+    }
+
+    /** Body text sits on the page, because the cells have no fill of their own. */
+    private static String bodyInk(JsonNode el, String pageBackground) {
+        return readableOn(CanvasPages.text(el, "color", "#1A1A1A"), pageBackground, Color.WHITE);
+    }
+
+    private static String readableOn(String inkHex, String behindHex, Color behindFallback) {
+        Color ink = color(inkHex, new Color(0x1a, 0x1a, 0x1a));
+        Color behind = color(behindHex, behindFallback);
+        double a = luminance(ink);
+        double b = luminance(behind);
         if ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 3) return String.format("#%06X", ink.getRGB() & 0xFFFFFF);
         return b < 0.5 ? "#FFFFFF" : "#1A1A1A";
+    }
+
+    private static double luminance(Color c) {
+        double[] v = {c.getRed() / 255.0, c.getGreen() / 255.0, c.getBlue() / 255.0};
+        for (int i = 0; i < 3; i++) v[i] = v[i] <= 0.03928 ? v[i] / 12.92 : Math.pow((v[i] + 0.055) / 1.055, 2.4);
+        return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
     }
 
     private static Color color(String hex, Color fallback) {

@@ -2,6 +2,7 @@ package icarus.report.canvas;
 
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.PdfTextExtractor;
+import icarus.core.Severity;
 import icarus.evidence.PdfReportGenerator;
 import icarus.evidence.ReportGenerator;
 import icarus.report.PreviewService;
@@ -9,11 +10,16 @@ import icarus.report.model.ReportProfile;
 import icarus.report.model.ReportProfileCodec;
 import icarus.report.model.SectionGraph;
 import icarus.report.model.SectionNode;
+import icarus.report.render.FindingView;
+import icarus.report.render.ReportData;
 import icarus.report.render.ReportRenderContext;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Renders the four starter covers through the same generators Burp calls,
@@ -60,6 +66,102 @@ public class CanvasPageRenderTest {
         assert viewbookPdf.contains("ENGINEERING") && viewbookPdf.contains("VIEWBOOK") : "pdf viewbook";
         assert viewbookPdf.contains("DISCOVER") : "pdf discover";
 
+        // Studio export with one real finding; client comes from the requester variable.
+        ReportProfile rich = ReportProfileCodec.fromJson(Files.readString(fixtures.resolve("rich.json")));
+        ReportData richData = new ReportData("Comprehensive Web Application Penetration Test", "Enterprise Vulnerability Assessment",
+            List.of(new FindingView("rich-1", 1, "SERVER_ERROR", Severity.HIGH, "SERVER_ERROR", "ServerErrorScanner",
+                "/debug", List.of(), "", Map.of(), List.of(), null, null, false)),
+            Map.of(Severity.HIGH, 1L), 0, 1, Map.of("requester", "QA-CLIENT-7", "author", "QA-AUTHOR-3"), false);
+        renderProfile(rich, richData, out.resolve("rich.html"), out.resolve("rich.pdf"));
+        String richHtml = Files.readString(out.resolve("rich.html"));
+        String richPdf = pdfText(out.resolve("rich.pdf"));
+        assert !richHtml.contains("{{") && !richPdf.contains("{{") : "no literal tokens";
+        assert richHtml.contains("QA-CLIENT-7") && richPdf.contains("QA-CLIENT-7") : "client from requester";
+        assert richPdf.contains("QA-AUTHOR-3") : "author variable";
+        assert richPdf.contains("Penetration Test") : "wrapped title keeps its words";
+        assert richPdf.contains("SERVER_ERROR") && richPdf.contains("HIGH") && richPdf.contains("/debug") : "pdf finding row";
+        assert richHtml.contains("SERVER_ERROR") && richHtml.contains("/debug") : "html finding row";
+        assert richHtml.contains("background:#0F172A;color:#FFFFFF") : "dark header gets white ink";
+
+        // A profile that sets the table ink to white still has to print the row on a white page.
+        ReportProfile whiteOnWhite = singlePage("white-row", "{\"background\":\"#FFFFFF\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"color\":\"#FFFFFF\",\"headerFill\":\"#0F172A\",\"mode\":\"static\",\"columns\":[{\"key\":\"a\",\"label\":\"Name\"}],\"rows\":[[\"visible-row\"]]}]}");
+        renderProfile(whiteOnWhite, out.resolve("white-row.html"), out.resolve("white-row.pdf"));
+        String whiteHtml = Files.readString(out.resolve("white-row.html"));
+        assert whiteHtml.contains("color:#1A1A1A") && whiteHtml.contains("background:#0F172A;color:#FFFFFF") : "white body ink turns dark on a white page";
+        assert whiteHtml.contains("visible-row") && pdfText(out.resolve("white-row.pdf")).contains("visible-row") : "white-ink row is present";
+        ReportProfile whiteOnDark = singlePage("white-on-dark", "{\"background\":\"#0F172A\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"color\":\"#FFFFFF\",\"headerFill\":\"#0F172A\",\"mode\":\"static\",\"columns\":[{\"key\":\"a\",\"label\":\"Name\"}],\"rows\":[[\"kept-white\"]]}]}");
+        renderProfile(whiteOnDark, out.resolve("white-on-dark.html"), out.resolve("white-on-dark.pdf"));
+        String darkHtml = Files.readString(out.resolve("white-on-dark.html"));
+        assert darkHtml.contains("color:#FFFFFF") && !darkHtml.contains("color:#1A1A1A") : "white ink stays on a dark page";
+        assert richHtml.contains(">High</span>") && richPdf.contains("High") : "chart labels in both outputs";
+
+        // Studio tokens with no value print as empty text; unknown tokens stay visible.
+        ReportData blank = new ReportData(null, null, List.of(), Map.of(), 0, 0, Map.of(), false);
+        var blankVars = CanvasPages.variables(new ReportRenderContext(rich, blank, null, out), 1, 2);
+        assert CanvasPages.fill("[{{project}}]", blankVars).equals("[]") : "blank project is empty";
+        assert CanvasPages.fill("[{{projct}}]", blankVars).equals("[{{projct}}]") : "typo stays literal";
+        for (String token : List.of("report_title", "project", "client", "tester", "author", "date", "version", "classification",
+                "finding_count", "count_critical", "count_info", "page", "pages")) {
+            assert !CanvasPages.fill("{{" + token + "}}", blankVars).contains("{{") : "studio token " + token;
+        }
+
+        // Static tables print their stored rows in both outputs.
+        ReportProfile staticPage = new ReportProfile("1", "user:canvas-static", "Static", "en", false, null,
+            null, null, new SectionGraph(List.of(
+                SectionNode.of("page:static", true, 1, false, "CANVAS_PAGE", Map.of("title", "Static", "role", "interior",
+                    "spec", "{\"background\":\"#FFFFFF\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"mode\":\"static\","
+                        + "\"columns\":[{\"key\":\"a\",\"label\":\"Name\"},{\"key\":\"b\",\"label\":\"Value\"}],\"rows\":[[\"alpha-row\",\"beta-value\"]]}]}"))
+            )), null, null, null, null);
+        renderProfile(staticPage, out.resolve("static.html"), out.resolve("static.pdf"));
+        assert Files.readString(out.resolve("static.html")).contains("beta-value") : "static rows in html";
+        assert pdfText(out.resolve("static.pdf")).contains("beta-value") : "static rows in pdf";
+
+        // Arrowheads in HTML: 6.3 x 2.35 stroke widths, tip on the line end, at any angle.
+        ReportProfile arrows = singlePage("arrows", "{\"background\":\"#FFFFFF\",\"elements\":["
+            + "{\"type\":\"line\",\"x1\":20,\"y1\":20,\"x2\":120,\"y2\":20,\"stroke\":\"#111111\",\"strokeWidth\":1,\"arrow\":true},"
+            + "{\"type\":\"line\",\"x1\":40,\"y1\":60,\"x2\":40,\"y2\":160,\"stroke\":\"#111111\",\"strokeWidth\":1,\"arrow\":true},"
+            + "{\"type\":\"line\",\"x1\":20,\"y1\":200,\"x2\":120,\"y2\":250,\"stroke\":\"#111111\",\"strokeWidth\":1,\"arrow\":true}]}");
+        renderProfile(arrows, out.resolve("arrows.html"), out.resolve("arrows.pdf"));
+        Matcher heads = Pattern.compile("<polygon points=\"([^\"]+)\"").matcher(Files.readString(out.resolve("arrows.html")));
+        int arrowCount = 0;
+        while (heads.find()) {
+            double[] v = Arrays.stream(heads.group(1).trim().split("[ ,]")).mapToDouble(Double::parseDouble).toArray();
+            double baseX = (v[2] + v[4]) / 2;
+            double baseY = (v[3] + v[5]) / 2;
+            assert Math.abs(Math.hypot(v[0] - baseX, v[1] - baseY) - 6.3) < 0.01 : "arrow length is 6.3 stroke widths";
+            assert Math.abs(Math.hypot(v[2] - baseX, v[3] - baseY) - 2.35) < 0.01 : "arrow half-width is 2.35 stroke widths";
+            arrowCount++;
+        }
+        Matcher shafts = Pattern.compile("<line [^>]*x2=\"([^\"]+)\" y2=\"([^\"]+)\"").matcher(Files.readString(out.resolve("arrows.html")));
+        heads.reset();
+        int shaftCount = 0;
+        while (shafts.find() && heads.find()) {
+            double[] v = Arrays.stream(heads.group(1).trim().split("[ ,]")).mapToDouble(Double::parseDouble).toArray();
+            double baseX = (v[2] + v[4]) / 2;
+            double baseY = (v[3] + v[5]) / 2;
+            assert Math.abs(Double.parseDouble(shafts.group(1)) - baseX) < 0.01 : "shaft ends at the arrow base, not past the tip";
+            assert Math.abs(Double.parseDouble(shafts.group(2)) - baseY) < 0.01 : "shaft ends at the arrow base, not past the tip";
+            shaftCount++;
+        }
+        assert shaftCount == 3 : "each arrow shaft stops at its head";
+        assert arrowCount == 3 : "one arrowhead per arrow line";
+
+        // Chart kinds: line and pie are strokes and wedges with no bars and no labels; bars keep their labels.
+        ReportProfile charts = singlePage("charts", "{\"background\":\"#FFFFFF\",\"elements\":["
+            + "{\"type\":\"chart\",\"chart\":\"line\",\"binding\":\"static\",\"x\":10,\"y\":10,\"w\":80,\"h\":60,\"categories\":[{\"key\":\"A\",\"label\":\"Low\",\"value\":1,\"color\":\"#B42318\"},{\"key\":\"B\",\"label\":\"High\",\"value\":3,\"color\":\"#B42318\"}]},"
+            + "{\"type\":\"chart\",\"chart\":\"pie\",\"binding\":\"static\",\"x\":100,\"y\":10,\"w\":60,\"h\":60,\"categories\":[{\"key\":\"A\",\"label\":\"Low\",\"value\":1,\"color\":\"#B42318\"},{\"key\":\"B\",\"label\":\"High\",\"value\":3,\"color\":\"#2563EB\"}]}]}");
+        renderProfile(charts, out.resolve("charts.html"), out.resolve("charts.pdf"));
+        String chartsHtml = Files.readString(out.resolve("charts.html"));
+        assert chartsHtml.contains("stroke=\"#2563EB\"") && chartsHtml.contains("A36 36") : "line and pie drawn in html";
+        assert !chartsHtml.contains("<rect") && !chartsHtml.contains("<span") : "no bars or labels for line and pie";
+
+        // Empty table: one dash row spanning all columns, in both outputs.
+        ReportProfile emptyTable = singlePage("empty", "{\"background\":\"#FFFFFF\",\"elements\":[{\"type\":\"table\",\"x\":10,\"y\":10,\"w\":120,\"h\":30,\"mode\":\"findings\","
+            + "\"columns\":[{\"key\":\"title\",\"label\":\"Finding\"},{\"key\":\"path\",\"label\":\"Path\"}]}]}");
+        renderProfile(emptyTable, new ReportData("T", "P", List.of(), Map.of(), 0, 0, Map.of(), false), out.resolve("empty.html"), out.resolve("empty.pdf"));
+        assert Files.readString(out.resolve("empty.html")).contains("colspan=\"2\">\u2014</td>") : "empty table dash row in html";
+        assert pdfText(out.resolve("empty.pdf")).contains("\u2014") : "empty table dash row in pdf";
+
         ReportProfile broken = new ReportProfile("1", "user:canvas-broken", "Broken", "en", false, null,
             null, null, new SectionGraph(List.of(
                 SectionNode.of("page:bad", true, 1, false, "CANVAS_PAGE",
@@ -96,8 +198,18 @@ public class CanvasPageRenderTest {
         return Files.readString(html);
     }
 
+    private static ReportProfile singlePage(String id, String spec) {
+        return new ReportProfile("1", "user:canvas-" + id, id, "en", false, null, null, null,
+            new SectionGraph(List.of(SectionNode.of("page:" + id, true, 1, false, "CANVAS_PAGE",
+                Map.of("title", id, "role", "interior", "spec", spec)))), null, null, null, null);
+    }
+
     private static void renderProfile(ReportProfile profile, Path html, Path pdf) throws Exception {
-        var ctx = new ReportRenderContext(profile, PreviewService.createFixtureReportData(), null, html.getParent());
+        renderProfile(profile, PreviewService.createFixtureReportData(), html, pdf);
+    }
+
+    private static void renderProfile(ReportProfile profile, ReportData data, Path html, Path pdf) throws Exception {
+        var ctx = new ReportRenderContext(profile, data, null, html.getParent());
         if (!new ReportGenerator(null).generate(ctx, html)) throw new AssertionError("html not written");
         if (!new PdfReportGenerator(null).generate(ctx, pdf)) throw new AssertionError("pdf not written");
     }

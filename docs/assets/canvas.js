@@ -62,6 +62,21 @@
     return /^#[0-9a-fA-F]{6}$/.test(text) ? text.toUpperCase() : fallback;
   }
 
+  // WCAG relative luminance and contrast ratio (Java renderer uses the same rule).
+  function luminance(value) {
+    var c = hex(value, "#000000");
+    var lin = [1, 3, 5].map(function (i) {
+      var v = parseInt(c.substr(i, 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  }
+
+  function contrast(a, b) {
+    var la = luminance(a), lb = luminance(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+
   function esc(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -143,10 +158,10 @@
       el.y1 = round(num(raw.y1, el.y));
       el.x2 = round(num(raw.x2, el.x + el.w));
       el.y2 = round(num(raw.y2, el.y + el.h));
-      syncLineBox(el);
       el.stroke = hex(raw.stroke, "#1A1A1A");
       el.strokeWidth = round(clamp(num(raw.strokeWidth, 0.4), 0.1, 8));
       el.arrow = !!raw.arrow;
+      syncLineBox(el); // after stroke and arrow are set: the box padding depends on both
       return el;
     }
     if (type === "text") {
@@ -226,12 +241,23 @@
   }
 
   function syncLineBox(el) {
-    var pad = Math.max(1.2, (el.strokeWidth || 0.4) + 1);
-    el.x = round(Math.min(el.x1, el.x2) - pad);
-    el.y = round(Math.min(el.y1, el.y2) - pad);
-    el.w = round(Math.max(pad * 2, Math.abs(el.x2 - el.x1) + pad * 2));
-    el.h = round(Math.max(pad * 2, Math.abs(el.y2 - el.y1) + pad * 2));
+    var sw = el.strokeWidth || 0.4, pad = Math.max(1.2, sw + 1);
+    // The box holds both ends and, for an arrow, the head's base and wings, even when the head is longer than the line.
+    var pts = [[el.x1, el.y1], [el.x2, el.y2]];
+    if (el.arrow) {
+      var dx = el.x2 - el.x1, dy = el.y2 - el.y1, len = Math.hypot(dx, dy) || 1;
+      var ux = dx / len, uy = dy / len, L = ARROW_LEN * sw, H = ARROW_HALF * sw;
+      var bx = el.x2 - ux * L, by = el.y2 - uy * L;
+      pts.push([bx - uy * H, by + ux * H], [bx + uy * H, by - ux * H]);
+    }
+    var xs = pts.map(function (p) { return p[0]; }), ys = pts.map(function (p) { return p[1]; });
+    var minX = Math.min.apply(null, xs), minY = Math.min.apply(null, ys);
+    el.x = round(minX - pad);
+    el.y = round(minY - pad);
+    el.w = round(Math.max(pad * 2, Math.max.apply(null, xs) - minX + pad * 2));
+    el.h = round(Math.max(pad * 2, Math.max.apply(null, ys) - minY + pad * 2));
   }
+
 
   function normalizePage(raw) {
     raw = raw && typeof raw === "object" ? raw : {};
@@ -555,9 +581,9 @@
     }).join(", ") + ")";
   }
 
-  function pointsAttr(points) {
+  function pointsAttr(points, w, h) {
     return (points || []).map(function (point) {
-      return (point[0] * 100) + "," + (point[1] * 100);
+      return (point[0] * w) + "," + (point[1] * h);
     }).join(" ");
   }
 
@@ -593,29 +619,37 @@
     }
     var gap = 3;
     var barW = (88 - gap * (rows.length - 1)) / rows.length;
-    var bars = rows.map(function (row, index) {
+    // Bars stretch with the box; labels are HTML so they are never distorted. Font: 6% of the smaller box side, capped so the longest label fits its slot (0.6em per character).
+    var bars = "";
+    var maxLen = Math.max(1, Math.max.apply(null, rows.map(function (row) { return String(row.label).length; })));
+    var labels = rows.map(function (row, index) {
       var h = Math.max(row.value > 0 ? 1.2 : 0, (row.value / max) * 62);
       var x = 6 + index * (barW + gap);
       var y = 78 - h;
-      return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + esc(row.color) + '"/>' +
-        '<text x="' + (x + barW / 2).toFixed(1) + '" y="92" text-anchor="middle" font-size="6" fill="#4B5563">' + esc(row.label) + "</text>";
+      bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + esc(row.color) + '"/>';
+      return '<span style="position:absolute;top:92%;left:' + (x + barW / 2).toFixed(2) + '%;width:' + barW.toFixed(2) + '%;transform:translate(-50%,-50%);text-align:center;font-size:min(6cqmin,' + (barW / (0.6 * maxLen)).toFixed(3) + 'cqw);line-height:1;white-space:nowrap;color:#4B5563">' + esc(row.label) + "</span>";
     }).join("");
-    return '<svg class="chart" viewBox="0 0 100 100" preserveAspectRatio="none" role="img">' + bars + "</svg>";
+    return '<div class="chart" role="img" style="position:relative;width:100%;height:100%;container-type:size"><svg viewBox="0 0 100 100" preserveAspectRatio="none" style="position:absolute;left:0;top:0;width:100%;height:100%;display:block">' + bars + "</svg>" + labels + "</div>";
   }
 
-  function tableHtml(element, vars) {
+  function tableHtml(element, vars, pageBackground) {
     var rows = element.mode === "static" ? element.rows : sampleFindings();
     var head = element.columns.map(function (col) { return "<th>" + esc(applyVars(col.label, vars)) + "</th>"; }).join("");
+    // Header ink: the body colour when it reads on the header fill, else white or near-black by the fill's luminance.
+    var pageBg = pageBackground || "#FFFFFF";
+    var headInk = contrast(element.color, element.headerFill) >= 3 ? element.color : luminance(element.headerFill) < 0.5 ? "#FFFFFF" : "#1A1A1A";
+    // Cells have no fill, so the row has to read on the page behind the table.
+    var bodyInk = contrast(element.color, pageBg) >= 3 ? element.color : luminance(pageBg) < 0.5 ? "#FFFFFF" : "#1A1A1A";
     var body = rows.map(function (row) {
       return "<tr>" + element.columns.map(function (col, index) {
         return "<td>" + esc(row[index] == null ? "" : row[index]) + "</td>";
       }).join("") + "</tr>";
     }).join("");
     if (!body) body = '<tr><td colspan="' + element.columns.length + '">—</td></tr>';
-    return '<table style="width:100%;border-collapse:collapse;font-family:' + esc(fontCss(element.font)) + ";font-size:" + element.size + 'pt;color:' + esc(element.color) + '"><thead style="background:' + esc(element.headerFill) + '"><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table>";
+    return '<table style="width:100%;border-collapse:collapse;font-family:' + esc(fontCss(element.font)) + ";font-size:" + element.size + 'pt;color:' + esc(bodyInk) + '"><thead style="background:' + esc(element.headerFill) + ';color:' + headInk + '"><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table>";
   }
 
-  function elementInner(element, vars, logo) {
+  function elementInner(element, vars, logo, pageBackground) {
     if (element.type === "text") {
       var shown = applyVars(element.text, vars);
       return esc(shown).replace(/\n/g, "<br>");
@@ -625,7 +659,8 @@
       if (element.shape === "ellipse") return "";
       var pts = element.points;
       var sw = element.strokeWidth || 0;
-      return '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon points="' + pointsAttr(pts) + '" fill="' + esc(element.fill) + '" stroke="' + esc(element.stroke || "none") + '" stroke-width="' + sw + '" vector-effect="non-scaling-stroke"/></svg>';
+      // viewBox in mm, so stroke-width is millimetres (uniform scale, zoom-safe).
+      return '<svg viewBox="0 0 ' + element.w + ' ' + element.h + '" overflow="visible" aria-hidden="true"><polygon points="' + pointsAttr(pts, element.w, element.h) + '" fill="' + esc(element.fill) + '" stroke="' + esc(element.stroke || "none") + '" stroke-width="' + sw + '"/></svg>';
     }
     if (element.type === "image") {
       var src = element.src;
@@ -639,7 +674,7 @@
     }
     if (element.type === "line") return "";
     if (element.type === "chart") return chartSvg(element, vars);
-    if (element.type === "table") return tableHtml(element, vars);
+    if (element.type === "table") return tableHtml(element, vars, pageBackground);
     return "";
   }
 
@@ -676,8 +711,10 @@
       var clip = clipCss(element);
       if (clip) style.push("clip-path:" + clip);
     }
+    if (element.type === "line") style.push("overflow:visible");
     if (element.type === "shape" && element.shape !== "rect" && element.shape !== "ellipse") {
       style.push("background:transparent");
+      style.push("overflow:visible");
     }
     return style.join(";");
   }
@@ -689,19 +726,30 @@
     var bits = (page.elements || []).filter(function (element) { return !element.hidden; }).map(function (element) {
       var cls = "el el-" + element.type + (element.locked ? " is-locked" : "");
       var extra = "";
-      if (element.type === "line") {
-        var x1 = ((element.x1 - element.x) / element.w) * 100;
-        var y1 = ((element.y1 - element.y) / element.h) * 100;
-        var x2 = ((element.x2 - element.x) / element.w) * 100;
-        var y2 = ((element.y2 - element.y) / element.h) * 100;
-        extra = '<svg class="line" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
-          (element.arrow ? '<defs><marker id="ah-' + esc(element.id) + '" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="' + esc(element.stroke) + '"/></marker></defs>' : "") +
-          '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + esc(element.stroke) + '" stroke-width="' + element.strokeWidth + '" vector-effect="non-scaling-stroke"' +
-          (element.arrow ? ' marker-end="url(#ah-' + esc(element.id) + ')"' : "") + "/></svg>";
-      }
-      return '<div class="' + cls + '" data-id="' + esc(element.id) + '" style="' + elementStyle(element) + '">' + extra + elementInner(element, vars, logo) + "</div>";
+      if (element.type === "line") extra = lineSvg(element);
+      return '<div class="' + cls + '" data-id="' + esc(element.id) + '" style="' + elementStyle(element) + '">' + extra + elementInner(element, vars, logo, page.background) + "</div>";
     }).join("");
     return bits;
+  }
+
+  // Arrowhead length and half-width as multiples of the stroke width. Java must use the same.
+  var ARROW_LEN = 6.3, ARROW_HALF = 2.35;
+
+  function lineSvg(element) {
+    var x1 = element.x1 - element.x, y1 = element.y1 - element.y, x2 = element.x2 - element.x, y2 = element.y2 - element.y;
+    var sw = element.strokeWidth, color = esc(element.stroke), head = "", line = "";
+    var dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+    var end = { x: x2, y: y2 }, drawLine = true;
+    if (element.arrow && len >= 0.5) {
+      var ux = dx / len, uy = dy / len, L = ARROW_LEN * sw, H = ARROW_HALF * sw;
+      var bx = x2 - ux * L, by = y2 - uy * L;
+      var pts = [[x2, y2], [bx - uy * H, by + ux * H], [bx + uy * H, by - ux * H]];
+      head = '<polygon points="' + pointsAttr(pts, 1, 1) + '" fill="' + color + '"/>';
+      // The line stops at the head's base centre, so its square end cannot poke past the tip. Shorter than the head: head only.
+      if (len > L) end = { x: bx, y: by }; else drawLine = false;
+    }
+    if (drawLine) line = '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + end.x + '" y2="' + end.y + '" stroke="' + color + '" stroke-width="' + sw + '"/>';
+    return '<svg class="line" viewBox="0 0 ' + element.w + ' ' + element.h + '" overflow="visible" aria-hidden="true">' + line + head + "</svg>";
   }
 
   function profileFromDoc(doc) {
@@ -1125,6 +1173,17 @@
     if (stack[2].z !== 3 || stack[0].z === stack[1].z) throw new Error("reorder front");
     reorder(stack, [stack[2].id], "backward");
     if (stack[2].z !== 2) throw new Error("reorder backward");
+    var arrow = newElement("line", { x1: 10, y1: 40, x2: 80, y2: 40, strokeWidth: 1, arrow: true });
+    var plain = newElement("line", { x1: 10, y1: 40, x2: 80, y2: 40, strokeWidth: 1, arrow: false });
+    if (arrow.h <= plain.h) throw new Error("arrow box");
+    var arrowHtml = renderPage({ elements: [arrow] });
+    var shaft = /<line[^>]*x2="([^"]+)"/.exec(arrowHtml);
+    var tip = /<polygon points="([^"]+)"/.exec(arrowHtml);
+    if (!shaft || !tip) throw new Error("arrow draw");
+    var nums = tip[1].split(/[ ,]/).map(Number);
+    if (Math.abs(parseFloat(shaft[1]) - (nums[2] + nums[4]) / 2) > 0.05) throw new Error("arrow shaft");
+    var whiteRow = renderPage({ background: "#FFFFFF", elements: [newElement("table", { color: "#FFFFFF", headerFill: "#0F172A", mode: "static", columns: [{ key: "a", label: "Name" }], rows: [["visible-row"]] })] });
+    if (whiteRow.indexOf("color:#1A1A1A") === -1 || whiteRow.indexOf("color:#FFFFFF") === -1) throw new Error("body ink");
     return "canvas ok";
   }
 

@@ -1,6 +1,7 @@
 package icarus.report;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import icarus.core.ModuleConfig;
 import icarus.core.ReportTemplateConfig;
@@ -59,10 +60,16 @@ public class DefaultReportProfileManager implements ReportProfileManager {
         if (json != null && !json.isBlank()) {
             try {
                 ObjectMapper mapper = new ObjectMapper();
-                List<ReportProfile> list = mapper.readValue(json, new TypeReference<List<ReportProfile>>() {});
-                for (ReportProfile p : list) {
-                    if (p != null && !p.builtIn()) {
-                        userProfiles.put(p.id(), p);
+                List<JsonNode> list = mapper.readValue(json, new TypeReference<List<JsonNode>>() {});
+                for (JsonNode node : list) {
+                    // Same validation as import; a bad entry is skipped so the rest still load.
+                    try {
+                        ReportProfile p = ReportProfileCodec.fromNode(node);
+                        if (!p.builtIn()) {
+                            userProfiles.put(p.id(), p);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[ICARUS] Warning: skipped stored report profile: " + e.getMessage());
                     }
                 }
             } catch (Exception e) {

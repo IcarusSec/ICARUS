@@ -187,10 +187,11 @@
         studio.setLang(lang);
       });
     });
-    document.querySelectorAll("[data-mobile]").forEach(function (button) {
+    // Only the tab buttons: <main id="workspace"> also carries data-mobile, and a click anywhere in it must not refit the page.
+    document.querySelectorAll("button[data-mobile]").forEach(function (button) {
       button.addEventListener("click", function () {
         document.getElementById("workspace").setAttribute("data-mobile", button.getAttribute("data-mobile"));
-        document.querySelectorAll("[data-mobile]").forEach(function (item) {
+        document.querySelectorAll("button[data-mobile]").forEach(function (item) {
           item.setAttribute("aria-pressed", item === button ? "true" : "false");
         });
         if (button.getAttribute("data-mobile") === "canvas") studio.fit();

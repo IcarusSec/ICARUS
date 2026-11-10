@@ -22,6 +22,8 @@ public class ReportProfileSystemTest {
 
         testBuiltInProfilesLoad();
         testJsonRoundTrip();
+        testImportValidation();
+        testStoredInvalidProfileSkipped();
         testProfileCloning();
         testProfileManagerImmutability();
         testMigrator();
@@ -70,6 +72,55 @@ public class ReportProfileSystemTest {
         assert deserialized.coverRenderer() == CoverRendererId.HEADER_BAND : "Cover mismatch";
         assert deserialized.findingRenderer() == FindingRendererId.TABULAR : "Finding renderer mismatch";
         System.out.println("   [PASSED] JSON round-trip verified.");
+    }
+
+    private static void testImportValidation() {
+        System.out.println(" - Testing profile import validation...");
+        ReportProfile ok = ReportProfileCodec.fromJson("{\"name\":\"No Version\"}");
+        assert "No Version".equals(ok.name()) : "profile without schemaVersion must still import";
+        assert ReportProfile.CURRENT_SCHEMA_VERSION.equals(ok.schemaVersion()) : "blank version defaults to current";
+        assert ReportProfileCodec.fromJson("{\"schemaVersion\":\"1\",\"name\":\"V1\"}").name().equals("V1") : "version 1 must import";
+
+        assertImportRejected("{\"schemaVersion\":\"99\",\"id\":\"user:bad-schema\",\"name\":\"Bad Schema\"}",
+            "Unsupported profile version \"99\" (this ICARUS reads version 1)");
+        assertImportRejected("{}", "Not a report profile");
+        assertImportRejected("[{\"name\":\"x\"}]", "Not a report profile");
+        assertImportRejected("\"just a string\"", "Not a report profile");
+        assertImportRejected("this is not json", "Failed to parse ReportProfile");
+
+        ModuleConfig cfg = new ModuleConfig();
+        DefaultReportProfileManager manager = new DefaultReportProfileManager(cfg);
+        int before = manager.list().size();
+        try {
+            manager.importJson("{\"schemaVersion\":\"99\",\"name\":\"Bad Schema\"}");
+            assert false : "importJson must reject unsupported version";
+        } catch (IllegalArgumentException expected) {
+            // expected: the message is the one the Reporting tab shows
+        }
+        assert manager.list().size() == before : "rejected import must not create a profile";
+        System.out.println("   [PASSED] Profile import validation.");
+    }
+
+    private static void testStoredInvalidProfileSkipped() {
+        System.out.println(" - Testing stored profiles with an unsupported version are skipped...");
+        ModuleConfig cfg = new ModuleConfig();
+        cfg.set(DefaultReportProfileManager.KEY_USER_PROFILES,
+            "[{\"schemaVersion\":\"1\",\"id\":\"user:good\",\"name\":\"Good\"},"
+            + "{\"schemaVersion\":\"99\",\"id\":\"user:bad\",\"name\":\"Bad\"}]");
+        DefaultReportProfileManager manager = new DefaultReportProfileManager(cfg);
+        assert manager.get("user:good") != null : "valid stored profile must still load";
+        assert manager.get("user:bad") == null : "schemaVersion 99 stored profile must be skipped";
+        System.out.println("   [PASSED] Invalid stored profile skipped, others loaded.");
+    }
+
+    private static void assertImportRejected(String json, String messagePrefix) {
+        try {
+            ReportProfileCodec.fromJson(json);
+            assert false : "expected rejection of: " + json;
+        } catch (RuntimeException e) {
+            assert e.getMessage() != null && e.getMessage().startsWith(messagePrefix)
+                : "message was: " + e.getMessage();
+        }
     }
 
     private static void testProfileCloning() {

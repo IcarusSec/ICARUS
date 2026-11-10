@@ -41,6 +41,11 @@ public final class ReportGenerator {
         this.api = api;
     }
 
+    /** Report ID shown on the cover and header: the output file name without its extension. */
+    public static String reportId(Path outputFile) {
+        return outputFile.getFileName().toString().replaceFirst("\\.[^.]+$", "");
+    }
+
     /**
      * @param outputHtmlFile where to write the report, chosen/confirmed by the caller
      *                       (e.g. via a save dialog). Every referenced evidence image is
@@ -73,9 +78,12 @@ public final class ReportGenerator {
             
             b.description(tmpl.descricao() != null && !tmpl.descricao().isBlank() ? tmpl.descricao() : f.description());
             
+            // Only a user-saved template severity overrides the finding's own; tmpl may be the
+            // knowledge-base fallback from getFindingTemplate(), which is not a user edit.
             Severity sev = f.severity();
-            if (tmpl.severidade() != null && !tmpl.severidade().isBlank()) {
-                try { sev = Severity.valueOf(tmpl.severidade().toUpperCase()); } catch (Exception e) {}
+            ReportTemplateConfig.FindingTemplate userTmpl = rtc.findingTemplates().get(f.type());
+            if (userTmpl != null && userTmpl.severidade() != null && !userTmpl.severidade().isBlank()) {
+                try { sev = Severity.valueOf(userTmpl.severidade().toUpperCase()); } catch (Exception e) {}
             }
             b.severity(sev);
             
@@ -136,7 +144,7 @@ public final class ReportGenerator {
         String html;
         try {
             StringBuilder sb = new StringBuilder();
-            appendHeader(sb, reportDir.getFileName().toString(), projectName, rtc);
+            appendHeader(sb, reportId(outputHtmlFile), projectName, rtc);
             if (rtc.tocEnabled()) appendToc(sb, rtc, findings, retest);
             boolean findingsPlaced = appendSections(sb, rtc, retest, findings, evidenceByHash, config, capture);
             if (!findingsPlaced) {

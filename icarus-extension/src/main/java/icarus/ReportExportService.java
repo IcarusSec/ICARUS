@@ -101,7 +101,7 @@ public class ReportExportService {
         new SwingWorker<Boolean, Void>() {
             @Override
             protected Boolean doInBackground() throws Exception {
-                return pdfReportGenerator.generate(reportFindings, config, evidenceCapture, tempFile);
+                return writeReport(true, reportFindings, tempFile);
             }
 
             @Override
@@ -139,12 +139,47 @@ public class ReportExportService {
 
     public void generateHtmlReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
         exportReportInteractive(parent, triggerButton, reportFindings, "html", "report.html", "HTML Report",
-                (findings, cfg, capture, out) -> reportGenerator.generate(findings, cfg, capture, out));
+                (findings, cfg, capture, out) -> writeReport(false, findings, out));
     }
 
     public void exportPdfReportInteractive(Component parent, JButton triggerButton, List<Finding> reportFindings) {
         exportReportInteractive(parent, triggerButton, reportFindings, "pdf", "report.pdf", "PDF Report",
-                (findings, cfg, capture, out) -> pdfReportGenerator.generate(findings, cfg, capture, out));
+                (findings, cfg, capture, out) -> writeReport(true, findings, out));
+    }
+
+    /**
+     * Canvas profiles render through the context overloads with the real findings; every other
+     * profile keeps the legacy overloads. The working dir is the output's parent, as the
+     * legacy generators use it (the context renderers do not read it today).
+     */
+    private boolean writeReport(boolean pdf, List<Finding> reportFindings, Path out) throws IOException {
+        icarus.report.DefaultReportProfileManager profiles = new icarus.report.DefaultReportProfileManager(config);
+        icarus.report.model.ReportProfile profile = profiles.active();
+        if (!icarus.report.canvas.CanvasPages.hasCanvas(profile)) {
+            return pdf ? pdfReportGenerator.generate(reportFindings, config, evidenceCapture, out)
+                       : reportGenerator.generate(reportFindings, config, evidenceCapture, out);
+        }
+        // Same title and project sources as the legacy generators: Report Details first, then Burp's project name.
+        ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        rtc.injectFindingsVariables(reportFindings);
+        String title = rtc.variables().get("report_title");
+        String project = rtc.variables().get("project");
+        if (project == null || project.isBlank()) {
+            project = null;
+            if (config.getBool("evidence.include_project_name", true)) {
+                String name = api.project().name();
+                if (name != null && !name.isBlank()) project = name;
+            }
+        }
+        icarus.report.render.ReportData mapped = icarus.report.ReportDataMapper.buildReportData(
+                reportFindings, evidenceCapture, config, profile.content(), title, project);
+        // Report Details fields ({{author}}, {{client}}, ...) reach canvas pages through the variables.
+        Map<String, String> vars = new LinkedHashMap<>(rtc.variables());
+        vars.putAll(mapped.variables());
+        icarus.report.render.ReportData data = new icarus.report.render.ReportData(mapped.reportTitle(), mapped.projectName(),
+                mapped.findings(), mapped.severityCounts(), mapped.fixedCount(), mapped.notFixedCount(), vars, mapped.isRetest());
+        icarus.report.render.ReportRenderContext ctx = profiles.bind(data, out.toAbsolutePath().getParent());
+        return pdf ? pdfReportGenerator.generate(ctx, out) : reportGenerator.generate(ctx, out);
     }
 
     public Path generateReport(String format, Map<String, String> templateVariables) throws Exception {
@@ -163,9 +198,7 @@ public class ReportExportService {
         Files.createDirectories(dir);
         Path outputFile = dir.resolve("icarus-report-" + System.currentTimeMillis() + (pdf ? ".pdf" : ".html"));
 
-        boolean written = pdf
-                ? pdfReportGenerator.generate(reportFindings, config, evidenceCapture, outputFile)
-                : reportGenerator.generate(reportFindings, config, evidenceCapture, outputFile);
+        boolean written = writeReport(pdf, reportFindings, outputFile);
 
         return written ? outputFile.toAbsolutePath() : null;
     }

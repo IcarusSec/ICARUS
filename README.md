@@ -1,7 +1,7 @@
 <p align="center">
   <img src="./.images/banner.png" alt="ICARUS Banner">
 </p>
-<h1 align="center">ICARUS v1.5.0</h1>
+<h1 align="center">ICARUS v1.0.0</h1>
 
 <p align="center">
   <a href="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml"><img src="https://github.com/IcarusSec/ICARUS/actions/workflows/build.yml/badge.svg" alt="Build"></a>
@@ -149,12 +149,16 @@ For a deep dive into ICARUS's capabilities, check out our official documentation
 
 ## 📝 Report template builder
 
-Design a pentest report template in the browser. The studio is a page list, an A4 canvas, and a style panel: fonts, size, color, bold, italic, underline, alignment, and spacing. Pages can be marked required so a later user of the template cannot turn them off. Charts, tables, diagrams, images, and callouts can be dropped into the flow. Nothing is uploaded. Drafts stay in the browser.
+Design a pentest report the way you would a poster. Each page is a free-form A4 canvas: drag, resize, rotate, type directly, group, and snap. Text can hold fields such as `{{client}}` and `{{count_critical}}` that Burp fills in when the report is generated. Nothing is uploaded. Drafts stay in the browser. The studio is in English and Brazilian Portuguese.
+
+The basics are on screen: click a tile or drag it onto the page, drop or paste an image, and pick colours from your brand palette. Opacity, letter spacing, chart data, and table columns are under **More options** and in each element's panel. Press <kbd>?</kbd> for every keyboard shortcut, and right-click for the context menu.
 
 - **Open it:** [`docs/index.html`](docs/index.html). After GitHub Pages is enabled (Settings → Pages → Deploy from branch → `main` → `/docs`), the site is <https://icarussec.github.io/ICARUS/>.
-- **Use it in Burp:** export JSON, then in Burp open **ICARUS → Reporting → Import**. The file is a report profile (`schemaVersion` 1), the same format as **Reporting → Export**. Custom blocks are section nodes with `rendererKey` `CUSTOM_BLOCK`.
-- **HTML, Markdown, and print** follow the A4 canvas, with sample findings. Print the page, or the downloaded HTML, to PDF from the browser.
-- **AI assist** copies a prompt you can paste into any model, then checks the JSON you paste back. The page does not call an AI API.
+- **Use it in Burp:** export JSON. In Burp open **ICARUS → Reporting → Import**. The file is a report profile (`schemaVersion` 1). Each designed page is a section with `rendererKey` `CANVAS_PAGE`.
+- **Share it:** **Share link** copies a URL that opens the design in someone else's browser. Designs with large photos are too big for a link; send the JSON instead.
+- **Print / PDF and HTML preview** include every page, filled with the sample data from the Brand tab. Burp's PDF uses the same coordinates and fonts.
+- **Images** are resized and stored as JPEG or PNG inside the template, so the Burp PDF can read them whatever format you uploaded.
+- **AI assist** copies a prompt that documents the page format, including a finished cover, then checks the JSON you paste back. The page does not call an AI API.
 - **Donation links** stay hidden until the placeholders in [`docs/assets/config.js`](docs/assets/config.js) are replaced. That file is also where the BApp listing URL goes once the extension is on the store.
 
 ---

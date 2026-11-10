@@ -17,7 +17,6 @@
 - **Commit Messages**: Follow Conventional Commits format (`feat:`, `fix:`, `chore:`).
 
 ## Workflow
-- **Planning & Changes**: Always ask `agy` about the proposed changes and plan before executing them.
 - **Commits**: Commit after every massive/significant code alteration, with a descriptive commit message explaining the change.
 
 ## MCP Tools: code-review-graph

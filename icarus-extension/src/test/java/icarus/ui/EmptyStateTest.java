@@ -12,6 +12,7 @@ import burp.api.montoya.MontoyaApi;
 
 import javax.swing.JLabel;
 import javax.swing.SwingUtilities;
+import javax.swing.text.JTextComponent;
 import java.awt.Component;
 import java.awt.Container;
 import java.lang.reflect.Proxy;
@@ -32,7 +33,8 @@ public final class EmptyStateTest {
 
     private static void messageIsVisible() {
         EmptyState state = new EmptyState("Capture a screenshot, then use Add to report.");
-        check(state.shownHtml().contains("Add to report"), "empty state dropped the message: " + state.shownHtml());
+        check(state.shownText().contains("Add to report"), "empty state dropped the message: " + state.shownText());
+        check(!state.shownText().contains("<"), "Burp disables HTML in extension labels, so markup would show: " + state.shownText());
         check(state.getComponentCount() == 1, "empty state should be a single explanation");
     }
 
@@ -45,20 +47,21 @@ public final class EmptyStateTest {
                 new ReportGenerator(api), new AutoAuthModule(api, config));
         SwingUtilities.invokeAndWait(() -> {
             EvidenceManagerTab tab = new EvidenceManagerTab(orchestrator, config, api);
-            String blob = labels(tab.getUiComponent()).stream().map(JLabel::getText).reduce("", (a, b) -> a + "\n" + b);
+            String blob = texts(tab.getUiComponent()).stream().reduce("", (a, b) -> a + "\n" + b);
             check(blob.contains("Add to report") || blob.contains(I18n.t("ui.evidence.empty.captured")),
                     "empty evidence tab did not explain what to do next: " + blob);
         });
     }
 
-    private static List<JLabel> labels(Component root) {
-        List<JLabel> out = new ArrayList<>();
+    private static List<String> texts(Component root) {
+        List<String> out = new ArrayList<>();
         walk(root, out);
         return out;
     }
 
-    private static void walk(Component c, List<JLabel> out) {
-        if (c instanceof JLabel label) out.add(label);
+    private static void walk(Component c, List<String> out) {
+        if (c instanceof JLabel label) out.add(label.getText());
+        if (c instanceof JTextComponent text) out.add(text.getText());
         if (c instanceof Container box) {
             for (Component child : box.getComponents()) walk(child, out);
         }

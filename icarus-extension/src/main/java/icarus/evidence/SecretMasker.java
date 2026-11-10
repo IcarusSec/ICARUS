@@ -1,5 +1,6 @@
 package icarus.evidence;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -33,27 +34,70 @@ public final class SecretMasker {
     private static final Pattern FORM_FIELD = Pattern.compile(
             "((?:^|[?&;\\s])(?i:" + SECRET_KEYS + ")=)([^&\\s#]*)");
 
-    /** Masks credentials in a raw HTTP request or response (headers + body). */
+    /** Start of a header line: an RFC 9110 token followed by a colon. */
+    private static final Pattern HEADER_START = Pattern.compile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+:");
+
+    /**
+     * Masks credentials in a raw HTTP request or response (headers + body).
+     *
+     * <p>The evidence editor and the image renderer hard-wrap long lines, so a long
+     * {@code Authorization: Bearer <jwt>} or {@code Cookie:} value can span several lines and
+     * only the first one starts with {@code Name:}. Lines in the header block that do not start
+     * a new header are treated as continuations of the previous one: the header is masked as a
+     * whole and re-wrapped, so no fragment of the token survives on a continuation line. The
+     * body is masked as one string for the same reason (a wrapped JSON value spans lines).
+     */
     public static String mask(String text) {
         if (text == null || text.isEmpty()) return text;
         String[] lines = text.split("\n", -1);
-        boolean inHeaders = true;
         StringBuilder sb = new StringBuilder(text.length());
-        for (int i = 0; i < lines.length; i++) {
+        int i = 0;
+        // Request line (query-string params) or status line.
+        sb.append(maskFields(lines[0]));
+        i++;
+        while (i < lines.length) {
             String line = lines[i];
-            if (inHeaders && line.strip().isEmpty() && i > 0) inHeaders = false;
-            String out;
-            if (i == 0) {
-                out = maskFields(line); // request line: query-string params
-            } else if (inHeaders) {
-                out = maskHeader(line);
-            } else {
-                out = maskFields(line);
-            }
-            sb.append(out);
-            if (i < lines.length - 1) sb.append('\n');
+            if (line.strip().isEmpty()) break; // end of the header block
+            int end = i + 1;
+            while (end < lines.length && !lines[end].strip().isEmpty() && !HEADER_START.matcher(lines[end]).find()) end++;
+            sb.append('\n').append(maskHeaderGroup(java.util.Arrays.asList(lines).subList(i, end)));
+            i = end;
+        }
+        if (i < lines.length) {
+            String body = String.join("\n", java.util.Arrays.asList(lines).subList(i, lines.length));
+            sb.append('\n').append(maskFields(body));
         }
         return sb.toString();
+    }
+
+    /** A header line plus its wrapped continuation lines. */
+    private static String maskHeaderGroup(List<String> group) {
+        if (group.size() == 1) return maskHeader(group.get(0));
+        StringBuilder logical = new StringBuilder(group.get(0));
+        int width = group.get(0).length();
+        for (String cont : group.subList(1, group.size())) {
+            width = Math.max(width, cont.length());
+            // A folded line (leading whitespace) was separated by whitespace; a hard-wrapped
+            // one was cut mid-value, or at a space the wrapper dropped.
+            if (!cont.isEmpty() && Character.isWhitespace(cont.charAt(0))) logical.append(' ').append(cont.strip());
+            else logical.append(cont);
+        }
+        String original = logical.toString();
+        String masked = maskHeader(original);
+        if (masked.equals(original)) return String.join("\n", group); // not a secret header: keep the layout
+        return rewrap(masked, Math.max(20, width));
+    }
+
+    /** Greedy re-wrap at {@code width}, preferring the space after a "; " separator. */
+    private static String rewrap(String s, int width) {
+        StringBuilder out = new StringBuilder();
+        while (s.length() > width) {
+            int cut = s.lastIndexOf(' ', width);
+            if (cut <= width / 2) cut = width;
+            out.append(s, 0, cut).append('\n');
+            s = s.substring(cut).stripLeading();
+        }
+        return out.append(s).toString();
     }
 
     private static String maskHeader(String line) {

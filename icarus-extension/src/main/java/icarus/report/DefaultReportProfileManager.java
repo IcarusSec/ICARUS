@@ -104,6 +104,19 @@ public class DefaultReportProfileManager implements ReportProfileManager {
         }
     }
 
+    private final List<Runnable> changeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    @Override
+    public void reload() {
+        loadUserProfiles();
+        changeListeners.forEach(Runnable::run);
+    }
+
+    @Override
+    public void addChangeListener(Runnable listener) {
+        changeListeners.add(listener);
+    }
+
     private synchronized void saveToConfig() {
         if (config == null) return;
         try {

@@ -65,4 +65,10 @@ public interface ReportProfileManager {
      * Binds domain report data with a specified profile into an immutable render context.
      */
     ReportRenderContext bind(String profileId, ReportData data, Path workingDir);
+
+    /** Re-reads the stored profiles (after a project import replaced them) and notifies listeners. */
+    default void reload() {}
+
+    /** Runs {@code listener} after {@link #reload()}, so open UIs can refresh. */
+    default void addChangeListener(Runnable listener) {}
 }

@@ -79,6 +79,7 @@ public class ReportingSettingsTab {
 
         containerPanel.add(scroll, BorderLayout.CENTER);
         refreshProfileList();
+        profileManager.addChangeListener(() -> SwingUtilities.invokeLater(this::refreshProfileList));
     }
 
     public Component getUiComponent() { return containerPanel; }

@@ -89,7 +89,7 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         this.reportProfileManager = new icarus.report.DefaultReportProfileManager(config);
 
         this.reportExportService = new ReportExportService(api, config, reportGenerator, this.pdfReportGenerator, evidenceCapture, this.findings);
-        this.projectStateService = new ProjectStateService(api, config, evidenceCapture, this.findings);
+        this.projectStateService = new ProjectStateService(api, config, evidenceCapture, this.findings, this.reportProfileManager);
         this.evidenceTriggerService = new EvidenceTriggerService(api, config, evidenceCapture, modules, autoAuth, this);
 
         // Initialize VulnerabilityKnowledgeBase

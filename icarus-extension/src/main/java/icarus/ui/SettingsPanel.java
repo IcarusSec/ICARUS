@@ -203,6 +203,8 @@ public class SettingsPanel {
             worker.execute();
         });
         cardMcp.addFormRow(btnRestartMcp);
+        // Ticking the box alone used to change nothing (not even the saved setting) until Restart.
+        chkMcp.addActionListener(e -> btnRestartMcp.doClick());
 
         CardPanel cardEvidence = new CardPanel(I18n.t("settings.section.evidence"), "camera");
         addOutputDirField(cardEvidence);

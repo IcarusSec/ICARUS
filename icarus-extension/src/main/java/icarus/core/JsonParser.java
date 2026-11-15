@@ -152,6 +152,7 @@ public final class JsonParser {
         if (o instanceof Long)          return String.valueOf(o);
         if (o instanceof Integer)       return String.valueOf(o);
         if (o instanceof Double)        return String.valueOf(o);
+        if (o instanceof Record r)      return write(recordToMap(r));
 
         if (o instanceof Map<?, ?> map) {
             var sb = new StringBuilder("{");
@@ -179,6 +180,21 @@ public final class JsonParser {
         return "\"" + escape(String.valueOf(o)) + "\"";
     }
 
+    /** A record as a JSON object of its components, so MCP tools return fields, not toString(). */
+    private static Map<String, Object> recordToMap(Record r) {
+        var m = new java.util.LinkedHashMap<String, Object>();
+        for (var c : r.getClass().getRecordComponents()) {
+            try {
+                c.getAccessor().setAccessible(true);
+                Object v = c.getAccessor().invoke(r);
+                m.put(c.getName(), v instanceof Enum<?> e ? e.name() : v);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                m.put(c.getName(), null);
+            }
+        }
+        return m;
+    }
+
     // ── Pretty Print ────────────────────────────────────────────
 
     public static String prettyPrint(Object o, int indentLevel) {
@@ -186,6 +202,7 @@ public final class JsonParser {
         if (o instanceof String str) return "\"" + escape(str) + "\"";
         if (o instanceof RawNumber rn) return rn.value();
         if (o instanceof Boolean || o instanceof Long || o instanceof Integer || o instanceof Double) return String.valueOf(o);
+        if (o instanceof Record r) return prettyPrint(recordToMap(r), indentLevel);
 
         String indent = "  ".repeat(indentLevel);
         String innerIndent = "  ".repeat(indentLevel + 1);

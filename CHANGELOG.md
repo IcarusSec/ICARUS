@@ -8,7 +8,28 @@ Full release notes (with complete detail) live on the
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **Project file:** a `.icarus` export now carries the whole project to a fresh
+  Burp/ICARUS install: every finding with its count, suppression and audit log,
+  suppression rules, evidence with captions, report profiles (studio pages,
+  texts, images) and the active one, custom Knowledge Base entries, and the
+  logo files the report settings use. Export works without evidence too.
+  Older `.icarus` files still import.
+
+### Fixed
+
+- **JWT Checker:** a verbose error that the original response already had is no
+  longer reported once per forged token, and an endpoint that ignores the token
+  no longer turns every tamper test into a HIGH finding (a control token is sent
+  first). `alg=none` acceptance is reported as an active hit.
+- **Rate Limit Tester:** no longer reports `SERVER_CRASH` when the original
+  response is already HTTP 5xx; it skips such requests.
+- **MCP:** `get_project_context` (and `auto_detected_context` in
+  `get_report_config`) return JSON objects instead of Java text; the Origin
+  check compares the exact host (`http://localhost.evil.example` was accepted);
+  ticking "Enable Local MCP Server" starts the server at once.
+- **UI:** the findings filter placeholder follows the selected language.
 
 ## [1.0.0] - 2026-11-10
 

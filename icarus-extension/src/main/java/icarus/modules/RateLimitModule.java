@@ -69,6 +69,14 @@ public class RateLimitModule implements IcarusModule {
         DebugLog.log("RateLimitModule.run: entered");
         if (!config.getBool("rl.enabled", true)) { DebugLog.log("RateLimitModule.run: skipped — rl.enabled=false"); return List.of(); }
         if (requestResponse == null || requestResponse.request() == null) { DebugLog.log("RateLimitModule.run: skipped — null request"); return List.of(); }
+        // 500/502/504 count as crashes and 429 as a block, so a baseline that already returns one
+        // would always be reported as SERVER_CRASH or as rate limited.
+        int baseStatus = requestResponse.response() == null ? -1 : requestResponse.response().statusCode();
+        if (baseStatus >= 500 || baseStatus == 429) {
+            logger.accept("Rate Limit Tester skipped: the original response is already HTTP " + baseStatus
+                    + ". Run it on a request that succeeds.");
+            return List.of();
+        }
 
         // Check project-level persistence to see if we should skip the dialog
         burp.api.montoya.persistence.PersistedObject extData = api.persistence().extensionData();

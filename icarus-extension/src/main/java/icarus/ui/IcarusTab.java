@@ -452,7 +452,7 @@ public class IcarusTab {
         // Add tabs in logical workflow order
         tabs.addTab(I18n.t("ui.tab.results"), resultsPanel);
         tabs.addTab(I18n.t("ui.tab.evidence"), evidenceManagerTab.getUiComponent());
-        tabs.addTab(I18n.t("ui.tab.reporting"), new ReportingSettingsTab(api, config, themeHelper).getUiComponent());
+        tabs.addTab(I18n.t("ui.tab.reporting"), new ReportingSettingsTab(api, config, themeHelper, orchestrator.getReportProfileManager()).getUiComponent());
         tabs.addTab(I18n.t("ui.tab.kb"), new KnowledgeBaseTab(api, orchestrator).getComponent());
         tabs.addTab(I18n.t("ui.tab.settings"), new SettingsPanel(api, config, themeHelper, orchestrator.autoAuth(), mcpServer).getComponent());
         tabs.addTab(I18n.t("ui.tab.audit_log"), auditPanel);

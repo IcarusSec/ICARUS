@@ -144,7 +144,8 @@ public final class EvidenceImageHeightTest {
         int yStart = Math.max(0, img.getHeight() - 160);
         int xStart = img.getWidth() / 2;
         for (int y = yStart; y <= img.getHeight() - needle.getHeight(); y++) {
-            for (int x = xStart; x <= img.getWidth() - needle.getWidth(); x += 2) {
+            // Step 1px: the phrase's x depends on the font's prefix width, which can be odd (DejaVu).
+            for (int x = xStart; x <= img.getWidth() - needle.getWidth(); x++) {
                 int sad = sad(img, needle, x, y);
                 if (sad < best) best = sad;
                 if (best / (double) pixels <= 15.0) return true;

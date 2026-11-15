@@ -90,10 +90,16 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
     /** Only loopback origins (or a null/absent origin, e.g. a native MCP client) are allowed. */
     private static boolean isAllowedOrigin(String origin) {
         String o = origin.trim().toLowerCase();
-        return o.equals("null")
-                || o.startsWith("http://127.0.0.1") || o.startsWith("https://127.0.0.1")
-                || o.startsWith("http://localhost")  || o.startsWith("https://localhost")
-                || o.startsWith("http://[::1]")       || o.startsWith("https://[::1]");
+        if (o.equals("null")) return true;
+        // Compare the exact host: a prefix test let http://localhost.evil.example through.
+        try {
+            java.net.URI u = new java.net.URI(o);
+            String host = u.getHost();
+            return ("http".equals(u.getScheme()) || "https".equals(u.getScheme()))
+                    && ("127.0.0.1".equals(host) || "localhost".equals(host) || "[::1]".equals(host));
+        } catch (java.net.URISyntaxException e) {
+            return false;
+        }
     }
 
     /** Binds and starts the HTTP server on 127.0.0.1. {@code port} 0 picks an ephemeral port. Returns the bound port. */
@@ -398,6 +404,12 @@ final class IcarusMcpTransportProvider implements McpStreamableServerTransportPr
      *  — end-to-end self-check: real HTTP client against a real McpSyncServer built on this
      *  transport, driving initialize -> notifications/initialized -> tools/call over the wire. */
     public static void main(String[] args) throws Exception {
+        for (String ok : new String[]{"null", "http://localhost", "http://localhost:6274", "https://127.0.0.1:8080", "http://[::1]:3000"}) {
+            assert isAllowedOrigin(ok) : "origin should be allowed: " + ok;
+        }
+        for (String bad : new String[]{"http://localhost.evil.example", "http://127.0.0.1.evil.example", "http://evil.example", "file://localhost", "garbage"}) {
+            assert !isAllowedOrigin(bad) : "origin should be refused: " + bad;
+        }
         var jsonMapper = new io.modelcontextprotocol.json.jackson2.JacksonMcpJsonMapper(new com.fasterxml.jackson.databind.ObjectMapper());
         String testToken = "test-token-0123456789abcdef";
         var provider = new IcarusMcpTransportProvider(System.err::println, jsonMapper, "/mcp", testToken);

@@ -272,40 +272,39 @@ public class JwtCheckerModule implements IcarusModule {
         }
 
         // Active Tests
+        // A verbose error already in the baseline (e.g. a payload in the body) is not caused by the token.
+        String baseVerbose = baseRR.response() == null ? null
+                : VerboseErrorDetector.getVerboseErrorMatch(baseRR.response().bodyToString());
+        // Control: if a non-JWT token is accepted, the endpoint does not check tokens, so 2xx is no bypass.
+        HttpRequestResponse control;
+        try {
+            control = sendWithToken(candidate, baseReq, "invalid");
+        } catch (Exception e) {
+            api.logging().logToError("JWT Checker: control request failed: " + e);
+            control = null;
+        }
+        boolean authNotEnforced = control != null && control.response() != null
+                && looksAccepted(control.response().statusCode(), control.response().bodyToString().toLowerCase());
+        if (authNotEnforced) {
+            logger.accept("Endpoint accepted an invalid token (HTTP " + control.response().statusCode()
+                    + ") - it does not enforce this token, so 2xx results are not reported as bypasses.");
+        }
+
         BiConsumer<String, String> testToken = (label, tokenToSend) -> {
             icarus.ScanRunner.waitIfPaused();
             if (icarus.ScanRunner.isCancelled()) return;
             logger.accept("Testing " + humanizeLabel(label) + "...");
             try {
-                String newHeaderValue = candidate.headerValue.replace(candidate.token, tokenToSend);
-                HttpRequest mutatedReq = baseReq.withUpdatedHeader(candidate.headerName, newHeaderValue).withService(baseReq.httpService());
-
-                if (mutatedReq.httpService() == null) return;
-
-                // Tell AutoAuth to leave this request alone — we're deliberately sending
-                // a tampered token and need it to arrive at the server as-is.
-                icarus.autoauth.AutoAuthModule.BYPASS_INJECTION.set(true);
-                HttpRequestResponse result;
-                try {
-                    result = api.http().sendRequest(mutatedReq);
-                } finally {
-                    icarus.autoauth.AutoAuthModule.BYPASS_INJECTION.set(false);
-                }
-                if (result.response() == null) return;
+                HttpRequestResponse result = sendWithToken(candidate, baseReq, tokenToSend);
+                if (result == null || result.response() == null) return;
 
                 int st = result.response().statusCode();
                 String body = result.response().bodyToString();
                 String lowerBody = body.toLowerCase();
                 String verboseMatch = VerboseErrorDetector.getVerboseErrorMatch(body);
-                boolean verbose = (verboseMatch != null);
+                boolean verbose = verboseMatch != null && !verboseMatch.equals(baseVerbose);
 
-                if (st < 400
-                    && !lowerBody.contains("invalid token")
-                    && !lowerBody.contains("jwt malformed")
-                    && !lowerBody.contains("signature")
-                    && !lowerBody.contains("unauthorized")
-                    && !lowerBody.contains("forbidden")
-                    && !lowerBody.contains("expired")) {
+                if (!authNotEnforced && looksAccepted(st, lowerBody)) {
                     findings.add(createFinding("ACTIVE_HIT_" + label, "Active test HIT for " + label, Severity.HIGH, result));
                     logger.accept("[FINDING] worked (HTTP " + st + ")");
                 } else if (verbose) {
@@ -495,6 +494,32 @@ public class JwtCheckerModule implements IcarusModule {
 
     private static String buildRawToken(String headerStr, String payloadStr, String signaturePart) {
         return b64UrlEncode(headerStr) + "." + b64UrlEncode(payloadStr) + "." + signaturePart;
+    }
+
+    /** Resends the base request with {@code tokenToSend} in place of the candidate token; null if it has no target. */
+    private HttpRequestResponse sendWithToken(JwtCandidate candidate, HttpRequest baseReq, String tokenToSend) {
+        String newHeaderValue = candidate.headerValue.replace(candidate.token, tokenToSend);
+        HttpRequest mutatedReq = baseReq.withUpdatedHeader(candidate.headerName, newHeaderValue).withService(baseReq.httpService());
+        if (mutatedReq.httpService() == null) return null;
+        // Tell AutoAuth to leave this request alone — we're deliberately sending
+        // a tampered token and need it to arrive at the server as-is.
+        icarus.autoauth.AutoAuthModule.BYPASS_INJECTION.set(true);
+        try {
+            return api.http().sendRequest(mutatedReq);
+        } finally {
+            icarus.autoauth.AutoAuthModule.BYPASS_INJECTION.set(false);
+        }
+    }
+
+    /** A response that the server would give to an accepted token. */
+    static boolean looksAccepted(int status, String lowerBody) {
+        return status < 400
+                && !lowerBody.contains("invalid token")
+                && !lowerBody.contains("jwt malformed")
+                && !lowerBody.contains("signature")
+                && !lowerBody.contains("unauthorized")
+                && !lowerBody.contains("forbidden")
+                && !lowerBody.contains("expired");
     }
 
     /** Turns a kebab-case test label like "future-nbf" or "alg-none-empty-signature" into readable log text. */

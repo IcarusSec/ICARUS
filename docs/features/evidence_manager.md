@@ -19,6 +19,14 @@ Navigate to the **ICARUS Tab > Evidence Manager** to curate your captured findin
 - **Toggling Visibility:** You can mark findings to be excluded from the *next* report export without permanently deleting their underlying evidence images.
 - **Annotations:** If a finding needs markup, right-click it and open the annotation editor to add boxes, highlights, redactions, or arrows directly to the HTTP payload screenshot.
 
+## Moving a Project (`.icarus`)
+
+In the Evidence Manager, **Export** saves the project to one `.icarus` file, and **Import Project...** loads it into any Burp/ICARUS install.
+
+The file holds every finding (with its count, suppression state and audit log), the suppression rules, the evidence screenshots and captions, the report profiles (studio pages, texts and images), the active profile, your Knowledge Base edits, and the logo files that the report settings use. Import replaces the project's findings, evidence and report settings, and adds the Knowledge Base edits. General settings and the MCP token are not in the file.
+
+The file contains the captured HTTP requests and responses, including any tokens or cookies in them. Treat it as sensitive.
+
 ## Exporting Reports
 
 ICARUS generates stunning, self-contained reports entirely offline.

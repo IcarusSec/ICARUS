@@ -43,20 +43,29 @@ public class ProjectStateService {
     private final icarus.core.ModuleConfig config;
     private final icarus.evidence.EvidenceCapture evidenceCapture;
     private final icarus.core.FindingRegistry findings;
+    private final icarus.report.ReportProfileManager profileManager;
 
-    public ProjectStateService(MontoyaApi api, icarus.core.ModuleConfig config, icarus.evidence.EvidenceCapture evidenceCapture, icarus.core.FindingRegistry findings) {
+    public ProjectStateService(MontoyaApi api, icarus.core.ModuleConfig config, icarus.evidence.EvidenceCapture evidenceCapture,
+                               icarus.core.FindingRegistry findings, icarus.report.ReportProfileManager profileManager) {
         this.api = api;
         this.config = config;
         this.evidenceCapture = evidenceCapture;
         this.findings = findings;
+        this.profileManager = profileManager;
+    }
+
+    /** Everything beyond the Evidence Manager that a fresh install needs to continue the project. */
+    private ProjectStateCodec.Workspace currentWorkspace() {
+        return new ProjectStateCodec.Workspace(
+                findings.serializeState(),
+                config.getStringList("suppressed_hashes"),
+                config.getString(icarus.report.DefaultReportProfileManager.KEY_USER_PROFILES, null),
+                config.getString(icarus.report.DefaultReportProfileManager.KEY_ACTIVE_PROFILE_ID, null),
+                VulnerabilityKnowledgeBase.getInstance().getCustomEntries());
     }
 
     public void exportProjectStateInteractive(Component parent, JButton triggerButton) {
         List<EvidenceCapture.CapturedEvidence> evidence = evidenceCapture.getCaptured();
-        if (evidence.isEmpty()) {
-            JOptionPane.showMessageDialog(parent, "No captured evidence to export yet.");
-            return;
-        }
 
         JFileChooser fc = new JFileChooser(new java.io.File(EvidencePaths.defaultOutputDir(api, config)));
         fc.setSelectedFile(new java.io.File("project.icarus"));
@@ -79,12 +88,13 @@ public class ProjectStateService {
 
         java.io.File finalSelectedFile = selectedFile;
         ReportTemplateConfig rtc = ReportTemplateConfig.fromConfig(config);
+        ProjectStateCodec.Workspace workspace = currentWorkspace();
 
         if (triggerButton != null) triggerButton.setEnabled(false);
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                String json = ProjectStateCodec.export(evidence, evidenceCapture::isIncluded, rtc);
+                String json = ProjectStateCodec.export(evidence, evidenceCapture::isIncluded, rtc, workspace);
                 Files.writeString(finalSelectedFile.toPath(), json);
                 return null;
             }
@@ -112,7 +122,8 @@ public class ProjectStateService {
         java.io.File selectedFile = fc.getSelectedFile();
 
         int confirm = JOptionPane.showConfirmDialog(parent,
-                "Importing replaces all evidence currently in the Evidence Manager. Continue?",
+                "Importing replaces this project's findings, evidence, audit log, suppression rules and report settings.\n"
+                        + "Knowledge Base edits in the file are added. Continue?",
                 "Confirm Import", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         if (confirm != JOptionPane.YES_OPTION) {
             return;
@@ -156,7 +167,26 @@ public class ProjectStateService {
                 if (staged.isEmpty() && skipped > 0) {
                     throw new IOException("none of the " + skipped + " evidence image(s) could be read");
                 }
-                return new StagedImport(staged, result, skipped);
+
+                // Logos/CSS the report settings point at: write them next to the evidence and
+                // record where, so the settings can be pointed at this machine's copies.
+                Map<String, String> assetPaths = new LinkedHashMap<>();
+                if (!result.assets().isEmpty()) {
+                    Path assetDir = dir.resolveSibling("assets");
+                    Files.createDirectories(assetDir);
+                    for (var asset : result.assets().entrySet()) {
+                        try {
+                            Path target = assetDir.resolve(asset.getKey()).normalize();
+                            if (!target.startsWith(assetDir.normalize())) continue;
+                            // Name is the content hash, so an existing file already holds these bytes.
+                            if (!Files.exists(target)) Files.write(target, asset.getValue());
+                            assetPaths.put(asset.getKey(), target.toAbsolutePath().toString());
+                        } catch (Exception e) {
+                            api.logging().logToError("Project import: could not write asset " + asset.getKey() + ": " + e);
+                        }
+                    }
+                }
+                return new StagedImport(staged, result, skipped, assetPaths);
             }
 
             @Override
@@ -166,22 +196,51 @@ public class ProjectStateService {
                 try {
                     StagedImport staged = get();
 
+                    ProjectStateCodec.Workspace ws = staged.result().workspace();
+                    Map<String, String> assetPaths = staged.assetPaths();
+
+                    // Suppression rules first: clearAllFindings re-seeds suppressed hashes from config.
+                    if (ws.suppressedHashes() != null) config.set("suppressed_hashes", String.join("\n", ws.suppressedHashes()));
+                    if (ws.registryJson() != null) {
+                        findings.clearAllFindings();
+                        findings.deserializeState(ws.registryJson());
+                    }
+
                     evidenceCapture.clearAll();
                     List<Finding> imported = new ArrayList<>();
                     for (var entry : staged.entries()) {
                         var ce = entry.getKey();
                         evidenceCapture.restoreCaptured(ce, entry.getValue());
-                        imported.add(ce.finding());
+                        // Already restored with its count/suppression from the registry: don't count it twice.
+                        if (findings.getRecordByHash(ce.finding().similarityHash()) == null) imported.add(ce.finding());
                     }
                     // One registry batch (one UI refresh). passive=true only skips creating Burp
                     // issues: these were raised when first found, and re-importing the same
                     // project re-added every one of them to the site map each time.
-                    findings.processDeduplication(imported, true);
-                    staged.result().reportTemplateConfig().saveTo(config);
+                    if (!imported.isEmpty()) findings.processDeduplication(imported, true);
+
+                    ReportTemplateConfig rtc = staged.result().reportTemplateConfig();
+                    rtc.setLogoPath(ProjectStateCodec.resolveAsset(rtc.logoPath(), assetPaths));
+                    rtc.setClientLogoPath(ProjectStateCodec.resolveAsset(rtc.clientLogoPath(), assetPaths));
+                    rtc.setCustomCssPath(ProjectStateCodec.resolveAsset(rtc.customCssPath(), assetPaths));
+                    rtc.saveTo(config);
+                    if (ws.reportProfilesJson() != null) {
+                        config.set(icarus.report.DefaultReportProfileManager.KEY_USER_PROFILES,
+                                ProjectStateCodec.resolveAssets(ws.reportProfilesJson(), assetPaths));
+                    }
+                    if (ws.activeProfileId() != null) {
+                        config.set(icarus.report.DefaultReportProfileManager.KEY_ACTIVE_PROFILE_ID, ws.activeProfileId());
+                    }
+                    if (ws.knowledgeBase() != null && !ws.knowledgeBase().isEmpty()) {
+                        VulnerabilityKnowledgeBase.getInstance().importEntries(ws.knowledgeBase());
+                    }
                     api.persistence().extensionData().setString("config", config.serialize());
+                    if (ws.reportProfilesJson() != null || ws.activeProfileId() != null) profileManager.reload();
 
                     onImported.run();
-                    ToastNotification.show(suiteFrame, "Project imported: " + staged.entries().size() + " evidence item(s)."
+                    ToastNotification.show(suiteFrame, "Project imported: " + findings.getAllFindingRecords().stream()
+                            .filter(r -> !"DUMMY".equals(r.getFinding().type())).count() + " finding(s), "
+                            + staged.entries().size() + " evidence item(s)."
                             + (staged.skipped() > 0 ? " " + staged.skipped() + " unreadable item(s) skipped — see the extension error log." : ""));
                 } catch (Exception ex) {
                     api.logging().logToError("Project import failed: " + ex.getCause());
@@ -194,6 +253,7 @@ public class ProjectStateService {
     private record StagedImport(
             List<Map.Entry<EvidenceCapture.CapturedEvidence, Boolean>> entries,
             ProjectStateCodec.ImportResult result,
-            int skipped) {}
+            int skipped,
+            Map<String, String> assetPaths) {}
 
 }

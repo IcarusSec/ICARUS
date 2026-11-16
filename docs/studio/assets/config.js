@@ -16,7 +16,7 @@
  */
 window.ICARUS_SITE_CONFIG = {
   repoUrl: "https://github.com/IcarusSec/ICARUS",
-  docsUrl: "https://github.com/IcarusSec/ICARUS/tree/main/docs",
+  docsUrl: "https://icarussec.github.io/ICARUS/",
   bappStoreHome: "https://portswigger.net/bappstore",
   bappUrl: "",
   donations: {

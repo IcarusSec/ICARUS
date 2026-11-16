@@ -35,6 +35,6 @@ Reports can be exported in two formats directly from the Evidence Manager:
 
 ## Template builder
 
-Profiles are JSON documents with `schemaVersion` `1`. The studio in this folder is a free-form A4 editor: text, shapes, clipped photos, lines, charts, and tables, with positions in millimetres. Open [the builder](../index.html), export JSON, then use **ICARUS → Reporting → Import**.
+Profiles are JSON documents with `schemaVersion` `1`. The Report Studio is a free-form A4 editor: text, shapes, clipped photos, lines, charts, and tables, with positions in millimetres. Open [the studio](https://icarussec.github.io/ICARUS/studio/), export JSON, then use **ICARUS → Reporting → Import**.
 
 A designed page is a section node with `rendererKey` `CANVAS_PAGE`. `params.spec` is a JSON string (`background` and `elements`), because section params are strings. `{{client}}`, `{{report_title}}`, `{{count_critical}}`, `{{page}}`, and the other listed fields are filled when the report is generated. A client-logo frame uses `slot: "clientLogo"` and reads `branding.clientLogoPath` in Burp. Fonts in the studio (Inter, Source Serif, JetBrains Mono) are the same files the PDF embeds. An old profile with no canvas pages still imports. A page the builder cannot draw is skipped instead of failing the import.

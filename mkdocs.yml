@@ -28,6 +28,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Report Studio: https://icarussec.github.io/ICARUS/studio/
   - Getting Started: getting_started.md
   - Workflows: workflows.md
   - Features:

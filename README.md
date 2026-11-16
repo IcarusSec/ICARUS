@@ -24,7 +24,8 @@ annotated evidence, an MCP server for your AI agent, and reports you design like
   <a href="#-find--seven-modules-one-click"><b>Modules</b></a> ·
   <a href="#-validate--let-your-ai-agent-drive"><b>AI agents (MCP)</b></a> ·
   <a href="#-report--design-once-every-report-wears-it"><b>Reports</b></a> ·
-  <a href="#-documentation"><b>Docs</b></a>
+  <a href="https://icarussec.github.io/ICARUS/studio/"><b>Report Studio (live)</b></a> ·
+  <a href="https://icarussec.github.io/ICARUS/"><b>Docs</b></a>
 </p>
 
 <img src="./.images/readme/hero.gif" alt="ICARUS launch film: seven module feathers open into a wing, an AI agent validates the findings, the report changes design, the ICARUS logo" width="780">
@@ -158,7 +159,7 @@ The agent lists the findings, replays each one live (`rescan_finding`), suppress
 
 ### 🎨 Report Studio
 
-Design the report in your browser, as you would a poster. Each page is a free-form A4 canvas: drag, resize, rotate, group and snap. Fields such as `{{client}}` and `{{count_critical}}` are filled by Burp when it generates the report.
+Design the report in your browser at **[icarussec.github.io/ICARUS/studio](https://icarussec.github.io/ICARUS/studio/)**, as you would a poster. Each page is a free-form A4 canvas: drag, resize, rotate, group and snap. Fields such as `{{client}}` and `{{count_critical}}` are filled by Burp when it generates the report.
 
 <p align="center">
   <img src="./.images/readme/studio.gif" alt="Real recording of the Report Studio: templates picked from the gallery, a severity chart dragged onto the page, the Export menu" width="900">
@@ -178,14 +179,14 @@ Then take it into Burp: **Export → JSON for ICARUS**, and in Burp **ICARUS →
 <summary><b>Report Studio details</b></summary>
 <br>
 
-- **Open it:** [`docs/index.html`](docs/index.html), or the hosted copy at <https://icarussec.github.io/ICARUS/> when GitHub Pages is on.
+- **Open it:** <https://icarussec.github.io/ICARUS/studio/>, or locally from [`docs/studio/index.html`](docs/studio/index.html).
 - **The file:** a report profile (`schemaVersion` 1). Each designed page is a section with `rendererKey` `CANVAS_PAGE`.
 - **Share:** **Share link** copies a URL that opens the design in another browser. For designs with large photos, send the JSON.
 - **Preview:** Print / PDF and HTML preview include every page, filled with sample data from the Brand tab. Burp's PDF uses the same coordinates and fonts.
 - **Images** are stored inside the template as JPEG or PNG, so the Burp PDF can read them.
 - **AI assist** copies a prompt that documents the page format, then checks the JSON you paste back. The page does not call an AI API.
 - **Privacy:** nothing is uploaded. Drafts stay in the browser. The studio is in English and Brazilian Portuguese.
-- **Donation links** stay hidden until the placeholders in [`docs/assets/config.js`](docs/assets/config.js) are replaced.
+- **Donation links** stay hidden until the placeholders in [`docs/studio/assets/config.js`](docs/studio/assets/config.js) are replaced.
 </details>
 
 ## 🛠 Build from source

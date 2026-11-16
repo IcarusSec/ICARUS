@@ -2,7 +2,7 @@
 
 Welcome to the official documentation for **ICARUS**, a next-generation security testing extension for Burp Suite.
 
-> **Report template builder:** [design a profile in the browser](index.html) and export JSON for **ICARUS → Reporting → Import**. On GitHub Pages this file's folder is served as the site, and `index.html` is the home page. 
+> **Report Studio:** [design a report template in the browser](https://icarussec.github.io/ICARUS/studio/) and export JSON for **ICARUS → Reporting → Import**. Its source is [`docs/studio/`](https://github.com/IcarusSec/ICARUS/tree/main/docs/studio).
 
 ## Documentation Structure
 

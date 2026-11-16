@@ -16,6 +16,7 @@ annotated evidence, an MCP server for your AI agent, and reports you design like
   <img src="https://img.shields.io/badge/Java-21-1f1d1a?style=flat-square&logo=openjdk" alt="Java 21">
   <img src="https://img.shields.io/badge/Burp_Suite-Montoya_API-ff6633?style=flat-square&logo=burpsuite&logoColor=white" alt="Burp Suite Montoya API">
   <img src="https://img.shields.io/badge/MCP-34_tools-0078bf?style=flat-square" alt="MCP: 34 tools">
+  <a href="https://buymeacoffee.com/icarussec"><img src="https://img.shields.io/badge/Buy_me_a_coffee-icarussec-ffdd00?style=flat-square&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
 </p>
 
 <p>
@@ -213,7 +214,9 @@ The JAR is written to `icarus-extension/build_manual/libs/icarus-<version>.jar`.
 
 Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) first. To report a vulnerability in ICARUS itself, follow [SECURITY.md](SECURITY.md) and do not open a public issue.
 
-If ICARUS saves you an afternoon of report writing, a ⭐ helps other testers find it.
+If ICARUS saves you an afternoon of report writing, a ⭐ helps other testers find it, and a [coffee](https://buymeacoffee.com/icarussec) keeps the project going.
+
+<a href="https://buymeacoffee.com/icarussec"><img src="https://img.shields.io/badge/Buy_me_a_coffee-ffdd00?style=for-the-badge&logo=buymeacoffee&logoColor=black" alt="Buy me a coffee"></a>
 
 <a href="https://star-history.com/#IcarusSec/ICARUS&Date">
   <img src="https://api.star-history.com/svg?repos=IcarusSec/ICARUS&type=Date" alt="Star history" width="600">

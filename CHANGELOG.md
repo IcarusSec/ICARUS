@@ -8,6 +8,11 @@ Full release notes (with complete detail) live on the
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-16
+
+First stable release. Builds 1.1.4–1.5.0 below were pre-releases (published on
+GitHub as tags v0.1.5–v0.4.0); the version number now matches the release tags.
+
 ### Added
 
 - **Project file:** a `.icarus` export now carries the whole project to a fresh
@@ -16,28 +21,9 @@ Full release notes (with complete detail) live on the
   texts, images) and the active one, custom Knowledge Base entries, and the
   logo files the report settings use. Export works without evidence too.
   Older `.icarus` files still import.
-
-### Fixed
-
-- **JWT Checker:** a verbose error that the original response already had is no
-  longer reported once per forged token, and an endpoint that ignores the token
-  no longer turns every tamper test into a HIGH finding (a control token is sent
-  first). `alg=none` acceptance is reported as an active hit.
-- **Rate Limit Tester:** no longer reports `SERVER_CRASH` when the original
-  response is already HTTP 5xx; it skips such requests.
-- **MCP:** `get_project_context` (and `auto_detected_context` in
-  `get_report_config`) return JSON objects instead of Java text; the Origin
-  check compares the exact host (`http://localhost.evil.example` was accepted);
-  ticking "Enable Local MCP Server" starts the server at once.
-- **UI:** the findings filter placeholder follows the selected language.
-
-## [1.0.0] - 2026-11-10
-
-First stable release. Builds 1.1.4–1.5.0 below were pre-releases (published on
-GitHub as tags v0.1.5–v0.4.0); the version number now matches the release tags.
-
-### Added
-
+- **Docs:** the README follows one request from scan to report, with real
+  recordings; the Report Studio is published on GitHub Pages at
+  <https://icarussec.github.io/ICARUS/studio/>.
 - **Report studio:** in-browser A4 template builder with a free-form cover
   editor; free-form canvas pages and custom blocks render in HTML and PDF.
 - **UI:** one action bar for preview, HTML and PDF; empty tabs explain the next
@@ -52,6 +38,17 @@ GitHub as tags v0.1.5–v0.4.0); the version number now matches the release tags
 
 ### Fixed
 
+- **JWT Checker:** a verbose error that the original response already had is no
+  longer reported once per forged token, and an endpoint that ignores the token
+  no longer turns every tamper test into a HIGH finding (a control token is sent
+  first). `alg=none` acceptance is reported as an active hit.
+- **Rate Limit Tester:** no longer reports `SERVER_CRASH` when the original
+  response is already HTTP 5xx; it skips such requests.
+- **MCP:** `get_project_context` (and `auto_detected_context` in
+  `get_report_config`) return JSON objects instead of Java text; the Origin
+  check compares the exact host (`http://localhost.evil.example` was accepted);
+  ticking "Enable Local MCP Server" starts the server at once.
+- **UI:** the findings filter placeholder follows the selected language.
 - **Reports:** one broken finding no longer spoils the whole report; one entry
   per finding; evidence images render in every HTML path.
 - **Findings:** per-verb, per-claim and per-endpoint findings no longer collapse

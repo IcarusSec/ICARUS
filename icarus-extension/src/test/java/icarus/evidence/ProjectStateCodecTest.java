@@ -54,6 +54,24 @@ public class ProjectStateCodecTest {
         var v1 = ProjectStateCodec.importFrom("{\"formatVersion\":1.0,\"findings\":[]}");
         check(v1.workspace().registryJson() == null && v1.workspace().reportProfilesJson() == null && v1.assets().isEmpty(), "v1 must import as before");
 
+        // Evidence items: finding fields, caption, include flag and image pixels survive the round trip.
+        var finding = icarus.core.Finding.builder("Manual", "MANUAL_EVIDENCE").description("Reviewed, see box")
+                .severity(icarus.core.Severity.HIGH).category(icarus.core.Category.MANUAL).path("/api/orders")
+                .meta("note", "validated").cwe("CWE-639").build();
+        var img = new java.awt.image.BufferedImage(3, 2, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        img.setRGB(2, 1, 0xFFFF0000);
+        var ce = new EvidenceCapture.CapturedEvidence(finding, null, img, "Caption ✓ with \"quotes\"");
+        var items = ProjectStateCodec.importFrom(ProjectStateCodec.export(List.of(ce), c -> false, rtc, ws)).items();
+        check(items.size() == 1, "one evidence item, got " + items.size());
+        var item = items.get(0);
+        check(item.caption().equals(ce.caption()) && !item.included(), item.caption() + " included=" + item.included());
+        var f = item.finding();
+        check(f.type().equals("MANUAL_EVIDENCE") && f.severity() == icarus.core.Severity.HIGH && f.path().equals("/api/orders")
+                && f.description().equals("Reviewed, see box") && "validated".equals(f.metadata().get("note"))
+                && f.cweIds().contains("CWE-639"), "finding fields changed: " + f);
+        var imgBack = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(item.imageBytes()));
+        check(imgBack.getWidth() == 3 && imgBack.getHeight() == 2 && imgBack.getRGB(2, 1) == 0xFFFF0000, "image pixels changed");
+
         Files.deleteIfExists(logo);
         System.out.println("ProjectStateCodecTest: all checks passed.");
     }

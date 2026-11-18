@@ -261,7 +261,7 @@ public class EvidenceManagerTab {
 
         JButton btnPopOut = UiMetrics.commandButton(I18n.t("ui.evidence.btn.detach"), I18n.t("ui.evidence.btn.popout"));
 
-        JButton btnExportProject = UiMetrics.commandButton(I18n.t("ui.evidence.btn.export_short"), I18n.t("ui.evidence.btn.export_project"));
+        JButton btnExportProject = UiMetrics.commandButton(I18n.t("ui.evidence.btn.export_project"), I18n.t("ui.evidence.btn.export_project.tip"));
         btnExportProject.addActionListener(e -> orchestrator.exportProjectStateInteractive(mainPanel, btnExportProject));
 
         masterToolbar.add(btnGroupUp);

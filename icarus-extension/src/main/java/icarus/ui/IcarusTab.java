@@ -401,7 +401,28 @@ public class IcarusTab {
 
         JButton btnImportProxy = new JButton(I18n.t("ui.tab.results.btn.import_proxy"));
         themeHelper.styleButton(btnImportProxy);
-        btnImportProxy.addActionListener(e -> showProxyHistoryImportDialog());
+        btnImportProxy.addActionListener(e -> {
+            // Proxy.history() copies the whole history: off the EDT so a large project can't freeze Burp.
+            btnImportProxy.setEnabled(false);
+            new SwingWorker<List<ProxyHttpRequestResponse>, Void>() {
+                @Override
+                protected List<ProxyHttpRequestResponse> doInBackground() {
+                    List<ProxyHttpRequestResponse> history = api.proxy().history();
+                    int from = Math.max(0, history.size() - PROXY_HISTORY_LIMIT);
+                    return new java.util.ArrayList<>(history.subList(from, history.size()));
+                }
+
+                @Override
+                protected void done() {
+                    btnImportProxy.setEnabled(true);
+                    try {
+                        showProxyHistoryImportDialog(get());
+                    } catch (Exception ex) {
+                        api.logging().logToError("ICARUS: proxy history load failed: " + ex);
+                    }
+                }
+            }.execute();
+        });
 
         JButton btnEvidenceManager = new JButton(I18n.t("ui.tab.results.btn.manage_evidence"));
         themeHelper.styleButton(btnEvidenceManager);
@@ -497,12 +518,7 @@ public class IcarusTab {
      * same entry point as the "Create Evidence" context-menu item, so Smart Evidence
      * detection and the Phase 1 dialog work identically either way.
      */
-    private void showProxyHistoryImportDialog() {
-        List<ProxyHttpRequestResponse> history = api.proxy().history();
-        if (history.size() > PROXY_HISTORY_LIMIT) {
-            history = history.subList(history.size() - PROXY_HISTORY_LIMIT, history.size());
-        }
-        List<ProxyHttpRequestResponse> entries = history;
+    private void showProxyHistoryImportDialog(List<ProxyHttpRequestResponse> entries) {
 
         DefaultTableModel model = new DefaultTableModel(new String[]{I18n.t("ui.import.col.host"), I18n.t("ui.import.col.method"), I18n.t("ui.import.col.path"), I18n.t("ui.import.col.status")}, 0) {
             @Override

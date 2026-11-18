@@ -109,7 +109,7 @@ public class Icarus implements BurpExtension {
                     event -> event.messageEditorRequestResponse()
                             .ifPresent(m -> orchestrator.createManualEvidence(m.requestResponse())));
         } catch (Throwable t) {
-            api.logging().logToError("Aviso: Registro de HotKey falhou (API incompatível com esta versão do Burp): " + t.getMessage());
+            api.logging().logToError("Warning: hotkey registration failed (API not supported by this Burp version): " + t.getMessage());
         }
 
         // Register passive HTTP handler for SensitiveHeaderModule

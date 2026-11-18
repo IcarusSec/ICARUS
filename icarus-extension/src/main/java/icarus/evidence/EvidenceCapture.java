@@ -382,7 +382,7 @@ public final class EvidenceCapture {
      *  screenshot that already exists (e.g. pasted from the system clipboard) — skips Phase 1
      *  text cleanup since there's no request/response text to render. */
     public void captureInteractiveWithImage(Finding finding, BufferedImage image) {
-        SwingUtilities.invokeLater(() -> phase2Dialog.showPhase2(new JFrame(), finding, image, finding.type()));
+        SwingUtilities.invokeLater(() -> phase2Dialog.showPhase2(null, finding, image, finding.type()));
     }
 
     /**

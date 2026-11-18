@@ -30,11 +30,11 @@ public class EvidencePhase2Dialog {
         this.config = config;
     }
 
-public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap, String finalTitle) {
-        // Owned by the Burp suite frame so it doesn't get lost behind Burp (was a
-        // top-level, owner-less JFrame before).
+/** {@code parentEditor} is the Phase 1 window to return to, or null when there is none (pasted image). */
+public void showPhase2(Window parentEditor, Finding finding, BufferedImage snap, String finalTitle) {
+        // Owned by the Burp suite frame so it doesn't get lost behind Burp.
         java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
-        JFrame frame = new JFrame(I18n.t("evidence.phase2.title"));
+        JDialog frame = new JDialog(parent, I18n.t("evidence.phase2.title"), false);
         if (parent != null) frame.setIconImage(parent.getIconImage());
         java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
         java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().getScreenSize());
@@ -346,13 +346,13 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         backBtn.addActionListener(a -> {
             backClicked[0] = true;
             frame.dispose();
-            parentEditor.setVisible(true);
+            if (parentEditor != null) parentEditor.setVisible(true);
         });
 
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosed(WindowEvent e) {
-                if (!backClicked[0]) {
+                if (!backClicked[0] && parentEditor != null) {
                     parentEditor.dispose();
                 }
             }
@@ -453,7 +453,7 @@ public void showPhase2(JFrame parentEditor, Finding finding, BufferedImage snap,
         // Default cursor for pan mode
         canvas.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
 
-        parentEditor.setVisible(false); // Hide the Phase 1 dialog, keep alive for Back button
+        if (parentEditor != null) parentEditor.setVisible(false); // Hide the Phase 1 dialog, keep alive for Back button
         frame.setContentPane(root);
         frame.setVisible(true);
     }

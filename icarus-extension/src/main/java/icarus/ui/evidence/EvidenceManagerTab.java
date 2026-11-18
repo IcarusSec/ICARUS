@@ -464,7 +464,7 @@ public class EvidenceManagerTab {
 
         btnPopOut.addActionListener(e -> {
             java.awt.Window winParent = javax.swing.SwingUtilities.getWindowAncestor(mainPanel);
-            JFrame popOutFrame = new JFrame(I18n.t("ui.evidence.title.detached"));
+            JDialog popOutFrame = new JDialog(api.userInterface().swingUtils().suiteFrame(), I18n.t("ui.evidence.title.detached"), false);
             if (winParent instanceof java.awt.Frame) popOutFrame.setIconImage(((java.awt.Frame)winParent).getIconImage());
             
             java.awt.GraphicsConfiguration gc = mainPanel.getGraphicsConfiguration();
@@ -1092,7 +1092,7 @@ public class EvidenceManagerTab {
         } else if (parentWindow instanceof Dialog) {
             dialog = new JDialog((Dialog) parentWindow, title, false);
         } else {
-            dialog = new JDialog((Frame) null, title, false);
+            dialog = new JDialog(api.userInterface().swingUtils().suiteFrame(), title, false);
         }
 
         dialog.setUndecorated(true);

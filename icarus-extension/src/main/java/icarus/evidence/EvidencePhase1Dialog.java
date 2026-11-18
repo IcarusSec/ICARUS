@@ -29,7 +29,8 @@ public class EvidencePhase1Dialog {
 
 public void showPhase1(Finding finding) {
         java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
-        JFrame editor = new JFrame(I18n.t("evidence.phase1.title"));
+        // Modeless child of the Burp frame (BApp criterion: popups are parented to suiteFrame()).
+        JDialog editor = new JDialog(parent, I18n.t("evidence.phase1.title"), false);
         if (parent != null) editor.setIconImage(parent.getIconImage());
         java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
         java.awt.Rectangle screenBounds = gc != null ? gc.getBounds() : new java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().getScreenSize());

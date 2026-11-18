@@ -152,6 +152,27 @@ public class EvidenceTriggerService {
         evidenceCapture.captureInteractive(finding);
     }
 
+    /** Same flow as {@link #pasteEvidenceFromClipboard}, for an image file on disk. Runs on the EDT (menu action). */
+    public void loadEvidenceImageFromFile(HttpRequestResponse rr) {
+        Frame suiteFrame = api.userInterface().swingUtils().suiteFrame();
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
+                "Images", ImageIO.getReaderFileSuffixes()));
+        if (chooser.showOpenDialog(suiteFrame) != JFileChooser.APPROVE_OPTION) return;
+        java.io.File file = chooser.getSelectedFile();
+        try {
+            BufferedImage image = ImageIO.read(file);
+            if (image == null) {
+                JOptionPane.showMessageDialog(suiteFrame, "Not a supported image file: " + file.getName());
+                return;
+            }
+            evidenceCapture.captureInteractiveWithImage(blankManualFinding(rr), image);
+        } catch (IOException e) {
+            api.logging().logToError("Failed to read image file " + file + ": " + e);
+            JOptionPane.showMessageDialog(suiteFrame, "Could not read image file: " + e.getMessage());
+        }
+    }
+
     private java.awt.image.BufferedImage toBufferedImage(Image img) {
         if (img instanceof java.awt.image.BufferedImage bi) return bi;
         // Clipboard images can arrive as not-yet-loaded Toolkit images whose width/height read

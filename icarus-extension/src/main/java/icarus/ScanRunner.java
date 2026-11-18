@@ -431,6 +431,10 @@ public final class ScanRunner {
             frame.setSize(800, 400);
             frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
             frame.setLocationRelativeTo(null); // Center on screen
+            // Modal dialogs (file choosers, prompts) must not block the scan's Pause/Stop window.
+            // Blocking it also crashed every later modal on X11 ("Window must not be zero") once
+            // its native window was gone, so Save/Export dialogs stopped opening.
+            frame.setModalExclusionType(java.awt.Dialog.ModalExclusionType.APPLICATION_EXCLUDE);
 
             JTextArea textArea = new JTextArea();
             textArea.setEditable(false);

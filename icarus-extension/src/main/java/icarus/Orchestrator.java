@@ -327,6 +327,10 @@ public final class Orchestrator implements ContextMenuItemsProvider, HttpHandler
         pasteEvidence.addActionListener(e -> pasteEvidenceFromClipboard(requestResponses.get(0)));
         evidenceMenu.add(pasteEvidence);
 
+        var loadImageEvidence = new JMenuItem(I18n.t("contextmenu.evidence.load_image"));
+        loadImageEvidence.addActionListener(e -> evidenceTriggerService.loadEvidenceImageFromFile(requestResponses.get(0)));
+        evidenceMenu.add(loadImageEvidence);
+
         var evidenceManager = new JMenuItem(I18n.t("contextmenu.evidence.manage"));
         evidenceManager.addActionListener(e -> {
             if (showEvidenceAction != null) showEvidenceAction.run();

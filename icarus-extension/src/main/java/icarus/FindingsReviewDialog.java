@@ -51,7 +51,10 @@ public class FindingsReviewDialog {
         // Modeless child of the Burp frame (BApp criterion: popups are parented to suiteFrame()).
         javax.swing.JDialog dialog = new javax.swing.JDialog(parent, I18n.t("findings.review.title"), false);
         if (parent != null) dialog.setIconImage(parent.getIconImage());
-        dialog.setSize(1200, 800);
+        // Fit small screens (e.g. 1280x800 laptops), same rule as the evidence editors.
+        java.awt.GraphicsConfiguration gc = parent != null ? parent.getGraphicsConfiguration() : null;
+        java.awt.Rectangle screen = gc != null ? gc.getBounds() : new java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().getScreenSize());
+        dialog.setSize(Math.min(1200, screen.width - 50), Math.min(800, screen.height - 100));
         dialog.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
         dialog.setLocationRelativeTo(parent);
 

@@ -30,7 +30,8 @@ public class Icarus implements BurpExtension {
 
     @Override
     public void initialize(MontoyaApi api) {
-        api.extension().setName(NAME + " v" + VERSION);
+        // Descriptive name for the BApp Store (criterion 2); the suite tab stays "ICARUS".
+        api.extension().setName(NAME + " - API Security Testing & Reporting");
 
         var config = new ModuleConfig();
         I18n.initialize(config);

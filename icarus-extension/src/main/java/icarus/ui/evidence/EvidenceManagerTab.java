@@ -490,6 +490,7 @@ public class EvidenceManagerTab {
                 }
                 
                 popOutFrame.add(mainPanel);
+                mainPanel.setVisible(true); // setComponentAt() above hid it; without this the dialog is blank
                 
                 popOutFrame.addWindowListener(new java.awt.event.WindowAdapter() {
                     @Override

@@ -48,11 +48,12 @@ public class FindingsReviewDialog {
 
     public void showFindingsDialog(List<FindingRecord> records) {
         java.awt.Frame parent = api.userInterface().swingUtils().suiteFrame();
-        javax.swing.JFrame dialog = new javax.swing.JFrame(I18n.t("findings.review.title"));
+        // Modeless child of the Burp frame (BApp criterion: popups are parented to suiteFrame()).
+        javax.swing.JDialog dialog = new javax.swing.JDialog(parent, I18n.t("findings.review.title"), false);
         if (parent != null) dialog.setIconImage(parent.getIconImage());
         dialog.setSize(1200, 800);
         dialog.setDefaultCloseOperation(javax.swing.WindowConstants.DISPOSE_ON_CLOSE);
-        dialog.setLocationRelativeTo(null);
+        dialog.setLocationRelativeTo(parent);
 
         String[] cols = {
             I18n.t("findings.review.col.count"), I18n.t("findings.review.col.severity"), 

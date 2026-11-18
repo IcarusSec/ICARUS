@@ -29,7 +29,7 @@ public final class ToastNotification {
         if (dismissTimer != null) dismissTimer.stop();
         if (current != null) current.dispose();
 
-        JWindow toast = new JWindow();
+        JWindow toast = new JWindow(parent); // owned by Burp (BApp criterion); null-safe
         // A toast must never steal focus from whatever the user is doing (e.g. mid-type in
         // Repeater) — JWindow requests focus on setVisible(true) unless told not to.
         toast.setFocusableWindowState(false);

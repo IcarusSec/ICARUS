@@ -7,7 +7,20 @@ plugins {
 
 group = 'com.icarus'
 // Single source of truth for the version, same as build.sh.
-version = (file('src/main/java/icarus/Icarus.java').text =~ /VERSION = "([^"]+)"/)[0][1]
+version = (file('icarus-extension/src/main/java/icarus/Icarus.java').text =~ /VERSION = "([^"]+)"/)[0][1]
+
+// The build lives at the repository root (the BApp Store checks for it here); the sources stay
+// in icarus-extension/, next to build.sh.
+sourceSets {
+    main {
+        java.srcDirs = ['icarus-extension/src/main/java']
+        resources.srcDirs = ['icarus-extension/src/main/resources']
+    }
+    test {
+        java.srcDirs = ['icarus-extension/src/test/java']
+        resources.srcDirs = ['icarus-extension/src/test/resources']
+    }
+}
 
 repositories {
     mavenCentral()

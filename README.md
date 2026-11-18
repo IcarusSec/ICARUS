@@ -205,8 +205,7 @@ The JAR is written to `icarus-extension/build_manual/libs/icarus-<version>.jar`.
 Gradle builds the same JAR (this is the BApp Store build; any JDK 19 or later):
 
 ```bash
-cd icarus-extension
-./gradlew jar          # writes build/libs/icarus-<version>.jar
+./gradlew jar          # from the repository root; writes build/libs/icarus-<version>.jar
 ```
 
 ## 📚 Documentation

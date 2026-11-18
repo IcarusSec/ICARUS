@@ -8,6 +8,11 @@ Full release notes (with complete detail) live on the
 
 ## [Unreleased]
 
+### Changed
+
+- **Build:** the Gradle build moved to the repository root (`./gradlew jar`,
+  output `build/libs/`), where the BApp Store looks for it.
+
 ## [1.0.1] - 2026-11-18
 
 BApp Store readiness release.

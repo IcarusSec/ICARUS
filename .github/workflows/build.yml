@@ -26,6 +26,11 @@ jobs:
         working-directory: icarus-extension
         run: bash build.sh
 
+      # The BApp Store builds with Gradle, so keep that path green too.
+      - name: Build extension jar (Gradle, BApp Store build)
+        working-directory: icarus-extension
+        run: ./gradlew --no-daemon jar
+
       - name: Verify jar exists
         run: |
           JAR=$(ls icarus-extension/build_manual/libs/icarus-*.jar 2>/dev/null | head -1)

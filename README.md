@@ -202,6 +202,13 @@ powershell -ExecutionPolicy Bypass -File build.ps1       # Windows
 
 The JAR is written to `icarus-extension/build_manual/libs/icarus-<version>.jar`. Load it with **Extensions → Add → Java**.
 
+Gradle builds the same JAR (this is the BApp Store build; any JDK 19 or later):
+
+```bash
+cd icarus-extension
+./gradlew jar          # writes build/libs/icarus-<version>.jar
+```
+
 ## 📚 Documentation
 
 | Start here | Features | Modules | Architecture |

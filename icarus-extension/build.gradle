@@ -1,50 +1,54 @@
+// BApp Store build: `./gradlew jar` writes the fat jar to build/libs/icarus-<version>.jar.
+// The dependency set mirrors build.sh (and libs/checksums.sha256) jar for jar: transitive
+// resolution is off so both builds bundle the same pinned versions.
 plugins {
     id 'java'
-    id 'com.gradleup.shadow' version '9.0.0-beta12'
 }
 
 group = 'com.icarus'
-version = '1.0.0'
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(19)
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.release = 19
-}
+// Single source of truth for the version, same as build.sh.
+version = (file('src/main/java/icarus/Icarus.java').text =~ /VERSION = "([^"]+)"/)[0][1]
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    compileOnly 'net.portswigger.burp.extensions:montoya-api:2025.6'
+    compileOnly 'net.portswigger.burp.extensions:montoya-api:2026.7'
 
-    implementation('com.github.librepdf:openpdf:2.0.2') {
-        exclude group: 'com.ibm.icu', module: 'icu4j'
-    }
-    
-    implementation 'org.commonmark:commonmark:0.30.0'
-
-    implementation('io.modelcontextprotocol.sdk:mcp-core:1.1.3') {
-        exclude group: 'com.networknt', module: 'json-schema-validator'
-    }
-    implementation('io.modelcontextprotocol.sdk:mcp-json-jackson2:1.1.3') {
-        exclude group: 'com.networknt', module: 'json-schema-validator'
-    }
-    
-    implementation 'org.jsoup:jsoup:1.23.1'
+    [
+        'com.github.librepdf:openpdf:2.0.2',
+        'org.commonmark:commonmark:0.30.0',
+        'org.commonmark:commonmark-ext-gfm-tables:0.30.0',
+        'org.apache.commons:commons-csv:1.10.0',
+        'com.formdev:flatlaf:3.4.1',
+        'com.formdev:flatlaf-extras:3.4.1',
+        'com.github.weisj:jsvg:1.4.0',
+        'com.fifesoft:rsyntaxtextarea:3.3.3',
+        'org.jsoup:jsoup:1.23.1',
+        'io.modelcontextprotocol.sdk:mcp-core:1.1.3',
+        'io.modelcontextprotocol.sdk:mcp-json-jackson2:1.1.3',
+        'com.fasterxml.jackson.core:jackson-databind:2.20.1',
+        'com.fasterxml.jackson.core:jackson-core:2.20.1',
+        'com.fasterxml.jackson.core:jackson-annotations:2.20',
+        'io.projectreactor:reactor-core:3.7.0',
+        'org.reactivestreams:reactive-streams:1.0.4',
+        'org.slf4j:slf4j-api:2.0.16',
+    ].each { implementation(it) { transitive = false } }
 }
 
-shadowJar {
+// `release` (not a toolchain) so any JDK 19+ can build it, including Burp's bundled 21.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 19
+    options.encoding = 'UTF-8'
+}
+
+jar {
     archiveBaseName = 'icarus'
-    archiveClassifier = ''
-    archiveVersion = project.version
-}
-
-tasks.named('build') {
-    dependsOn shadowJar
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // Burp loads only this one jar, so every runtime dependency is unpacked into it.
+    // Their META-INF is dropped (signatures, manifests), as build.sh does.
+    from({ configurations.runtimeClasspath.collect { zipTree(it) } }) {
+        exclude 'META-INF/**', 'module-info.class'
+    }
 }

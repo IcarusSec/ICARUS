@@ -8,6 +8,40 @@ Full release notes (with complete detail) live on the
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-18
+
+BApp Store readiness release.
+
+### Added
+
+- **Evidence:** *Load Image as Evidence…* (right-click → Evidence & Reporting)
+  opens an image file in the annotator and adds it to the report, next to
+  *Paste Screenshot as Evidence*.
+- **Project file:** the Evidence Manager button is now labelled
+  *Export Project…*, with a tooltip for the review round trip (export, send,
+  import the updated file).
+- **Build:** `./gradlew jar` (Gradle wrapper 9.9.1) builds the same JAR as
+  `build.sh`; this is the BApp Store build. CI builds both.
+
+### Changed
+
+- **Name:** Burp lists the extension as *ICARUS - API Security Testing &
+  Reporting*; the suite tab stays *ICARUS*.
+- **Dependencies:** jsoup 1.23.2 (memory exhaustion fix in its XML parser).
+- **License:** `LICENSE` carries the *MIT License* title, so GitHub detects it.
+
+### Fixed
+
+- **Windows:** the evidence editors, the detached Evidence Manager, the Scan
+  Results window and toasts are owned by the Burp window, not free-floating.
+- **Detached Evidence Manager:** no longer opens blank.
+- **Pasted screenshot:** *Back* in the annotator no longer opens an empty window.
+- **Small screens:** the Scan Results window fits a 1280×800 screen.
+- **Save/Export dialogs:** no longer stop opening after a scan progress window
+  goes away; progress windows stay usable while a dialog is open.
+- **Proxy history import:** loads the history off the UI thread, so large
+  projects do not freeze Burp.
+
 ## [1.0.0] - 2026-11-16
 
 First stable release. Builds 1.1.4–1.5.0 below were pre-releases (published on
@@ -229,7 +263,8 @@ Fixed a config-persistence bug that could corrupt suppression rules/custom paylo
 
 Initial unified Burp Suite interface for ICARUS modules: smart evidence capture with full payload logging and manual evidence popups, the Rate Limit Tester, and automated scanning from the extension UI.
 
-[Unreleased]: https://github.com/IcarusSec/ICARUS/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/IcarusSec/ICARUS/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/IcarusSec/ICARUS/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/IcarusSec/ICARUS/compare/v0.4.0...v1.0.0
 [1.5.0]: https://github.com/IcarusSec/ICARUS/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/IcarusSec/ICARUS/compare/v1.3...v1.4.0

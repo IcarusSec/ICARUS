@@ -71,7 +71,7 @@ flowchart LR
 ## 🔎 Find · seven modules, one click
 
 <p align="center">
-  <img src="./.images/readme/scan.gif" alt="Real recording: right-click a request, Extensions → ICARUS v1.0.0 → Modules, Run All Modules, the scan log streams, the results window lists the findings" width="900">
+  <img src="./.images/readme/scan.gif" alt="Real recording: right-click a request, Extensions → ICARUS → Modules, Run All Modules, the scan log streams, the results window lists the findings" width="900">
 </p>
 
 | Module | What it tests | Real result on the demo API |
